@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bajrang AI Pro — Local Llama 3.2 GNOME Extension & Voice Assistant for Fedora Linux</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    html.dark body {
+      background-color: #0b0d14;
+      color: #f3f4f6;
+    }
+    html.light body {
+      background-color: #f5f7fb;
+      color: #111827;
+    }
+    html.dark .hud-card {
+      background: rgba(18, 20, 28, 0.94);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+    html.light .hud-card {
+      background: rgba(255, 255, 255, 0.95);
+      border-color: rgba(0, 0, 0, 0.1);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+    html.dark .hud-subcard {
+      background: rgba(12, 14, 20, 0.85);
+      border-color: rgba(255, 255, 255, 0.07);
+    }
+    html.light .hud-subcard {
+      background: #f1f4f9;
+      border-color: rgba(0, 0, 0, 0.07);
+    }
+    html.dark .hud-input {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+    }
+    html.light .hud-input {
+      background: #ffffff;
+      border-color: rgba(0, 0, 0, 0.15);
+      color: #111827;
+    }
+    .dot-idle {
+      background-color: #2ec27e;
+      box-shadow: 0 0 10px rgba(46, 194, 126, 0.8);
+    }
+    .dot-listening {
+      background-color: #c061cb;
+      box-shadow: 0 0 12px rgba(192, 97, 203, 0.95);
+    }
+    .dot-thinking {
+      background-color: #3584e4;
+      box-shadow: 0 0 12px rgba(53, 132, 228, 0.9);
+    }
+    .dot-executing {
+      background-color: #ff7800;
+      box-shadow: 0 0 12px rgba(255, 120, 0, 0.9);
+    }
+    .dot-blocked {
+      background-color: #e01b24;
+      box-shadow: 0 0 14px rgba(224, 27, 36, 0.95);
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 17, 23, 0.3);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(150, 150, 150, 0.25);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <header class="sticky top-0 z-40 backdrop-blur-xl border-b border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#0b0d14]/85">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 via-amber-500 to-indigo-600 flex items-center justify-center font-extrabold text-white shadow-lg shadow-orange-500/20">
+          ⚡
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-base tracking-tight">Bajrang AI Pro</span>
+            <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30">v3.2 Fedora</span>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Local Llama 3.2 • BYO API Key • PipeWire Voice DSP • GNOME Extension</p>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-medium">
+        <button id="nav-btn-simulator" type="button" onclick="switchTab('simulator')" class="px-3 py-1.5 rounded-lg bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-semibold transition">
+          🖥️ Simulator
+        </button>
+        <button id="nav-btn-byokey" type="button" onclick="switchTab('byokey')" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          🔑 BYO Key / Free
+        </button>
+        <button id="nav-btn-install" type="button" onclick="switchTab('install')" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          🐧 Fedora Setup
+        </button>
+        <button id="nav-btn-pricing" type="button" onclick="switchTab('pricing')" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          💳 Store &amp; ₹100/mo
+        </button>
+        <button id="nav-btn-git" type="button" onclick="switchTab('git')" class="px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5 transition">
+          🐙 Host on Git
+        </button>
+      </nav>
+
+      <div class="flex items-center gap-2.5">
+        <button id="theme-toggle-btn" type="button" onclick="toggleTheme()" title="Toggle Bright / Dark Mode" class="px-2.5 py-1.5 rounded-lg border border-black/10 dark:border-white/15 bg-black/5 dark:bg-white/5 text-xs font-semibold flex items-center gap-1.5">
+          <span id="theme-icon">☀️</span>
+          <span id="theme-text" class="hidden sm:inline">Bright</span>
+        </button>
+
+        <div id="google-auth-container" class="flex items-center">
+          <button id="google-login-btn" type="button" onclick="openGoogleLoginModal()" class="px-3 py-1.5 rounded-full border border-black/15 dark:border-white/20 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-2 shadow-sm transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span class="hidden sm:inline">Sign in with Google</span>
+            <span class="sm:hidden">Google</span>
+          </button>
+
+          <div id="google-user-profile" class="hidden flex items-center gap-2">
+            <img id="google-user-avatar" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><circle cx='14' cy='14' r='14' fill='%234f46e5'/><text x='14' y='18' font-size='12' fill='%23fff' text-anchor='middle' font-family='sans-serif'>K</text></svg>" alt="Google Avatar" class="w-7 h-7 rounded-full border border-amber-400" />
+            <div class="hidden md:block text-left text-[11px] leading-tight">
+              <div id="google-user-name" class="font-bold truncate max-w-[100px]">Kaushik Ram</div>
+              <div class="text-emerald-500 font-mono">Google Connected</div>
+            </div>
+            <button id="google-logout-btn" type="button" onclick="signOutGoogle()" class="p-1 text-slate-400 hover:text-red-500 text-xs" title="Sign Out">✕</button>
+          </div>
+        </div>
+
+        <button id="header-buy-btn" type="button" onclick="openCheckoutModal('monthly')" class="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-xs sm:text-sm shadow-md transition">
+          ₹100/mo
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+    <section id="tab-simulator" class="space-y-8">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+        <div class="lg:col-span-5 space-y-4">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-300 text-xs font-medium">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Fedora Workstation 41/42 • Wayland • GNOME 45–49 ESM
+          </div>
+          <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+            Personalized <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 via-orange-500 to-indigo-500">Llama 3.2</span> Voice &amp; GNOME Extension.
+          </h1>
+          <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+            Run locally on your Fedora PC with <a href="https://ollama.com/library/llama3.2" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 underline font-semibold">Ollama Llama 3.2</a> tuned for your personalized desktop, or enter your own OpenAI/Groq/OpenRouter API key to run for free in the cloud. Features a custom pure-Python <a href="https://pipewire.org/" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 underline font-semibold">PipeWire</a> Spectral-DTW Voice Recognizer, SQLite3 local chat history, and <a href="https://github.com/ReimuNotMoe/ydotool" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 underline font-semibold">ydotool</a> Wayland automation.
+          </p>
+          <div class="flex flex-wrap gap-2.5 pt-1">
+            <button id="hero-checkout-btn" type="button" onclick="openCheckoutModal('monthly')" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-sm shadow-lg transition">
+              Get Pro Extension • ₹100 / mo
+            </button>
+            <button id="hero-byo-btn" type="button" onclick="switchTab('byokey')" class="px-4 py-2.5 rounded-xl border border-black/15 dark:border-white/15 bg-black/5 dark:bg-white/5 font-semibold text-sm transition">
+              🔑 Use Your Own API Key (Free)
+            </button>
+          </div>
+          <div class="grid grid-cols-3 gap-2 pt-2 text-center text-xs">
+            <div class="p-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]">
+              <div class="text-base font-extrabold text-amber-500">₹100 / mo</div>
+              <div class="text-[11px] text-slate-500">Pro License</div>
+            </div>
+            <div class="p-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]">
+              <div class="text-base font-extrabold text-emerald-500">16 kHz DSP</div>
+              <div class="text-[11px] text-slate-500">PipeWire DTW</div>
+            </div>
+            <div class="p-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]">
+              <div class="text-base font-extrabold text-indigo-500">SQLite3</div>
+              <div class="text-[11px] text-slate-500">Local History</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7">
+          <div class="rounded-2xl border border-black/15 dark:border-white/15 overflow-hidden shadow-2xl hud-card">
+            <div class="bg-black/90 text-white px-4 py-1.5 flex items-center justify-between text-xs border-b border-white/10 select-none">
+              <div class="flex items-center gap-3">
+                <span class="font-semibold text-white/90">Activities</span>
+                <span class="text-slate-400 hidden sm:inline">Fedora Workstation (Wayland)</span>
+              </div>
+              <div class="font-medium text-slate-300" id="gnome-clock">Wed 11 Nov 19:16</div>
+              <div class="relative">
+                <button id="gnome-ext-pill" type="button" onclick="toggleGnomeExtMenu()" class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/15 hover:bg-white/25 border border-white/15 transition">
+                  <span id="gnome-top-dot" class="w-2.5 h-2.5 rounded-full dot-idle"></span>
+                  <span class="font-bold text-white text-[11px]">Bajrang AI</span>
+                  <span id="gnome-top-badge" class="text-[10px] text-amber-300 font-mono">PRO</span>
+                </button>
+
+                <div id="gnome-ext-menu" class="hidden absolute right-0 mt-2 w-64 rounded-xl bg-[#1c1e26] text-white border border-white/15 shadow-2xl py-2 z-30 text-xs">
+                  <div class="px-3 py-1.5 font-bold text-amber-300 border-b border-white/10">
+                    ⚡ Bajrang AI Pro • Llama 3.2
+                  </div>
+                  <button id="ext-menu-toggle" type="button" onclick="toggleHudVisibility(); toggleGnomeExtMenu();" class="w-full text-left px-3 py-2 hover:bg-white/10 flex items-center justify-between">
+                    <span>💬 Toggle Floating HUD</span>
+                    <kbd class="text-[10px] font-mono bg-black/40 px-1.5 py-0.5 rounded">Super+Space</kbd>
+                  </button>
+                  <button id="ext-menu-voice" type="button" onclick="triggerSimulatedVoice('open terminal'); toggleGnomeExtMenu();" class="w-full text-left px-3 py-2 hover:bg-white/10 flex items-center justify-between">
+                    <span>🎙️ Voice Capture (PipeWire)</span>
+                    <kbd class="text-[10px] font-mono bg-black/40 px-1.5 py-0.5 rounded">Super+V</kbd>
+                  </button>
+                  <button id="ext-menu-history" type="button" onclick="toggleSidebarVisibility(); toggleGnomeExtMenu();" class="w-full text-left px-3 py-2 hover:bg-white/10 flex items-center justify-between">
+                    <span>🗂️ Toggle SQLite History</span>
+                    <span class="text-[10px] text-slate-400">history.db</span>
+                  </button>
+                  <div class="my-1 border-t border-white/10"></div>
+                  <button id="ext-menu-kill" type="button" onclick="triggerKillSwitch(); toggleGnomeExtMenu();" class="w-full text-left px-3 py-2 hover:bg-red-500/20 text-red-400 font-semibold flex items-center justify-between">
+                    <span>🛑 Emergency Kill-Switch</span>
+                    <kbd class="text-[10px] font-mono bg-red-950/60 px-1.5 py-0.5 rounded">Ctrl+Esc</kbd>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 sm:p-5 min-h-[480px] flex flex-col justify-between">
+              <div id="simulated-hud" class="rounded-[24px] overflow-hidden flex flex-col h-[440px] border border-black/10 dark:border-white/10 hud-subcard transition-all">
+                <div class="px-4 py-2.5 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-2 bg-black/5 dark:bg-black/30">
+                  <div class="flex items-center gap-2.5">
+                    <button id="hud-sidebar-btn" type="button" onclick="toggleSidebarVisibility()" title="Toggle Local SQLite Chat History Sidebar" class="p-1.5 rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-xs">
+                      ☰
+                    </button>
+                    <span id="hud-status-dot" class="w-3 h-3 rounded-full dot-idle"></span>
+                    <div>
+                      <div class="text-xs sm:text-sm font-bold leading-none">Bajrang AI Pro</div>
+                      <div id="hud-status-text" class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Idle • llama3.2 (Local Personalized)</div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <span id="hud-license-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40">
+                      PRO ₹100/mo
+                    </span>
+                    <select id="hud-model-select" onchange="changeModel(this.value)" aria-label="Select AI Model" class="bg-black/5 dark:bg-white/10 border border-black/15 dark:border-white/15 rounded-lg text-xs px-2 py-1 focus:outline-none">
+                      <option value="llama3.2">Personalized Llama 3.2</option>
+                      <option value="llama3.2:1b">llama3.2:1b (Fast)</option>
+                      <option value="llama3.2-vision">llama3.2-vision</option>
+                      <option value="byo-cloud">BYO Cloud API Key</option>
+                    </select>
+                    <button id="hud-kill-btn" type="button" onclick="triggerKillSwitch()" class="px-2.5 py-1 rounded-full bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] shadow">
+                      KILL
+                    </button>
+                  </div>
+                </div>
+
+                <div class="flex-1 flex overflow-hidden">
+                  <div id="hud-sidebar" class="w-48 sm:w-56 border-r border-black/10 dark:border-white/10 p-2.5 flex flex-col gap-2 bg-black/[0.03] dark:bg-black/30">
+                    <button id="new-session-btn" type="button" onclick="createNewSession()" class="w-full py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs text-center transition">
+                      + New Chat Session
+                    </button>
+                    <input id="history-search-input" type="text" oninput="renderSessionList()" placeholder="Search history.db..." class="w-full hud-input rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-indigo-500" />
+                    <div class="text-[10px] font-mono uppercase text-slate-500 px-1 flex items-center justify-between">
+                      <span>SQLite Sessions</span>
+                      <span id="session-count-badge" class="text-indigo-500 font-bold">0</span>
+                    </div>
+                    <div id="session-list" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+                  </div>
+
+                  <div class="flex-1 flex flex-col overflow-hidden">
+                    <div class="px-3 py-1.5 bg-purple-500/10 border-b border-black/10 dark:border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <div class="flex items-center gap-2">
+                        <span class="text-purple-600 dark:text-purple-300 font-semibold">🎙️ PipeWire Voice DSP:</span>
+                        <span id="dsp-readout" class="font-mono text-slate-600 dark:text-slate-300">VAD Gate: -38 dB | 8-Band Spectral DTW</span>
+                      </div>
+                      <div id="dsp-bars" class="flex items-end gap-1 h-4">
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-1.5 transition-all"></span>
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-2 transition-all"></span>
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-3 transition-all"></span>
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-2 transition-all"></span>
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-1.5 transition-all"></span>
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-2.5 transition-all"></span>
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-1.5 transition-all"></span>
+                        <span class="w-1.5 bg-purple-500 rounded-sm h-1 transition-all"></span>
+                      </div>
+                    </div>
+
+                    <div class="px-3 py-1.5 bg-black/5 dark:bg-black/20 border-b border-black/5 dark:border-white/5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span class="text-slate-500">Test Preset:</span>
+                      <button id="voice-preset-terminal" type="button" onclick="triggerSimulatedVoice('open terminal')" class="px-2 py-0.5 rounded-md bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-200 border border-purple-500/30 transition">
+                        🗣️ "open terminal"
+                      </button>
+                      <button id="voice-preset-screen" type="button" onclick="triggerSimulatedVoice('take screenshot')" class="px-2 py-0.5 rounded-md bg-purple-500/15 hover:bg-purple-500/25 text-purple-700 dark:text-purple-200 border border-purple-500/30 transition">
+                        🗣️ "take screenshot"
+                      </button>
+                      <button id="voice-preset-type" type="button" onclick="runSimulatedPrompt('Type Hello Fedora in editor')" class="px-2 py-0.5 rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-200 border border-indigo-500/30 transition">
+                        ⌨️ ydotool type
+                      </button>
+                      <button id="voice-preset-block" type="button" onclick="runSimulatedPrompt('run sudo rm -rf /')" class="px-2 py-0.5 rounded-md bg-red-500/15 hover:bg-red-500/25 text-red-700 dark:text-red-300 border border-red-500/30 transition">
+                        🛡️ Blocklist Test
+                      </button>
+                    </div>
+
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-3 space-y-2.5 text-xs sm:text-sm"></div>
+
+                    <form id="hud-prompt-form" onsubmit="handlePromptSubmit(event)" class="p-2.5 border-t border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/30 flex items-center gap-2">
+                      <button id="mic-record-btn" type="button" onclick="startBrowserOrSimulatedMic()" title="Push-to-Talk Voice Mode" class="px-2.5 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1 transition">
+                        🎙️ <span id="mic-btn-label" class="hidden sm:inline">Speak</span>
+                      </button>
+                      <label class="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-300 cursor-pointer select-none">
+                        <input id="tts-checkbox" type="checkbox" checked class="rounded" />
+                        <span>TTS</span>
+                      </label>
+                      <input id="hud-prompt-input" type="text" placeholder="Ask Bajrang AI, click 🎙️, or command an action..." class="flex-1 hud-input rounded-full px-3.5 py-1.5 text-xs sm:text-sm focus:outline-none focus:border-indigo-400" />
+                      <button id="hud-send-btn" type="submit" class="px-3.5 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-2 flex flex-wrap items-center justify-between text-[11px] text-slate-500 px-1">
+                <span>Click <strong>Bajrang AI PRO</strong> on top to test GNOME Shell Extension integration.</span>
+                <span class="font-mono">~/.local/share/bajrang-ai/history.db</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-byokey" class="hidden space-y-6">
+      <div class="border-b border-black/10 dark:border-white/10 pb-4">
+        <h2 class="text-xl sm:text-2xl font-extrabold">BYO API Key &amp; Personalization Settings</h2>
+        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Choose between your own API key to use cloud models for free without a subscription, or use local Ollama Llama 3.2 tuned for your personal Fedora workflow.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4 hud-card">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-sm">🔑 Enter Your Own Cloud API Key (Free Use)</h3>
+            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-bold">No Card Required</span>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Supports OpenAI, Groq, OpenRouter, Together AI, or Gemini OpenAI endpoints. The app routes prompts directly using your key.
+          </p>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label for="byo-provider-select" class="block font-medium mb-1">Provider Preset</label>
+              <select id="byo-provider-select" onchange="applyProviderPreset(this.value)" class="w-full hud-input rounded-xl px-3 py-2 text-xs">
+                <option value="groq">Groq (Ultra-fast Llama 3.3 / Llama 3.2)</option>
+                <option value="openrouter">OpenRouter (Multi-model free tier)</option>
+                <option value="openai">OpenAI (GPT-4o / GPT-4o-mini)</option>
+                <option value="gemini">Google Gemini (OpenAI compatible endpoint)</option>
+                <option value="custom">Custom Endpoint</option>
+              </select>
+            </div>
+            <div>
+              <label for="byo-key-input" class="block font-medium mb-1">API Key</label>
+              <input id="byo-key-input" type="password" placeholder="sk-..." class="w-full font-mono hud-input rounded-xl px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label for="byo-endpoint-input" class="block font-medium mb-1">Chat Completions Endpoint</label>
+              <input id="byo-endpoint-input" type="text" value="https://api.groq.com/openai/v1/chat/completions" class="w-full font-mono hud-input rounded-xl px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label for="byo-model-input" class="block font-medium mb-1">Model Name</label>
+              <input id="byo-model-input" type="text" value="llama-3.3-70b-versatile" class="w-full font-mono hud-input rounded-xl px-3 py-2 text-xs" />
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button id="save-byo-btn" type="button" onclick="saveByoKeySettings()" class="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+                Save &amp; Switch to BYO Cloud Key
+              </button>
+              <button id="clear-byo-btn" type="button" onclick="clearByoKeySettings()" class="px-3 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-xs">
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-4 hud-card">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-sm">🦙 Local Llama 3.2 Personalized Experience</h3>
+            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-300 font-bold">100% Offline</span>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            Configure system prompt rules and personal preferences for your Lenovo Yoga / Fedora setup so Bajrang AI acts as your dedicated Linux peer.
+          </p>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label for="persona-name-input" class="block font-medium mb-1">Assistant Persona / Name</label>
+              <input id="persona-name-input" type="text" value="Bajrang AI Pro" class="w-full hud-input rounded-xl px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label for="persona-role-input" class="block font-medium mb-1">User Profile &amp; Machine Context</label>
+              <input id="persona-role-input" type="text" value="Fedora 41/42 GNOME • Lenovo Yoga 7i • Wayland" class="w-full hud-input rounded-xl px-3 py-2 text-xs" />
+            </div>
+            <div>
+              <label for="persona-prompt-textarea" class="block font-medium mb-1">Custom System Instructions</label>
+              <textarea id="persona-prompt-textarea" rows="4" class="w-full font-mono hud-input rounded-xl p-2.5 text-xs leading-relaxed">Be concise and helpful. Reply conversationally unless asked to launch apps or automate tasks. Never use destructive bash commands.</textarea>
+            </div>
+            <button id="save-persona-btn" type="button" onclick="savePersonalization()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition">
+              Save Personalization &amp; Use Local Llama 3.2
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-install" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold">Complete Commands for a Fresh Fedora Linux Installation</h2>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Run the automated <code class="font-mono text-amber-500">./setup_fedora.sh</code> installer or copy step-by-step commands below.
+          </p>
+        </div>
+        <button id="copy-all-fedora-btn" type="button" onclick="copyCommand('cmd-all-in-one')" class="self-start px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+          📋 Copy Full Installer Command
+        </button>
+      </div>
+
+      <div class="rounded-2xl border border-indigo-500/30 p-4 space-y-2 hud-card">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-indigo-500 font-mono">Option A — Automated One-Line Setup</span>
+          <button id="btn-copy-all" type="button" onclick="copyCommand('cmd-all-in-one')" class="text-xs px-2.5 py-1 rounded bg-black/5 dark:bg-white/10">Copy</button>
+        </div>
+        <pre id="cmd-all-in-one" class="font-mono text-xs bg-black/90 p-3.5 rounded-xl overflow-x-auto text-emerald-400">chmod +x setup_fedora.sh bajrang_llama32.py &amp;&amp; ./setup_fedora.sh</pre>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-2 hud-card">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-500">Step 1 • Install Fedora DNF Packages</span>
+            <button id="btn-copy-step1" type="button" onclick="copyCommand('cmd-step1')" class="px-2 py-0.5 rounded bg-black/5 dark:bg-white/10">Copy</button>
+          </div>
+          <pre id="cmd-step1" class="font-mono bg-black/90 p-3 rounded-xl overflow-x-auto text-slate-200">sudo dnf update -y
+sudo dnf install -y python3 python3-pip python3-gobject python3-pillow sqlite \
+  gtk4 libadwaita pipewire-utils alsa-utils speech-dispatcher speech-dispatcher-utils \
+  espeak-ng ydotool grim gnome-screenshot wl-clipboard gnome-extensions-app curl git
+pip3 install --user --upgrade faster-whisper</pre>
+        </div>
+
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-2 hud-card">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-500">Step 2 • Configure /dev/uinput &amp; ydotoold Daemon</span>
+            <button id="btn-copy-step2" type="button" onclick="copyCommand('cmd-step2')" class="px-2 py-0.5 rounded bg-black/5 dark:bg-white/10">Copy</button>
+          </div>
+          <pre id="cmd-step2" class="font-mono bg-black/90 p-3 rounded-xl overflow-x-auto text-slate-200">echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' | \
+  sudo tee /etc/udev/rules.d/80-uinput-bajrang.rules
+sudo usermod -aG input,pipewire,audio "$USER"
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger
+ydotoold --socket-path=/tmp/.ydotool_socket --socket-perm=0600 &amp;</pre>
+        </div>
+
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-2 hud-card">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-500">Step 3 • Start Ollama &amp; Pull Llama 3.2</span>
+            <button id="btn-copy-step3" type="button" onclick="copyCommand('cmd-step3')" class="px-2 py-0.5 rounded bg-black/5 dark:bg-white/10">Copy</button>
+          </div>
+          <pre id="cmd-step3" class="font-mono bg-black/90 p-3 rounded-xl overflow-x-auto text-slate-200">curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable --now ollama
+ollama pull llama3.2</pre>
+        </div>
+
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-2 hud-card">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-500">Step 4 • Deploy Extension &amp; Launch HUD</span>
+            <button id="btn-copy-step4" type="button" onclick="copyCommand('cmd-step4')" class="px-2 py-0.5 rounded bg-black/5 dark:bg-white/10">Copy</button>
+          </div>
+          <pre id="cmd-step4" class="font-mono bg-black/90 p-3 rounded-xl overflow-x-auto text-slate-200">python3 bajrang_llama32.py --export-project ~/bajrang-ai
+python3 bajrang_llama32.py --install-gnome-extension
+gnome-extensions enable bajrang-ai@fedora.local
+~/bajrang-ai/run.sh</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-pricing" class="hidden space-y-8">
+      <div class="text-center max-w-2xl mx-auto space-y-2">
+        <span class="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-300 text-xs font-bold uppercase">
+          Subscription Store
+        </span>
+        <h2 class="text-2xl sm:text-3xl font-extrabold">Bajrang AI Pro — ₹100 / Month</h2>
+        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+          Subscribe via UPI (Google Pay, PhonePe, Paytm, BHIM), Cards, or NetBanking to unlock GNOME Top-Bar integration, PipeWire Voice Mode, and local SQLite chat history.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-6 flex flex-col justify-between space-y-5 hud-card">
+          <div class="space-y-3">
+            <div class="text-xs font-mono uppercase text-slate-500">BYO Key / Community</div>
+            <div class="text-3xl font-extrabold">₹0 <span class="text-xs font-normal text-slate-500">/ forever</span></div>
+            <p class="text-xs text-slate-500">Use your own OpenAI/Groq API key or local Ollama without a subscription.</p>
+            <ul class="space-y-2 text-xs text-slate-600 dark:text-slate-300 pt-2">
+              <li>✅ Bring Your Own Cloud API Key</li>
+              <li>✅ Basic Local Llama 3.2 Chat HUD</li>
+              <li>✅ Safety Blocklist &amp; Kill-Switch</li>
+              <li class="text-slate-400">❌ GNOME Top-Bar Extension Sync</li>
+              <li class="text-slate-400">❌ Commercial License Support</li>
+            </ul>
+          </div>
+          <button id="plan-free-btn" type="button" onclick="switchTab('byokey')" class="w-full py-2.5 rounded-xl border border-black/15 dark:border-white/15 bg-black/5 dark:bg-white/5 font-semibold text-xs">
+            Configure BYO Key
+          </button>
+        </div>
+
+        <div class="rounded-2xl bg-gradient-to-b from-amber-500/15 via-indigo-950/20 to-transparent border-2 border-amber-500 p-6 flex flex-col justify-between space-y-5 relative shadow-xl">
+          <div class="absolute -top-3 right-5 px-3 py-0.5 rounded-full bg-amber-500 text-slate-950 font-extrabold text-[11px]">
+            MOST POPULAR • ₹100/MO
+          </div>
+          <div class="space-y-3">
+            <div class="text-xs font-mono uppercase text-amber-500 font-bold">Bajrang AI Pro Monthly</div>
+            <div class="text-4xl font-extrabold">₹100 <span class="text-xs font-normal text-slate-500">/ month</span></div>
+            <p class="text-xs text-slate-600 dark:text-slate-300">Complete GNOME 45–49 Extension + PipeWire Voice DSP + SQLite3 Chat History.</p>
+            <ul class="space-y-2 text-xs text-slate-700 dark:text-slate-200 pt-2">
+              <li>✅ <strong>GNOME Top-Bar Extension</strong> (bajrang-ai@fedora.local)</li>
+              <li>✅ <strong>PipeWire Custom Voice DSP</strong> + Unlimited Phrases</li>
+              <li>✅ <strong>Persistent SQLite3 Local History</strong> &amp; Search</li>
+              <li>✅ <strong>Wayland ydotool Automation</strong> + Screen Perception</li>
+              <li>✅ Instant <code class="font-mono">BAJRANG-PRO</code> License Delivery</li>
+            </ul>
+          </div>
+          <button id="plan-monthly-btn" type="button" onclick="openCheckoutModal('monthly')" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-extrabold text-sm shadow-md transition">
+            Buy Pro Monthly — ₹100
+          </button>
+        </div>
+
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-6 flex flex-col justify-between space-y-5 hud-card">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-mono uppercase text-indigo-500 font-bold">Pro Annual Pass</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-bold">Save 17%</span>
+            </div>
+            <div class="text-3xl font-extrabold">₹999 <span class="text-xs font-normal text-slate-500">/ year</span></div>
+            <p class="text-xs text-slate-500">Full annual license key for power developers across multiple Fedora machines.</p>
+            <ul class="space-y-2 text-xs text-slate-600 dark:text-slate-300 pt-2">
+              <li>✅ Everything in Pro Monthly</li>
+              <li>✅ 365 Days Validity on up to 3 Fedora PCs</li>
+              <li>✅ Priority Qwen2.5-VL Multimodal Support</li>
+              <li>✅ Custom Action Automation Macros</li>
+            </ul>
+          </div>
+          <button id="plan-annual-btn" type="button" onclick="openCheckoutModal('annual')" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+            Buy Pro Annual — ₹999
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-git" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-4">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold">Host Bajrang AI on Git &amp; Deploy to Web</h2>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Everything you need to host this portal and desktop app on GitHub, GitLab, or GitHub Pages.
+          </p>
+        </div>
+        <button id="copy-git-all-btn" type="button" onclick="copyCommand('cmd-git-push')" class="self-start px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+          📋 Copy Git Push Commands
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-3 hud-card">
+          <h3 class="font-bold text-sm">📦 Initialize Git Repository &amp; Push to GitHub</h3>
+          <p class="text-xs text-slate-500">Run inside your project directory to create your Git repository and push:</p>
+          <pre id="cmd-git-push" class="font-mono text-xs bg-black/90 p-3.5 rounded-xl overflow-x-auto text-emerald-400">git init
+git add .
+git commit -m "Initial commit: Bajrang AI Pro for Fedora Linux"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/bajrang-ai.git
+git push -u origin main</pre>
+        </div>
+
+        <div class="rounded-2xl border border-black/10 dark:border-white/10 p-5 space-y-3 hud-card">
+          <h3 class="font-bold text-sm">🌐 Free Web Hosting on GitHub Pages</h3>
+          <p class="text-xs text-slate-500">Enable instant free hosting for the website in GitHub Settings:</p>
+          <div class="font-mono text-xs bg-black/90 p-3.5 rounded-xl overflow-x-auto text-slate-200 space-y-1">
+            <div>1. Go to repository: <strong>Settings → Pages</strong></div>
+            <div>2. Build and deployment: <strong>Deploy from a branch</strong></div>
+            <div>3. Branch: <strong>main / (root)</strong> → Click <strong>Save</strong></div>
+            <div class="text-amber-400 pt-1">Your website will be live at:</div>
+            <div class="text-emerald-400">https://YOUR_USERNAME.github.io/bajrang-ai/</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="google-login-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-sm rounded-2xl bg-white dark:bg-[#151824] text-slate-900 dark:text-white border border-black/10 dark:border-white/15 p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-3">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span class="font-bold text-sm">Sign in with Google</span>
+        </div>
+        <button id="close-google-modal-btn" type="button" onclick="closeGoogleLoginModal()" class="text-slate-400 hover:text-white text-xs">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-500 dark:text-slate-400">
+        Sign in to link your ₹100/mo subscription license keys, sync chat history, and manage devices.
+      </p>
+
+      <div class="space-y-2 text-xs">
+        <button id="google-account-1-btn" type="button" onclick="executeGoogleLogin('Kaushik Ram Ravuru', 'kaushikramravuru@gmail.com')" class="w-full p-3 rounded-xl border border-black/10 dark:border-white/15 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 flex items-center gap-3 transition">
+          <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">K</div>
+          <div class="text-left flex-1 truncate">
+            <div class="font-semibold text-xs">Kaushik Ram Ravuru</div>
+            <div class="text-[11px] text-slate-500 font-mono">kaushikramravuru@gmail.com</div>
+          </div>
+        </button>
+
+        <div class="pt-2 border-t border-black/10 dark:border-white/10 space-y-2">
+          <label for="custom-google-email" class="block text-slate-500 font-medium">Or enter your Google email:</label>
+          <div class="flex gap-2">
+            <input id="custom-google-email" type="email" placeholder="you@gmail.com" class="flex-1 hud-input rounded-xl px-3 py-1.5 text-xs focus:outline-none" />
+            <button id="custom-google-submit-btn" type="button" onclick="executeCustomEmailGoogleLogin()" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-semibold text-xs">Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="checkout-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-2xl bg-white dark:bg-[#141724] text-slate-900 dark:text-white border border-black/10 dark:border-white/15 shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 bg-gradient-to-r from-amber-500/20 via-indigo-900/30 to-black/20 border-b border-black/10 dark:border-white/10 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 font-extrabold flex items-center justify-center">₹</span>
+          <div>
+            <div class="font-bold text-sm">Bajrang AI Pro Checkout</div>
+            <div id="checkout-plan-subtitle" class="text-xs text-amber-600 dark:text-amber-300 font-mono">Pro Monthly Plan • ₹100 / month</div>
+          </div>
+        </div>
+        <button id="close-checkout-btn" type="button" onclick="closeCheckoutModal()" class="text-slate-400 hover:text-white text-sm px-2 py-1">✕</button>
+      </div>
+
+      <form id="checkout-form" onsubmit="processCheckoutPayment(event)" class="p-5 space-y-4 text-xs">
+        <div>
+          <label for="checkout-email" class="block font-medium mb-1">Subscriber Email</label>
+          <input id="checkout-email" type="email" required value="kaushikramravuru@gmail.com" class="w-full hud-input rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-amber-400" />
+        </div>
+
+        <div>
+          <label class="block font-medium mb-1.5">Select Payment Method</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button id="pay-tab-upi" type="button" onclick="selectPaymentMethod('UPI')" class="py-2 px-2 rounded-xl border border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-300 font-bold text-center">
+              📱 UPI / QR
+            </button>
+            <button id="pay-tab-card" type="button" onclick="selectPaymentMethod('CARD')" class="py-2 px-2 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 font-medium text-center">
+              💳 Card
+            </button>
+            <button id="pay-tab-net" type="button" onclick="selectPaymentMethod('NETBANKING')" class="py-2 px-2 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 font-medium text-center">
+              🏦 NetBanking
+            </button>
+          </div>
+        </div>
+
+        <div id="payment-method-fields" class="p-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-black/40 space-y-2.5">
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="text-slate-500">Google Pay, PhonePe, Paytm, BHIM</span>
+            <span class="text-emerald-500 font-mono font-bold">0% UPI Fee</span>
+          </div>
+          <div>
+            <label for="checkout-upi-id" class="block text-slate-500 mb-1">Enter UPI VPA / ID</label>
+            <input id="checkout-upi-id" type="text" value="kaushik@okicici" class="w-full hud-input rounded-lg px-3 py-1.5 font-mono text-xs" />
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl border border-black/10 dark:border-white/10 flex items-center justify-between">
+          <div>
+            <div class="font-semibold">Total Payable Now</div>
+            <div class="text-[11px] text-slate-500">Instant license key generation</div>
+          </div>
+          <div id="checkout-total-amount" class="text-xl font-extrabold text-amber-500">₹100</div>
+        </div>
+
+        <button id="submit-payment-btn" type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-sm shadow-lg transition">
+          Pay <span id="checkout-btn-amount">₹100</span> &amp; Activate License
+        </button>
+      </form>
+
+      <div id="checkout-success-view" class="hidden p-5 space-y-4 text-xs">
+        <div class="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-200">
+          <div class="font-bold text-sm">✅ Payment Verified! License Key Issued</div>
+          <div id="receipt-subtitle" class="text-[11px] mt-0.5">UPI Settlement Verified • ₹100.00 INR</div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block font-semibold">Your Bajrang AI Pro Key:</label>
+          <div class="flex items-center gap-2">
+            <code id="issued-license-key" class="flex-1 font-mono text-xs bg-black/80 border border-amber-500/40 text-amber-300 p-2.5 rounded-xl select-all"></code>
+            <button id="copy-issued-key-btn" type="button" onclick="copyCommand('issued-license-key')" class="px-3 py-2.5 rounded-xl bg-black/10 dark:bg-white/10 hover:bg-black/20 font-semibold">
+              Copy
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block font-semibold">Terminal Activation Command:</label>
+          <pre id="issued-activate-cmd" class="font-mono text-[11px] bg-black/80 border border-white/10 text-emerald-400 p-2.5 rounded-xl overflow-x-auto"></pre>
+        </div>
+
+        <button id="done-checkout-btn" type="button" onclick="closeCheckoutModal()" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold">
+          Done &amp; Return to Dashboard
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="border-t border-black/10 dark:border-white/10 py-5 px-4 sm:px-6 text-xs text-slate-500 mt-10">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <strong>Bajrang AI Pro v3.2</strong> — Fedora GNOME / Wayland Desktop Assistant.
+      </div>
+      <div class="flex flex-wrap gap-4 font-medium">
+        <a href="https://ollama.com/library/llama3.2" target="_blank" rel="noopener noreferrer" class="hover:underline">Ollama Llama 3.2</a>
+        <a href="https://github.com/ReimuNotMoe/ydotool" target="_blank" rel="noopener noreferrer" class="hover:underline">ydotool Wayland</a>
+        <a href="https://pygobject.gnome.org/" target="_blank" rel="noopener noreferrer" class="hover:underline">PyGObject GTK4</a>
+        <a href="https://pipewire.org/" target="_blank" rel="noopener noreferrer" class="hover:underline">PipeWire Audio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const STORAGE_KEY = 'bajrang_ai_pro_state_v32';
+
+    const DEFAULT_STATE = {
+      activeTab: 'simulator',
+      theme: 'dark',
+      selectedModel: 'llama3.2',
+      agentState: 'idle',
+      activeLicense: 'BAJRANG-PRO-KAUSHIK-20261211-B46C1D64',
+      selectedPlan: 'monthly',
+      paymentMethod: 'UPI',
+      googleUser: null,
+      byoSettings: {
+        provider: 'groq',
+        apiKey: '',
+        endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+        model: 'llama-3.3-70b-versatile'
+      },
+      currentSessionId: 'sess_fedora_01',
+      sessions: [
+        {
+          session_id: 'sess_fedora_01',
+          title: 'Fedora GNOME Setup & Voice Test',
+          model: 'llama3.2',
+          updated_at: '2026-11-11 19:16',
+          messages: [
+            {
+              role: 'assistant',
+              content: 'Bajrang AI Pro v3.2 ready on Fedora GNOME/Wayland. You can run locally with Llama 3.2 or use your own API key for free. Click Speak 🎙️ to test Voice Mode.',
+              results: []
+            },
+            {
+              role: 'user',
+              content: '🎙️ open terminal',
+              results: []
+            },
+            {
+              role: 'assistant',
+              content: 'Opening GNOME Terminal on Fedora Wayland.',
+              results: [
+                {
+                  tool: 'shell_exec',
+                  success: true,
+                  blocked: false,
+                  output: 'Executed: gtk-launch org.gnome.Terminal.desktop (exit 0)'
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      subscribers: [
+        {
+          email: 'kaushikramravuru@gmail.com',
+          plan: 'Pro Monthly (₹100/mo)',
+          amount: 100,
+          method: 'UPI (kaushik@okicici)',
+          key: 'BAJRANG-PRO-KAUSHIK-20261211-B46C1D64'
+        }
+      ]
+    };
+
+    let appState = loadAppState();
+    let dspInterval = null;
+
+    function loadAppState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.sessions)) {
+            return parsed;
+          }
+        }
+      } catch (e) {
+      }
+      return JSON.parse(JSON.stringify(DEFAULT_STATE));
+    }
+
+    function saveAppState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+      } catch (e) {
+      }
+    }
+
+    function showToast(message, tone) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      const isErr = tone === 'error';
+      toast.className = 'pointer-events-auto px-4 py-2.5 rounded-xl border text-xs font-medium shadow-xl transition-all ' +
+        (isErr ? 'border-red-500 bg-red-950 text-red-200' : 'border-emerald-500 bg-slate-900 text-emerald-200');
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function () {
+        toast.remove();
+      }, 3200);
+    }
+
+    function copyCommand(elementId) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const text = (el.textContent || el.innerText || '').trim();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          showToast('Copied to clipboard!');
+        }).catch(function () {
+          fallbackCopy(text);
+        });
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('Copied to clipboard!');
+      } catch (e) {
+        showToast('Select text to copy manually.');
+      }
+      ta.remove();
+    }
+
+    function toggleTheme() {
+      const htmlEl = document.documentElement;
+      const cur = htmlEl.classList.contains('dark') ? 'dark' : 'light';
+      const nxt = cur === 'dark' ? 'light' : 'dark';
+      applyTheme(nxt);
+      appState.theme = nxt;
+      saveAppState();
+    }
+
+    function applyTheme(themeName) {
+      const htmlEl = document.documentElement;
+      const icon = document.getElementById('theme-icon');
+      const text = document.getElementById('theme-text');
+      if (themeName === 'light') {
+        htmlEl.classList.remove('dark');
+        htmlEl.classList.add('light');
+        if (icon) icon.textContent = '🌙';
+        if (text) text.textContent = 'Dark';
+      } else {
+        htmlEl.classList.remove('light');
+        htmlEl.classList.add('dark');
+        if (icon) icon.textContent = '☀️';
+        if (text) text.textContent = 'Bright';
+      }
+    }
+
+    function switchTab(tabName) {
+      appState.activeTab = tabName;
+      const tabs = ['simulator', 'byokey', 'install', 'pricing', 'git'];
+      tabs.forEach(function (t) {
+        const sec = document.getElementById('tab-' + t);
+        const btn = document.getElementById('nav-btn-' + t);
+        if (sec) {
+          sec.classList.toggle('hidden', t !== tabName);
+        }
+        if (btn) {
+          if (t === tabName) {
+            btn.className = 'px-3 py-1.5 rounded-lg bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-semibold transition';
+          } else {
+            btn.className = 'px-3 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5 transition';
+          }
+        }
+      });
+      saveAppState();
+    }
+
+    function openGoogleLoginModal() {
+      const modal = document.getElementById('google-login-modal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeGoogleLoginModal() {
+      const modal = document.getElementById('google-login-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function executeGoogleLogin(name, email) {
+      appState.googleUser = {
+        name: name,
+        email: email,
+        avatar: 'data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'28\' height=\'28\'><circle cx=\'14\' cy=\'14\' r=\'14\' fill=\'%234f46e5\'/><text x=\'14\' y=\'18\' font-size=\'12\' fill=\'%23fff\' text-anchor=\'middle\' font-family=\'sans-serif\'>' + (email[0].toUpperCase()) + '</text></svg>'
+      };
+      saveAppState();
+      renderGoogleUserProfile();
+      closeGoogleLoginModal();
+      showToast('Signed in with Google as ' + email);
+      const emailField = document.getElementById('checkout-email');
+      if (emailField) emailField.value = email;
+    }
+
+    function executeCustomEmailGoogleLogin() {
+      const input = document.getElementById('custom-google-email');
+      if (input && input.value && input.value.includes('@')) {
+        const email = input.value.trim();
+        const userName = email.split('@')[0];
+        executeGoogleLogin(userName, email);
+      } else {
+        showToast('Please enter a valid Google email address.', 'error');
+      }
+    }
+
+    function signOutGoogle() {
+      appState.googleUser = null;
+      saveAppState();
+      renderGoogleUserProfile();
+      showToast('Signed out from Google account.');
+    }
+
+    function renderGoogleUserProfile() {
+      const btn = document.getElementById('google-login-btn');
+      const profile = document.getElementById('google-user-profile');
+      const nameEl = document.getElementById('google-user-name');
+      const avatarEl = document.getElementById('google-user-avatar');
+
+      if (appState.googleUser) {
+        if (btn) btn.classList.add('hidden');
+        if (profile) profile.classList.remove('hidden');
+        if (nameEl) nameEl.textContent = appState.googleUser.name;
+        if (avatarEl) avatarEl.src = appState.googleUser.avatar;
+      } else {
+        if (btn) btn.classList.remove('hidden');
+        if (profile) profile.classList.add('hidden');
+      }
+    }
+
+    function applyProviderPreset(provider) {
+      const endpoint = document.getElementById('byo-endpoint-input');
+      const model = document.getElementById('byo-model-input');
+      if (!endpoint || !model) return;
+      if (provider === 'groq') {
+        endpoint.value = 'https://api.groq.com/openai/v1/chat/completions';
+        model.value = 'llama-3.3-70b-versatile';
+      } else if (provider === 'openrouter') {
+        endpoint.value = 'https://openrouter.ai/api/v1/chat/completions';
+        model.value = 'meta-llama/llama-3.2-3b-instruct:free';
+      } else if (provider === 'openai') {
+        endpoint.value = 'https://api.openai.com/v1/chat/completions';
+        model.value = 'gpt-4o-mini';
+      } else if (provider === 'gemini') {
+        endpoint.value = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+        model.value = 'gemini-1.5-flash';
+      }
+    }
+
+    function saveByoKeySettings() {
+      const key = (document.getElementById('byo-key-input').value || '').trim();
+      const endpoint = (document.getElementById('byo-endpoint-input').value || '').trim();
+      const model = (document.getElementById('byo-model-input').value || '').trim();
+      const provider = document.getElementById('byo-provider-select').value;
+
+      appState.byoSettings = {
+        provider: provider,
+        apiKey: key,
+        endpoint: endpoint,
+        model: model
+      };
+      appState.selectedModel = 'byo-cloud';
+      const select = document.getElementById('hud-model-select');
+      if (select) select.value = 'byo-cloud';
+      setAgentStatus('idle', 'Idle • Cloud ' + model + ' (BYO Key)');
+      saveAppState();
+      showToast('Switched to BYO Key mode for free cloud inference!');
+      switchTab('simulator');
+    }
+
+    function clearByoKeySettings() {
+      appState.byoSettings.apiKey = '';
+      document.getElementById('byo-key-input').value = '';
+      appState.selectedModel = 'llama3.2';
+      const select = document.getElementById('hud-model-select');
+      if (select) select.value = 'llama3.2';
+      setAgentStatus('idle', 'Idle • llama3.2 (Local Personalized)');
+      saveAppState();
+      showToast('Reset to local Llama 3.2 mode.');
+    }
+
+    function savePersonalization() {
+      const name = document.getElementById('persona-name-input').value.trim();
+      const role = document.getElementById('persona-role-input').value.trim();
+      appState.selectedModel = 'llama3.2';
+      const select = document.getElementById('hud-model-select');
+      if (select) select.value = 'llama3.2';
+      setAgentStatus('idle', 'Idle • ' + name + ' (Personalized Local)');
+      saveAppState();
+      showToast('Personalized configuration saved for ' + role + '!');
+      switchTab('simulator');
+    }
+
+    function toggleGnomeExtMenu() {
+      const menu = document.getElementById('gnome-ext-menu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    function toggleHudVisibility() {
+      const hud = document.getElementById('simulated-hud');
+      if (!hud) return;
+      hud.classList.toggle('opacity-30');
+      hud.classList.toggle('scale-95');
+      showToast('Toggled Floating HUD (Super+Space)');
+    }
+
+    function toggleSidebarVisibility() {
+      const sb = document.getElementById('hud-sidebar');
+      if (sb) sb.classList.toggle('hidden');
+    }
+
+    function changeModel(modelName) {
+      appState.selectedModel = modelName;
+      if (modelName === 'byo-cloud') {
+        const m = (appState.byoSettings && appState.byoSettings.model) || 'Cloud Model';
+        setAgentStatus('idle', 'Idle • ' + m + ' (BYO Key)');
+      } else {
+        setAgentStatus('idle', 'Idle • ' + modelName + ' (Local)');
+      }
+      saveAppState();
+    }
+
+    function setAgentStatus(stateKey, labelText) {
+      appState.agentState = stateKey;
+      const dot = document.getElementById('hud-status-dot');
+      const topDot = document.getElementById('gnome-top-dot');
+      const lbl = document.getElementById('hud-status-text');
+
+      const clsMap = {
+        idle: 'dot-idle',
+        listening: 'dot-listening',
+        thinking: 'dot-thinking',
+        executing: 'dot-executing',
+        blocked: 'dot-blocked'
+      };
+      const dotCls = clsMap[stateKey] || 'dot-idle';
+      if (dot) dot.className = 'w-3 h-3 rounded-full ' + dotCls;
+      if (topDot) topDot.className = 'w-2.5 h-2.5 rounded-full ' + dotCls;
+      if (lbl) lbl.textContent = labelText;
+    }
+
+    function animateDspBars(active) {
+      const container = document.getElementById('dsp-bars');
+      const readout = document.getElementById('dsp-readout');
+      if (!container) return;
+      if (dspInterval) {
+        clearInterval(dspInterval);
+        dspInterval = null;
+      }
+      const spans = container.querySelectorAll('span');
+      if (!active) {
+        spans.forEach(function (s) { s.style.height = '5px'; });
+        return;
+      }
+      dspInterval = setInterval(function () {
+        spans.forEach(function (s) {
+          const h = Math.floor(4 + Math.random() * 12);
+          s.style.height = h + 'px';
+        });
+        if (readout) {
+          const db = (-24 + Math.random() * 9).toFixed(1);
+          readout.textContent = 'PipeWire 16kHz | ' + db + ' dB | 8-Band DTW Matching...';
+        }
+      }, 90);
+    }
+
+    function triggerSimulatedVoice(phrase) {
+      setAgentStatus('listening', 'Listening (PipeWire 16kHz Voice DSP)...');
+      animateDspBars(true);
+      const readout = document.getElementById('dsp-readout');
+
+      setTimeout(function () {
+        animateDspBars(false);
+        if (readout) {
+          readout.textContent = 'Matched "' + phrase + '" (99% DTW confidence, -18.9 dB)';
+        }
+        if (phrase === 'clear chat') {
+          const session = getActiveSession();
+          if (session) {
+            session.messages = [];
+            renderChatMessages();
+            saveAppState();
+          }
+          setAgentStatus('idle', 'Idle • ' + appState.selectedModel);
+          showToast('Voice Command: Cleared active session.');
+          return;
+        }
+        if (phrase === 'kill switch') {
+          triggerKillSwitch();
+          return;
+        }
+        runSimulatedPrompt(phrase, true);
+      }, 900);
+    }
+
+    function startBrowserOrSimulatedMic() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        try {
+          const rec = new SR();
+          rec.lang = 'en-IN';
+          rec.interimResults = false;
+          setAgentStatus('listening', 'Listening via Microphone...');
+          animateDspBars(true);
+          rec.onresult = function (event) {
+            animateDspBars(false);
+            const transcript = event.results[0][0].transcript;
+            runSimulatedPrompt(transcript, true);
+          };
+          rec.onerror = function () {
+            animateDspBars(false);
+            triggerSimulatedVoice('open terminal');
+          };
+          rec.start();
+          return;
+        } catch (e) {
+        }
+      }
+      triggerSimulatedVoice('open terminal');
+    }
+
+    function speakTextIfEnabled(text) {
+      const ttsBox = document.getElementById('tts-checkbox');
+      if (!ttsBox || !ttsBox.checked) return;
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance(text);
+          utter.rate = 1.05;
+          window.speechSynthesis.speak(utter);
+        } catch (e) {
+        }
+      }
+    }
+
+    const FORBIDDEN_PATTERNS = [
+      'rm -rf /',
+      'rm -rf /*',
+      'rm -rf ~',
+      'sudo ',
+      'pkexec',
+      'mkfs',
+      'dd if=',
+      'chmod -R 777 /',
+      'dnf remove -y systemd',
+      'curl | bash',
+      'wget | bash'
+    ];
+
+    function triggerKillSwitch() {
+      animateDspBars(false);
+      setAgentStatus('blocked', 'Blocked / Killed (Emergency Stop Ctrl+Esc)');
+      const session = getActiveSession();
+      if (session) {
+        session.messages.push({
+          role: 'assistant',
+          content: '🛑 Emergency Kill-Switch activated: sent SIGTERM -> SIGKILL (500ms) to active subprocesses and released ydotool keycodes.',
+          results: [
+            {
+              tool: 'kill_switch',
+              success: false,
+              blocked: true,
+              output: 'All active processes terminated; key states reset.'
+            }
+          ]
+        });
+        renderChatMessages();
+        saveAppState();
+      }
+      showToast('Emergency Kill-Switch triggered (Ctrl+Escape)', 'error');
+    }
+
+    function handlePromptSubmit(event) {
+      event.preventDefault();
+      const input = document.getElementById('hud-prompt-input');
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      runSimulatedPrompt(text, false);
+    }
+
+    function runSimulatedPrompt(promptText, fromVoice) {
+      const session = getActiveSession();
+      if (!session) return;
+
+      session.messages.push({
+        role: 'user',
+        content: fromVoice ? '🎙️ ' + promptText : promptText,
+        results: []
+      });
+      if (session.title === 'New Conversation') {
+        session.title = promptText.slice(0, 32);
+      }
+      session.updated_at = 'Just now';
+      renderChatMessages();
+      renderSessionList();
+
+      const modelLabel = appState.selectedModel === 'byo-cloud' ? 'BYO Cloud' : 'Llama 3.2';
+      setAgentStatus('thinking', 'Thinking (' + modelLabel + ')...');
+
+      setTimeout(function () {
+        const lower = promptText.toLowerCase();
+        let hitForbidden = null;
+        for (let i = 0; i < FORBIDDEN_PATTERNS.length; i++) {
+          if (lower.includes(FORBIDDEN_PATTERNS[i])) {
+            hitForbidden = FORBIDDEN_PATTERNS[i];
+            break;
+          }
+        }
+
+        if (hitForbidden || /\b(curl|wget)\b.*\|\s*(ba)?sh/.test(lower)) {
+          setAgentStatus('blocked', 'Action Blocked by Safety Guardrail');
+          const blockReply = 'Safety Guardrail intercepted destructive command pattern matching "' + (hitForbidden || 'pipe-to-shell') + '".';
+          session.messages.push({
+            role: 'assistant',
+            content: blockReply,
+            results: [
+              {
+                tool: 'shell_exec',
+                success: false,
+                blocked: true,
+                output: 'Blocked by SafetyGuard: destructive pattern detected.'
+              }
+            ]
+          });
+          speakTextIfEnabled(blockReply);
+          renderChatMessages();
+          saveAppState();
+          return;
+        }
+
+        if (lower.includes('open terminal') || lower.includes('launch terminal')) {
+          setAgentStatus('executing', 'Executing action (shell_exec)...');
+          const reply = 'Opening GNOME Terminal on Fedora Wayland.';
+          session.messages.push({
+            role: 'assistant',
+            content: reply,
+            results: [
+              {
+                tool: 'shell_exec',
+                success: true,
+                blocked: false,
+                output: 'Executed: gtk-launch org.gnome.Terminal.desktop (exit 0)'
+              }
+            ]
+          });
+          setTimeout(function () { setAgentStatus('idle', 'Idle • ' + modelLabel); }, 400);
+          speakTextIfEnabled(reply);
+        } else if (lower.includes('screenshot') || lower.includes('screen')) {
+          setAgentStatus('executing', 'Capturing screen (Wayland perception)...');
+          const reply = 'Captured Wayland display frame (1920x1080) for multimodal analysis.';
+          session.messages.push({
+            role: 'assistant',
+            content: reply,
+            results: [
+              {
+                tool: 'wayland_perception',
+                success: true,
+                blocked: false,
+                output: 'gnome-screenshot -f /tmp/bajrang_capture.png (JPEG 82%)'
+              }
+            ]
+          });
+          setTimeout(function () { setAgentStatus('idle', 'Idle • ' + modelLabel); }, 400);
+          speakTextIfEnabled(reply);
+        } else if (lower.includes('type ') || lower.includes('click')) {
+          setAgentStatus('executing', 'Injecting Wayland input via ydotoold...');
+          const payload = promptText.replace(/.*type\s+/i, '').trim() || 'Hello Fedora';
+          const reply = 'Injected synthetic keystrokes via ydotoold socket.';
+          session.messages.push({
+            role: 'assistant',
+            content: reply,
+            results: [
+              {
+                tool: 'ydotool_type',
+                success: true,
+                blocked: false,
+                output: 'ydotool type --key-delay 12 "' + payload + '" -> Enter'
+              }
+            ]
+          });
+          setTimeout(function () { setAgentStatus('idle', 'Idle • ' + modelLabel); }, 400);
+          speakTextIfEnabled(reply);
+        } else {
+          setAgentStatus('idle', 'Idle • ' + modelLabel);
+          const reply = 'Bajrang AI (' + modelLabel + '): Processed "' + promptText + '" conversationally. No system action tools were commanded.';
+          session.messages.push({
+            role: 'assistant',
+            content: reply,
+            results: []
+          });
+          speakTextIfEnabled(reply);
+        }
+
+        renderChatMessages();
+        renderSessionList();
+        saveAppState();
+      }, 450);
+    }
+
+    function getActiveSession() {
+      for (let i = 0; i < appState.sessions.length; i++) {
+        if (appState.sessions[i].session_id === appState.currentSessionId) {
+          return appState.sessions[i];
+        }
+      }
+      return appState.sessions[0];
+    }
+
+    function createNewSession() {
+      const newId = 'sess_' + Date.now();
+      appState.sessions.unshift({
+        session_id: newId,
+        title: 'New Conversation',
+        model: appState.selectedModel,
+        updated_at: 'Just now',
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Started new local session with ' + appState.selectedModel + '.',
+            results: []
+          }
+        ]
+      });
+      appState.currentSessionId = newId;
+      renderSessionList();
+      renderChatMessages();
+      saveAppState();
+    }
+
+    function selectSession(sessionId) {
+      appState.currentSessionId = sessionId;
+      renderSessionList();
+      renderChatMessages();
+      saveAppState();
+    }
+
+    function renderSessionList() {
+      const listEl = document.getElementById('session-list');
+      const countEl = document.getElementById('session-count-badge');
+      const searchEl = document.getElementById('history-search-input');
+      if (!listEl) return;
+
+      const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
+      const filtered = appState.sessions.filter(function (s) {
+        if (!query) return true;
+        if (s.title.toLowerCase().includes(query)) return true;
+        return s.messages.some(function (m) { return m.content.toLowerCase().includes(query); });
+      });
+
+      if (countEl) countEl.textContent = String(filtered.length);
+      listEl.innerHTML = '';
+
+      filtered.forEach(function (sess) {
+        const isCurrent = sess.session_id === appState.currentSessionId;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full text-left px-2.5 py-2 rounded-xl text-xs transition flex items-center justify-between gap-1 ' +
+          (isCurrent ? 'bg-indigo-600/30 border border-indigo-500/40 font-semibold' : 'hover:bg-black/5 dark:hover:bg-white/5 text-slate-500 dark:text-slate-300');
+        btn.onclick = function () { selectSession(sess.session_id); };
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'truncate';
+        titleSpan.textContent = '💬 ' + sess.title;
+
+        const countSpan = document.createElement('span');
+        countSpan.className = 'text-[10px] font-mono text-slate-400';
+        countSpan.textContent = String(sess.messages.length);
+
+        btn.appendChild(titleSpan);
+        btn.appendChild(countSpan);
+        listEl.appendChild(btn);
+      });
+    }
+
+    function renderChatMessages() {
+      const box = document.getElementById('chat-messages');
+      if (!box) return;
+      const session = getActiveSession();
+      box.innerHTML = '';
+      if (!session) return;
+
+      session.messages.forEach(function (msg) {
+        const wrap = document.createElement('div');
+        if (msg.role === 'user') {
+          wrap.className = 'bg-indigo-600/25 border border-indigo-500/40 rounded-2xl px-3.5 py-2.5 ml-6 text-slate-900 dark:text-white';
+          wrap.textContent = 'You: ' + msg.content;
+        } else {
+          wrap.className = 'border border-black/10 dark:border-white/10 rounded-2xl px-3.5 py-2.5 mr-4 space-y-2 bg-black/[0.02] dark:bg-white/[0.04] text-slate-800 dark:text-slate-200';
+          const textP = document.createElement('div');
+          textP.textContent = msg.content;
+          wrap.appendChild(textP);
+
+          if (Array.isArray(msg.results) && msg.results.length > 0) {
+            msg.results.forEach(function (res) {
+              const badge = document.createElement('div');
+              const isErr = res.blocked || !res.success;
+              badge.className = 'font-mono text-[11px] px-3 py-1.5 rounded-xl border ' +
+                (isErr ? 'bg-red-500/15 border-red-500/40 text-red-600 dark:text-red-300' : 'bg-emerald-500/15 border-emerald-500/35 text-emerald-600 dark:text-emerald-300');
+              const prefix = res.blocked ? '🛑 BLOCKED' : (res.success ? '✅ OK' : '⚠️ ERROR');
+              badge.textContent = '[' + prefix + ' • ' + res.tool + '] ' + res.output;
+              wrap.appendChild(badge);
+            });
+          }
+        }
+        box.appendChild(wrap);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function generateBajrangLicenseKey(subscriberEmail, planType) {
+      const cleanId = (subscriberEmail || 'USER01').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'USER01';
+      const now = new Date();
+      now.setDate(now.getDate() + (planType === 'annual' ? 365 : 30));
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const expStr = '' + yyyy + mm + dd;
+
+      const raw = cleanId + '-' + expStr + '-BajrangAI-Fedora-Pro-100INR-2026';
+      let hash = 2166136261;
+      for (let i = 0; i < raw.length; i++) {
+        hash ^= raw.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      const sig = (hash >>> 0).toString(16).toUpperCase().padStart(8, '0');
+      return 'BAJRANG-PRO-' + cleanId + '-' + expStr + '-' + sig;
+    }
+
+    function openCheckoutModal(plan) {
+      appState.selectedPlan = plan;
+      const modal = document.getElementById('checkout-modal');
+      const form = document.getElementById('checkout-form');
+      const successView = document.getElementById('checkout-success-view');
+      const sub = document.getElementById('checkout-plan-subtitle');
+      const total = document.getElementById('checkout-total-amount');
+      const btnAmt = document.getElementById('checkout-btn-amount');
+      const emailField = document.getElementById('checkout-email');
+
+      if (appState.googleUser && emailField) {
+        emailField.value = appState.googleUser.email;
+      }
+
+      const priceText = plan === 'annual' ? '₹999' : '₹100';
+      if (sub) sub.textContent = plan === 'annual' ? 'Pro Annual Plan • ₹999 / year' : 'Pro Monthly Plan • ₹100 / month';
+      if (total) total.textContent = priceText;
+      if (btnAmt) btnAmt.textContent = priceText;
+
+      if (form) form.classList.remove('hidden');
+      if (successView) successView.classList.add('hidden');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeCheckoutModal() {
+      const modal = document.getElementById('checkout-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function selectPaymentMethod(method) {
+      appState.paymentMethod = method;
+      const tabIds = { UPI: 'pay-tab-upi', CARD: 'pay-tab-card', NETBANKING: 'pay-tab-net' };
+      ['UPI', 'CARD', 'NETBANKING'].forEach(function (m) {
+        const btn = document.getElementById(tabIds[m]);
+        if (!btn) return;
+        if (m === method) {
+          btn.className = 'py-2 px-2 rounded-xl border border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-300 font-bold text-center';
+        } else {
+          btn.className = 'py-2 px-2 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 font-medium text-center';
+        }
+      });
+
+      const container = document.getElementById('payment-method-fields');
+      if (!container) return;
+      if (method === 'UPI') {
+        container.innerHTML = '<div class="flex items-center justify-between text-[11px]"><span class="text-slate-500">Google Pay, PhonePe, Paytm, BHIM</span><span class="text-emerald-500 font-mono font-bold">0% UPI Fee</span></div><div><label for="checkout-upi-id" class="block text-slate-500 mb-1">Enter UPI VPA / ID</label><input id="checkout-upi-id" type="text" value="kaushik@okicici" class="w-full hud-input rounded-lg px-3 py-1.5 font-mono text-xs" /></div>';
+      } else if (method === 'CARD') {
+        container.innerHTML = '<div><label for="checkout-card-num" class="block text-slate-500 mb-1">Card Number (RuPay / Visa / Mastercard)</label><input id="checkout-card-num" type="text" value="4532 •••• •••• 8891" class="w-full hud-input rounded-lg px-3 py-1.5 font-mono text-xs" /></div>';
+      } else {
+        container.innerHTML = '<div><label for="checkout-bank-select" class="block text-slate-500 mb-1">Select Bank</label><select id="checkout-bank-select" class="w-full hud-input rounded-lg px-3 py-1.5 text-xs"><option>SBI NetBanking</option><option>HDFC Bank</option><option>ICICI Bank</option><option>Axis Bank</option></select></div>';
+      }
+    }
+
+    function processCheckoutPayment(event) {
+      event.preventDefault();
+      const emailEl = document.getElementById('checkout-email');
+      const email = emailEl ? emailEl.value.trim() : 'subscriber@fedora.org';
+      const plan = appState.selectedPlan || 'monthly';
+      const amount = plan === 'annual' ? 999 : 100;
+      const key = generateBajrangLicenseKey(email, plan);
+
+      appState.activeLicense = key;
+      appState.subscribers.unshift({
+        email: email,
+        plan: plan === 'annual' ? 'Pro Annual (₹999/yr)' : 'Pro Monthly (₹100/mo)',
+        amount: amount,
+        method: appState.paymentMethod,
+        key: key
+      });
+
+      const form = document.getElementById('checkout-form');
+      const successView = document.getElementById('checkout-success-view');
+      const keyEl = document.getElementById('issued-license-key');
+      const cmdEl = document.getElementById('issued-activate-cmd');
+      const subEl = document.getElementById('receipt-subtitle');
+
+      if (keyEl) keyEl.textContent = key;
+      if (cmdEl) cmdEl.textContent = 'python3 ~/bajrang-ai/bajrang_llama32.py --activate-license ' + key;
+      if (subEl) subEl.textContent = 'Verified via ' + appState.paymentMethod + ' • ₹' + amount + '.00 INR (' + email + ')';
+
+      if (form) form.classList.add('hidden');
+      if (successView) successView.classList.remove('hidden');
+
+      saveAppState();
+      showToast('Issued Pro License Key for ' + email + '!');
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+      applyTheme(appState.theme || 'dark');
+      renderGoogleUserProfile();
+      renderSessionList();
+      renderChatMessages();
+      switchTab(appState.activeTab || 'simulator');
+    });
+  </script>
+</body>
+</html>
