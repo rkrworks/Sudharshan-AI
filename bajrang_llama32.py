@@ -1,5 +1,37 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+# -*- coding: utf-8 -*-
+"""
+Bajrang AI Pro (Argon Edition v6.0) — Fedora Workstation (GNOME / Wayland) Commercial Desktop Assistant
+Integrates the unified `bajrang_core` v6.0 architecture:
+  - SecurityVault (OS keyring / Windows DPAPI / 0600 vault)
+  - AsymmetricLicenseVerifier (RSA Public-Key verification; no hardcoded client secrets)
+  - LongTermMemoryStore & DatabaseMigrationManager (SQLite WAL + v1..v3 migrations + Memories CRUD)
+  - ModularAIRouter (Gemini Argon, Ollama Local, Groq, OpenRouter, OpenAI + Task Complexity Router + Fallback)
+  - AutonomousTaskPlanner (Multi-step Downloads organizer, SHA-256 duplicate finder, explicit permission gates)
+  - AdvancedVoiceEngine (Continuous listening, wake word, barge-in, spectral noise floor + VAD, 8-band Goertzel-DTW + Whisper/SAPI)
+  - CrossPlatformComputerUse (Verified Win32 EnumWindows/SetForegroundWindow, PIL.ImageGrab, PyAutoGUI/user32 input)
+"""
+
+try:
+    from bajrang_core import (
+        CORE_VERSION,
+        AdvancedVoiceEngine,
+        AsymmetricLicenseVerifier,
+        AutonomousTaskPlanner,
+        CrossPlatformComputerUse,
+        DatabaseMigrationManager,
+        LongTermMemoryStore,
+        ModularAIRouter,
+        PerformanceProfile,
+        PerformanceSettings,
+        SecurityVault,
+        TaskComplexity,
+        ToolSchemaValidator,
+        redact_sensitive_text,
+    )
+    HAS_BAJRANG_CORE = True
+except ImportError:
+    HAS_BAJRANG_CORE = False
 
 import argparse
 import array
@@ -677,7 +709,7 @@ class CustomVoiceRecognizer:
         if sampwidth != 2 or n_frames == 0:
             return []
 
-        total_shorts = len(raw) // 2
+        total_shorts = int(len(raw) / 2)
         shorts = struct.unpack(f"<{total_shorts}h", raw[: total_shorts * 2])
         if n_channels > 1:
             shorts = shorts[::n_channels]

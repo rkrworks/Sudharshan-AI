@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 
-APP_VERSION = "5.0.0-Argon-Win11-Installer"
+APP_VERSION = "6.0.0-Argon-Win11-Installer"
 
 REQUIRED_LIBRARIES: List[Tuple[str, str, str, str]] = [
     ("pillow", "PIL", "pillow>=10.0.0", "PIL.ImageGrab Screen Capture & RGB Framing"),
@@ -353,11 +353,48 @@ class SmartSystemScannerInstaller:
 
         return True
 
+    def write_diagnostic_log(self, event: str) -> Path:
+        log_path = self.install_dir / "install_diagnostics.log"
+        self.install_dir.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {event}\n")
+        return log_path
+
+    def clean_uninstall(self) -> Tuple[bool, str]:
+        removed_items: List[str] = []
+        if platform.system() == "Windows":
+            desktop_lnk = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop" / "Bajrang AI Pro.lnk"
+            if desktop_lnk.exists():
+                try:
+                    desktop_lnk.unlink()
+                    removed_items.append(str(desktop_lnk))
+                except Exception:
+                    pass
+        for fname in [
+            "bajrang_core.py",
+            "bajrang_windows.py",
+            "installer_windows.py",
+            "requirements_windows.txt",
+            "setup_windows.bat",
+            "Launch_Bajrang_AI.bat",
+            "Modelfile.bajrang",
+            "install_diagnostics.log",
+        ]:
+            fp = self.install_dir / fname
+            if fp.exists():
+                try:
+                    fp.unlink()
+                    removed_items.append(fname)
+                except Exception:
+                    pass
+        return True, f"Uninstalled {len(removed_items)} application files from {self.install_dir} (preserved user history.db)."
+
     def deploy_app_files_and_shortcuts(self, source_dir: Optional[Path] = None) -> Dict[str, str]:
         src = source_dir or Path(__file__).resolve().parent
         deployed: Dict[str, str] = {}
 
-        for fname in ["bajrang_windows.py", "requirements_windows.txt", "setup_windows.bat"]:
+        for fname in ["bajrang_core.py", "bajrang_windows.py", "requirements_windows.txt", "setup_windows.bat"]:
             candidate = src / fname
             if candidate.exists():
                 dest = self.install_dir / fname
@@ -612,9 +649,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Bajrang AI Pro Smart Windows 11 Pre-Flight Scanner & Installer")
     parser.add_argument("--cli", action="store_true", help="Run interactive CLI scanner and installer")
     parser.add_argument("--dry-run", action="store_true", help="Simulate installing missing packages")
+    parser.add_argument("--uninstall", action="store_true", help="Cleanly uninstall application files and shortcuts")
     parser.add_argument("--self-test", action="store_true", help="Run self-tests")
     args = parser.parse_args()
 
+    if getattr(args, 'uninstall', False):
+        sc = SmartSystemScannerInstaller()
+        ok, msg = sc.clean_uninstall()
+        print(msg)
+        return 0 if ok else 1
     if args.self_test:
         return run_self_tests()
     if args.cli or args.dry_run:

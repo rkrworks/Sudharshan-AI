@@ -1,33 +1,24 @@
-# Bajrang AI Pro — Fedora Linux GNOME Assistant & Portal
+# ⚡ Bajrang AI Pro (Argon v6.0) — Cross-Platform Voice & Autonomous Desktop AI Assistant
 
-Locally-run and cloud-powered AI desktop assistant tailored for Fedora Linux (GNOME / Wayland).
-Integrates with Ollama Llama 3.2 or custom API keys, featuring a custom PipeWire 8-band Spectral-DTW Voice Recognizer, SQLite3 local chat history, GNOME Shell 45-49 ESM Top-Bar extension, and a commercial storefront with Razorpay checkout.
+**Bajrang AI Pro v6.0** is a privacy-first, security-hardened personal AI desktop assistant engineered for **Windows 11** and **Fedora Workstation (GNOME / Wayland)**.
 
-## Features
-- **Flexible Intelligence**: Run 100% offline via local Ollama `llama3.2` or enter your own OpenAI / Groq / OpenRouter API key for free cloud inference.
-- **Dynamic Themes**: Bright Mode & Dark Mode switch in both the GTK4/Libadwaita HUD and web portal.
-- **Voice Mode**: Pure-Python DSP (VAD + 8-band Goertzel Spectral-DTW acoustic template matcher) recording 16kHz mono PCM via PipeWire (`pw-record`).
-- **Local Storage**: Persistent SQLite3 history (`~/.local/share/bajrang-ai/history.db`) with full-text search.
-- **GNOME Shell Extension**: Native top-bar status pill and control menu (`bajrang-ai@fedora.local`) communicating over local IPC (`127.0.0.1:17420`).
-- **Safety Guardrail**: Built-in blocklist preventing root escalation and destructive commands, plus instant Emergency Kill-Switch (`Ctrl+Escape`).
+## 🌟 What's New in v6.0
+1. **Modular Multi-Provider AI Router (`bajrang_core.py`)**:
+   - Automatic task-complexity routing (`SIMPLE`, `MODERATE`, `COMPLEX_REASONING`, `MULTIMODAL_VISION`) across **Google Gemini Argon** (`gemini-2.5-pro` / `gemini-2.5-flash`), local [Ollama Llama 3.2](https://ollama.com/library/llama3.2) (`bajrang-llama3.2`), **Groq**, **OpenRouter**, and **OpenAI** with automatic provider fallback, health checks, and exponential-backoff retries.
+2. **Long-Term SQLite3 Memory with Schema Migrations (`v1` → `v3`)**:
+   - Stores searchable `preference`, `project`, `fact`, and `task_history` memories in `history.db` (`WAL` mode, `0600` permissions) with automatic PII/credential redaction guardrails.
+3. **Autonomous Multi-Step Task Planner & Restrictive Executor**:
+   - Plans and executes multi-step workflows (such as scanning `~/Downloads`, separating `Documents`, `Images`, `Installers`, `Archives`, and `Code`, and identifying exact duplicates via SHA-256 hashing), pauses at an explicit permission gate before moving or deleting files, and verifies post-action integrity.
+4. **Advanced Hybrid Voice Engine**:
+   - Continuous listening mode with configurable wake word (`"hey bajrang"`), barge-in TTS interruption, spectral noise floor subtraction + RMS/ZCR VAD, 8-band Goertzel Spectral-DTW command recognition, `faster-whisper` / Windows SAPI / [PipeWire](https://pipewire.org/) STT, microphone selection, and configurable TTS speed/language.
+5. **Verified Computer-Use & Security Hardening**:
+   - Genuine window enumeration, focus switching, screen analysis, and input automation via Win32 `user32.dll` + [PyAutoGUI](https://pypi.org/project/PyAutoGUI/) on Windows 11 and [PyGObject GTK4](https://pygobject.gnome.org/) + [ydotool](https://github.com/ReimuNotMoe/ydotool) + [GNOME Shell 45–49 ESM](https://gjs.guide/extensions/upgrading/gnome-shell-45.html) on Fedora Wayland.
+   - OS credential storage (`SecurityVault` via `keyring` / Windows DPAPI / Linux `libsecret`), strict JSON Schema tool validation (`shell=False`), and server-side [Razorpay Orders & RSA Public-Key License Verification](https://razorpay.com/upi-payment-gateway-india/) (`razorpay_server.py`).
 
-## How to Host on GitHub Pages
-1. Initialize repository and push to GitHub:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit: Bajrang AI Pro for Fedora Linux"
-   git branch -M main
-   git remote add origin https://github.com/YOUR_USERNAME/bajrang-ai.git
-   git push -u origin main
-   ```
-2. Enable GitHub Pages in your repo:
-   - Go to **Settings → Pages**
-   - Under **Build and deployment**, select **GitHub Actions** (or **Deploy from a branch → main / root**)
-   - Your website will be live at `https://YOUR_USERNAME.github.io/bajrang-ai/`
-
-## Quick Start on Fedora Workstation
+## 🚀 Quick Start
+- **Windows 11**: Run `BajrangAI_Pro_Setup.exe` or `python installer_windows.py` (or `.\setup_windows.bat`).
+- **Fedora Workstation**: Run `chmod +x setup_fedora.sh && ./setup_fedora.sh`.
+- **Run Automated 15-Domain Test Suite**:
 ```bash
-chmod +x setup_fedora.sh bajrang_llama32.py
-./setup_fedora.sh
+python3 test_bajrang_suite.py
 ```

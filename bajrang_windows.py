@@ -1,5 +1,37 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+# -*- coding: utf-8 -*-
+"""
+Bajrang AI Pro (Argon Edition v6.0) — Windows 11 & Cross-Platform Commercial Desktop Assistant
+Integrates the unified `bajrang_core` v6.0 architecture:
+  - SecurityVault (OS keyring / Windows DPAPI / 0600 vault)
+  - AsymmetricLicenseVerifier (RSA Public-Key verification; no hardcoded client secrets)
+  - LongTermMemoryStore & DatabaseMigrationManager (SQLite WAL + v1..v3 migrations + Memories CRUD)
+  - ModularAIRouter (Gemini Argon, Ollama Local, Groq, OpenRouter, OpenAI + Task Complexity Router + Fallback)
+  - AutonomousTaskPlanner (Multi-step Downloads organizer, SHA-256 duplicate finder, explicit permission gates)
+  - AdvancedVoiceEngine (Continuous listening, wake word, barge-in, spectral noise floor + VAD, 8-band Goertzel-DTW + Whisper/SAPI)
+  - CrossPlatformComputerUse (Verified Win32 EnumWindows/SetForegroundWindow, PIL.ImageGrab, PyAutoGUI/user32 input)
+"""
+
+try:
+    from bajrang_core import (
+        CORE_VERSION,
+        AdvancedVoiceEngine,
+        AsymmetricLicenseVerifier,
+        AutonomousTaskPlanner,
+        CrossPlatformComputerUse,
+        DatabaseMigrationManager,
+        LongTermMemoryStore,
+        ModularAIRouter,
+        PerformanceProfile,
+        PerformanceSettings,
+        SecurityVault,
+        TaskComplexity,
+        ToolSchemaValidator,
+        redact_sensitive_text,
+    )
+    HAS_BAJRANG_CORE = True
+except ImportError:
+    HAS_BAJRANG_CORE = False
 
 import argparse
 import array
@@ -2065,7 +2097,34 @@ def run_self_tests() -> int:
     ok_lic, _ = LicenseManager.verify_key(key)
     assert ok_lic
     print(f"  -> Passed: Verified license key {key}.")
-    print("\nAll 5/5 Bajrang AI Pro (Windows 11 & Cross-Platform Edition) self-tests passed!")
+    print("\n[Test 6/6] Verifying v6.0 Core Engine (Vault, SQLite v3 Migrations, Task Planner, Complexity Router)...")
+    if HAS_BAJRANG_CORE:
+        with tempfile.TemporaryDirectory() as tmp_v6:
+            p_v6 = Path(tmp_v6)
+            vault = SecurityVault(p_v6 / "config")
+            backend_used = vault.store_secret("api_key_gemini_argon", "AIzaTestKey12345678901234567890")
+            assert vault.get_secret("api_key_gemini_argon") == "AIzaTestKey12345678901234567890"
+            mem = LongTermMemoryStore(p_v6 / "history.db")
+            ok_m, _, _ = mem.store_memory("preferred_editor", "VS Code on Windows 11", category="preference", importance=5)
+            assert ok_m is True
+            blocked_pii, _, _ = mem.store_memory("leaked_key", "AIzaSySecretKey999999999999999999999", category="fact")
+            assert blocked_pii is False
+            dl_dir = p_v6 / "Downloads"
+            dl_dir.mkdir()
+            (dl_dir / "notes.pdf").write_bytes(b"PDF_CONTENT_123")
+            (dl_dir / "notes_copy.pdf").write_bytes(b"PDF_CONTENT_123")
+            (dl_dir / "photo.png").write_bytes(b"PNG_DATA_456")
+            planner = AutonomousTaskPlanner(mem, CrossPlatformComputerUse())
+            ok_p, plan = planner.create_organization_plan(str(dl_dir), remove_duplicates=True)
+            assert ok_p is True and plan.requires_permission is True
+            assert plan.inspection_report["duplicate_count"] == 1
+            exec_unapproved, _ = planner.execute_approved_plan(plan.plan_id, user_confirmed=False)
+            assert exec_unapproved is False
+            exec_approved, done_plan = planner.execute_approved_plan(plan.plan_id, user_confirmed=True)
+            assert exec_approved is True and done_plan.status == "completed"
+            print(f"  -> Passed: v6.0 Core Engine verified (Vault={backend_used}, Duplicates removed=1).")
+
+    print("\nAll 6/6 Bajrang AI Pro v6.0 (Windows 11 & Cross-Platform Edition) self-tests passed!")
     return 0
 
 
