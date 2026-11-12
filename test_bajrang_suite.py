@@ -48,6 +48,8 @@ class TestBajrangV6Suite(unittest.TestCase):
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp_dir.name)
         self.vault = SecurityVault(self.root / "config")
+        for k in ("api_key_gemini_argon", "byo_api_key", "api_key_groq", "api_key_openrouter", "api_key_openai"):
+            self.vault.delete_secret(k)
         self.db_path = self.root / "history.db"
         self.memory = LongTermMemoryStore(self.db_path)
         self.computer = CrossPlatformComputerUse(PerformanceSettings.from_profile("balanced"))
@@ -60,6 +62,8 @@ class TestBajrangV6Suite(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        for k in ("api_key_gemini_argon", "byo_api_key", "api_key_groq", "api_key_openrouter", "api_key_openai"):
+            self.vault.delete_secret(k)
         self.tmp_dir.cleanup()
 
     def test_01_ai_provider_connectivity_and_health_checks(self) -> None:
@@ -98,11 +102,12 @@ class TestBajrangV6Suite(unittest.TestCase):
             "gemini-2.5-pro",
         )
 
-        sess_id = self.memory.create_session("Fallback Test")
-        turn = self.router.generate_structured_turn("open notepad", sess_id)
-        self.assertEqual(turn["provider_used"], "deterministic_local_router")
-        self.assertEqual(turn["actions"][0]["tool"], "open_app")
-        self.assertEqual(turn["actions"][0]["arguments"]["app_name"], "notepad")
+        with patch("urllib.request.urlopen", side_effect=OSError("External endpoint offline")):
+            sess_id = self.memory.create_session("Fallback Test")
+            turn = self.router.generate_structured_turn("open notepad", sess_id)
+            self.assertEqual(turn["provider_used"], "deterministic_local_router")
+            self.assertEqual(turn["actions"][0]["tool"], "open_app")
+            self.assertEqual(turn["actions"][0]["arguments"]["app_name"], "notepad")
 
     def test_03_voice_recognition_vad_denoise_and_goertzel_dtw(self) -> None:
         """[REAL INTEGRATION TEST] Verifies VAD silence rejection, spectral denoise, wake word & 8-band Goertzel-DTW."""

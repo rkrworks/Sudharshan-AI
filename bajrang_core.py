@@ -366,6 +366,16 @@ class SecurityVault:
                 keyring.delete_password(self.SERVICE_NAME, clean_name)
             except Exception:
                 pass
+        if platform.system() == "Linux" and shutil.which("secret-tool") and os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+            try:
+                subprocess.run(
+                    ["secret-tool", "clear", "service", self.SERVICE_NAME, "account", clean_name],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+            except Exception:
+                pass
         for suffix in (".dpapi", ".sec"):
             fp = self.vault_dir / f"{clean_name}{suffix}"
             if fp.exists():
