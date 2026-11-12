@@ -1,0 +1,6 @@
+-r requirements-common.txt
+PyAutoGUI>=0.9.54
+pyttsx3>=2.90
+sounddevice>=0.4.6
+pystray>=0.19.5
+faster-whisper>=1.0.0
