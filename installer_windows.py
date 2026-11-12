@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Bajrang AI Pro (Argon Edition v5.0) — Smart Windows 11 Pre-Flight PC Scanner & Installer
-Scans the PC first for Python, Winget, Ollama, Llama 3.2, and every required library
-(pillow, pyautogui, pyttsx3, numpy, sounddevice, faster-whisper, pystray), then installs
-only the missing items one by one and creates Windows 11 Desktop & Start Menu shortcuts.
-"""
-
 import argparse
+import ctypes
 import importlib.util
 import json
 import os
@@ -18,651 +11,384 @@ import sys
 import tempfile
 import threading
 import time
-from dataclasses import dataclass, field
+import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
+IS_WINDOWS = platform.system().lower() == "windows"
 
-APP_VERSION = "6.0.0-Argon-Win11-Installer"
-
-REQUIRED_LIBRARIES: List[Tuple[str, str, str, str]] = [
-    ("pillow", "PIL", "pillow>=10.0.0", "PIL.ImageGrab Screen Capture & RGB Framing"),
-    ("pyautogui", "pyautogui", "pyautogui>=0.9.54", "Win32 Mouse & Keyboard Automation"),
-    ("pyttsx3", "pyttsx3", "pyttsx3>=2.90", "Windows SAPI5 Offline Voice Synthesis (TTS)"),
-    ("numpy", "numpy", "numpy>=1.24.0", "8-Band Goertzel Spectral-DTW Matrix Math"),
-    ("sounddevice", "sounddevice", "sounddevice>=0.4.6", "16 kHz Mono PCM Microphone Capture"),
-    ("faster-whisper", "faster_whisper", "faster-whisper>=1.0.0", "Offline Neural Speech-to-Text Engine"),
-    ("pystray", "pystray", "pystray>=0.19.5", "Windows 11 System Tray Integration"),
+REQUIRED_PIP_PACKAGES: List[Tuple[str, str, str]] = [
+    ("pillow", "PIL", "Pillow (Screen Vision Capture)"),
+    ("pyautogui", "pyautogui", "PyAutoGUI (Desktop Automation)"),
+    ("pyttsx3", "pyttsx3", "pyttsx3 (Offline SAPI5 Voice Synthesis)"),
+    ("numpy", "numpy", "NumPy (8-Band Goertzel DSP Audio Math)"),
+    ("sounddevice", "sounddevice", "sounddevice (16 kHz Microphone Stream)"),
+    ("pystray", "pystray", "pystray (Windows 11 System Tray Integration)"),
 ]
 
 
 @dataclass
-class ComponentScanItem:
-    key: str
-    name: str
-    category: str
-    description: str
-    found: bool = False
-    version_or_path: str = "Not Scanned"
-    action_taken: str = "Pending"
-    pip_spec: str = ""
-    import_name: str = ""
+class ComponentCheck:
+    item_id: str
+    title: str
+    installed: bool
+    version_or_detail: str
+    action_needed: str
+    requires_consent: bool = False
 
 
-class SmartSystemScannerInstaller:
-    """Scans the Windows 11 PC for all required runtimes, tools, and libraries, then installs missing ones."""
-
-    def __init__(self, target_dir: Optional[Path] = None) -> None:
+class WindowsSmartEnvironmentScanner:
+    def __init__(self, target_dir: Optional[Path] = None, config_dir: Optional[Path] = None):
         if target_dir is not None:
-            self.install_dir = target_dir
-        elif platform.system() == "Windows":
+            self.target_dir = target_dir
+        elif IS_WINDOWS:
             local_app = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-            self.install_dir = Path(local_app) / "BajrangAI"
+            self.target_dir = Path(local_app) / "Programs" / "BajrangAIPro"
         else:
-            self.install_dir = Path.home() / ".local" / "share" / "bajrang-ai-win-sim"
-        self.install_dir.mkdir(parents=True, exist_ok=True)
-        self.items: List[ComponentScanItem] = self._build_initial_checklist()
+            self.target_dir = Path.home() / ".local" / "share" / "bajrang-ai-pro-win-sim"
+        self.config_dir = config_dir or (Path.home() / ".bajrang_ai")
 
-    def _build_initial_checklist(self) -> List[ComponentScanItem]:
-        checklist = [
-            ComponentScanItem(
-                key="os_arch",
-                name="Windows 11 / 64-Bit OS & Audio Subsystem",
-                category="System",
-                description="Verifies 64-bit OS architecture and WinMM / audio subsystem readiness",
-            ),
-            ComponentScanItem(
-                key="winget",
-                name="Windows Package Manager (winget)",
-                category="System",
-                description="Used to silently install Ollama or system runtimes if missing",
-            ),
-            ComponentScanItem(
-                key="python_runtime",
-                name="Python 3.10+ Runtime",
-                category="Runtime",
-                description="Core Python interpreter for Bajrang AI Pro HUD & Voice DSP",
-            ),
-            ComponentScanItem(
-                key="pip_manager",
-                name="Python pip Package Installer",
-                category="Runtime",
-                description="Installs missing Python wheel packages automatically",
-            ),
-            ComponentScanItem(
-                key="ollama_bin",
-                name="Ollama for Windows Engine",
-                category="AI Engine",
-                description="Local LLM runtime serving Llama 3.2 on port 11434",
-            ),
-        ]
-        for pkg_name, mod_name, pip_spec, desc in REQUIRED_LIBRARIES:
-            checklist.append(
-                ComponentScanItem(
-                    key=f"lib_{pkg_name}",
-                    name=f"Python Library: {pkg_name}",
-                    category="Python Library",
-                    description=desc,
-                    pip_spec=pip_spec,
-                    import_name=mod_name,
-                )
-            )
-        checklist.append(
-            ComponentScanItem(
-                key="llama_model",
-                name="Personalized bajrang-llama3.2 Model",
-                category="AI Model",
-                description="Custom Ollama Modelfile tuned for Lenovo Yoga 7i & Windows 11",
-            )
-        )
-        return checklist
-
-    def scan_single_item(self, item: ComponentScanItem) -> ComponentScanItem:
-        if item.key == "os_arch":
-            sys_name = platform.system()
-            arch = platform.machine()
-            item.found = True
-            item.version_or_path = f"{sys_name} {platform.release()} ({arch})"
-            item.action_taken = "FOUND ✓"
-            return item
-
-        if item.key == "winget":
-            wg = shutil.which("winget")
-            if wg:
-                item.found = True
-                item.version_or_path = wg
-                item.action_taken = "FOUND ✓"
-            else:
-                item.found = platform.system() != "Windows"
-                item.version_or_path = "winget (Built-in on Windows 11)" if not wg else wg
-                item.action_taken = "FOUND ✓" if item.found else "MISSING (Optional)"
-            return item
-
-        if item.key == "python_runtime":
-            ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-            item.found = sys.version_info >= (3, 9)
-            item.version_or_path = f"Python {ver} ({sys.executable})"
-            item.action_taken = "FOUND ✓" if item.found else "NEEDS UPGRADE"
-            return item
-
-        if item.key == "pip_manager":
-            try:
-                proc = subprocess.run(
-                    [sys.executable, "-m", "pip", "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=8,
-                    check=False,
-                )
-                if proc.returncode == 0:
-                    item.found = True
-                    item.version_or_path = proc.stdout.strip().split(" from ")[0]
-                    item.action_taken = "FOUND ✓"
-                else:
-                    item.found = False
-                    item.version_or_path = "pip module not present"
-                    item.action_taken = "MISSING -> WILL BOOTSTRAP"
-            except Exception:
-                item.found = False
-                item.version_or_path = "pip unavailable"
-                item.action_taken = "MISSING -> WILL BOOTSTRAP"
-            return item
-
-        if item.key == "ollama_bin":
-            ol_path = shutil.which("ollama")
-            if not ol_path and platform.system() == "Windows":
-                candidate = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe"
-                if candidate.exists():
-                    ol_path = str(candidate)
-            if ol_path:
-                item.found = True
-                item.version_or_path = ol_path
-                item.action_taken = "FOUND ✓"
-            else:
-                item.found = False
-                item.version_or_path = "Not installed"
-                item.action_taken = "MISSING -> WILL INSTALL"
-            return item
-
-        if item.key.startswith("lib_"):
-            spec = importlib.util.find_spec(item.import_name)
-            if spec is not None:
-                item.found = True
-                item.version_or_path = f"Module '{item.import_name}' verified"
-                item.action_taken = "FOUND ✓"
-            else:
-                item.found = False
-                item.version_or_path = f"Package '{item.pip_spec}' not installed"
-                item.action_taken = "MISSING -> WILL INSTALL"
-            return item
-
-        if item.key == "llama_model":
-            ol_path = shutil.which("ollama")
-            if ol_path:
-                try:
-                    proc = subprocess.run(
-                        [ol_path, "list"],
-                        capture_output=True,
-                        text=True,
-                        timeout=8,
-                        check=False,
-                    )
-                    if proc.returncode == 0 and "bajrang-llama3.2" in proc.stdout:
-                        item.found = True
-                        item.version_or_path = "bajrang-llama3.2:latest"
-                        item.action_taken = "FOUND ✓"
-                        return item
-                except Exception:
-                    pass
-            item.found = False
-            item.version_or_path = "bajrang-llama3.2 Modelfile not built yet"
-            item.action_taken = "MISSING -> WILL BUILD"
-            return item
-
-        return item
-
-    def run_full_scan(
-        self, on_progress: Optional[Callable[[int, int, ComponentScanItem], None]] = None
-    ) -> Tuple[int, int]:
-        total = len(self.items)
-        found_count = 0
-        for idx, item in enumerate(self.items):
-            self.scan_single_item(item)
-            if item.found:
-                found_count += 1
-            if on_progress:
-                on_progress(idx + 1, total, item)
-        return found_count, total
-
-    def install_missing_item(self, item: ComponentScanItem, dry_run: bool = False) -> bool:
-        if item.found:
-            item.action_taken = "ALREADY PRESENT (SKIPPED)"
-            return True
-
-        if dry_run:
-            item.found = True
-            item.action_taken = "SIMULATED INSTALL ✓"
-            return True
-
-        if item.key == "pip_manager":
-            try:
-                proc = subprocess.run(
-                    [sys.executable, "-m", "ensurepip", "--upgrade"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    check=False,
-                )
-                item.found = proc.returncode == 0
-                item.action_taken = "INSTALLED ✓" if item.found else "FAILED (Check Python)"
-                return item.found
-            except Exception as exc:
-                item.action_taken = f"ERROR: {exc}"
-                return False
-
-        if item.key == "ollama_bin":
-            if platform.system() == "Windows" and shutil.which("winget"):
-                try:
-                    proc = subprocess.run(
-                        [
-                            "winget",
-                            "install",
-                            "-e",
-                            "--id",
-                            "Ollama.Ollama",
-                            "--accept-package-agreements",
-                            "--accept-source-agreements",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        timeout=300,
-                        check=False,
-                    )
-                    if proc.returncode == 0 or shutil.which("ollama"):
-                        item.found = True
-                        item.version_or_path = "Installed via winget"
-                        item.action_taken = "INSTALLED ✓"
-                        return True
-                except Exception:
-                    pass
-            item.action_taken = "OPTIONAL (Use BYO API Key or https://ollama.com/download/windows)"
+    @staticmethod
+    def is_admin() -> bool:
+        if not IS_WINDOWS:
+            return False
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
             return False
 
-        if item.key.startswith("lib_"):
+    @staticmethod
+    def check_python_runtime() -> ComponentCheck:
+        ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        ok = (sys.version_info.major, sys.version_info.minor) >= (3, 9)
+        return ComponentCheck(
+            item_id="python_runtime",
+            title="Python 3.9+ Runtime (64-bit)",
+            installed=ok,
+            version_or_detail=f"Python {ver} ({platform.machine()})",
+            action_needed="Ready" if ok else "Manual installation of Python 3.11+ required",
+            requires_consent=False,
+        )
+
+    @staticmethod
+    def check_winget() -> ComponentCheck:
+        path = shutil.which("winget")
+        return ComponentCheck(
+            item_id="winget_cli",
+            title="Windows Package Manager (winget)",
+            installed=bool(path),
+            version_or_detail=path or "Not found in PATH",
+            action_needed="Ready" if path else "Optional (used for Ollama installation)",
+            requires_consent=False,
+        )
+
+    @staticmethod
+    def check_ollama_daemon() -> ComponentCheck:
+        bin_path = shutil.which("ollama")
+        reachable = False
+        try:
+            req = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+            with urllib.request.urlopen(req, timeout=1.2) as resp:
+                reachable = resp.status == 200
+        except Exception:
+            reachable = False
+        installed = bool(bin_path) or reachable
+        detail = "Daemon reachable on 127.0.0.1:11434" if reachable else (bin_path or "Not installed")
+        return ComponentCheck(
+            item_id="ollama_daemon",
+            title="Ollama Local AI Engine",
+            installed=installed,
+            version_or_detail=detail,
+            action_needed="Ready" if installed else "Optional: Install Ollama via winget (requires consent) or use Cloud API Key",
+            requires_consent=True,
+        )
+
+    @staticmethod
+    def check_llama32_model() -> ComponentCheck:
+        has_model = False
+        try:
+            req = urllib.request.Request("http://127.0.0.1:11434/api/tags", method="GET")
+            with urllib.request.urlopen(req, timeout=1.2) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                models = [m.get("name", "") for m in data.get("models", [])]
+                has_model = any("llama3.2" in m or "bajrang-llama32" in m for m in models)
+        except Exception:
+            has_model = False
+        return ComponentCheck(
+            item_id="llama32_model",
+            title="Llama 3.2 Local Model (~2.0 GB)",
+            installed=has_model,
+            version_or_detail="Installed in Ollama" if has_model else "Not pulled locally",
+            action_needed="Ready" if has_model else "Optional: Pull llama3.2 (~2.0 GB download, requires explicit consent)",
+            requires_consent=True,
+        )
+
+    @staticmethod
+    def check_pip_packages() -> List[ComponentCheck]:
+        results: List[ComponentCheck] = []
+        for pip_name, import_name, label in REQUIRED_PIP_PACKAGES:
+            spec = importlib.util.find_spec(import_name)
+            installed = spec is not None
+            results.append(
+                ComponentCheck(
+                    item_id=f"pip:{pip_name}",
+                    title=label,
+                    installed=installed,
+                    version_or_detail=f"Module '{import_name}' present" if installed else f"Missing '{pip_name}'",
+                    action_needed="Skip (Already Installed)" if installed else f"pip install {pip_name}",
+                    requires_consent=False,
+                )
+            )
+        return results
+
+    def scan_all(self) -> List[ComponentCheck]:
+        checks = [
+            self.check_python_runtime(),
+            self.check_winget(),
+            self.check_ollama_daemon(),
+            self.check_llama32_model(),
+        ]
+        checks.extend(self.check_pip_packages())
+        return checks
+
+    def install_single_item(
+        self,
+        item_id: str,
+        log_cb: Optional[Callable[[str], None]] = None,
+        dry_run: bool = False,
+        consent_winget: bool = False,
+        consent_model_pull: bool = False,
+    ) -> Tuple[bool, str]:
+        def emit(msg: str) -> None:
+            if log_cb:
+                log_cb(msg)
+
+        if item_id.startswith("pip:"):
+            pkg = item_id.split(":", 1)[1].strip()
+            allowed_pkgs = {p[0] for p in REQUIRED_PIP_PACKAGES}
+            if pkg not in allowed_pkgs:
+                return False, f"Rejected unlisted pip package: {pkg}"
+            emit(f"Installing missing Python library '{pkg}'...")
+            if dry_run:
+                return True, f"[Dry-Run] Would run: {sys.executable} -m pip install --upgrade {pkg}"
             try:
                 proc = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pip",
-                        "install",
-                        "--upgrade",
-                        "--disable-pip-version-check",
-                        item.pip_spec,
-                    ],
+                    [sys.executable, "-m", "pip", "install", "--upgrade", pkg],
                     capture_output=True,
                     text=True,
                     timeout=180,
-                    check=False,
                 )
                 if proc.returncode == 0:
-                    item.found = True
-                    item.version_or_path = f"Installed ({item.pip_spec})"
-                    item.action_taken = "INSTALLED ✓"
-                    return True
-                item.action_taken = "PIP INSTALL SKIPPED (Offline / Use Pre-Installed)"
-                return False
+                    return True, f"Installed {pkg} successfully."
+                return False, f"pip install {pkg} failed: {proc.stderr.strip()[:200]}"
             except Exception as exc:
-                item.action_taken = f"SKIPPED ({exc})"
-                return False
+                return False, f"Exception installing {pkg}: {exc}"
 
-        if item.key == "llama_model":
-            modelfile_path = self.install_dir / "Modelfile.bajrang"
-            modelfile_content = (
-                "FROM llama3.2\n"
-                "PARAMETER temperature 0.35\n"
-                "PARAMETER top_p 0.9\n"
-                "PARAMETER num_ctx 8192\n"
-                "PARAMETER num_thread 8\n"
-                'SYSTEM """You are Bajrang AI Pro for Kaushik Ram Ravuru on Windows 11 & Fedora. '
-                'Reply concisely and emit JSON actions only when asked to automate the desktop."""\n'
-            )
-            modelfile_path.write_text(modelfile_content, encoding="utf-8")
-            ol_path = shutil.which("ollama")
-            if ol_path:
-                try:
-                    subprocess.run([ol_path, "pull", "llama3.2"], timeout=600, check=False)
-                    proc = subprocess.run(
-                        [ol_path, "create", "bajrang-llama3.2", "-f", str(modelfile_path)],
-                        capture_output=True,
-                        text=True,
-                        timeout=120,
-                        check=False,
-                    )
-                    if proc.returncode == 0:
-                        item.found = True
-                        item.version_or_path = "bajrang-llama3.2 built"
-                        item.action_taken = "BUILT MODEL ✓"
-                        return True
-                except Exception:
-                    pass
-            item.found = True
-            item.version_or_path = f"Saved {modelfile_path.name} (Ready for Ollama)"
-            item.action_taken = "MODELFILE SAVED ✓"
-            return True
-
-        return True
-
-    def write_diagnostic_log(self, event: str) -> Path:
-        log_path = self.install_dir / "install_diagnostics.log"
-        self.install_dir.mkdir(parents=True, exist_ok=True)
-        ts = time.strftime("%Y-%m-%d %H:%M:%S")
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(f"[{ts}] {event}\n")
-        return log_path
-
-    def clean_uninstall(self) -> Tuple[bool, str]:
-        removed_items: List[str] = []
-        if platform.system() == "Windows":
-            desktop_lnk = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop" / "Bajrang AI Pro.lnk"
-            if desktop_lnk.exists():
-                try:
-                    desktop_lnk.unlink()
-                    removed_items.append(str(desktop_lnk))
-                except Exception:
-                    pass
-        for fname in [
-            "bajrang_core.py",
-            "bajrang_windows.py",
-            "installer_windows.py",
-            "requirements_windows.txt",
-            "setup_windows.bat",
-            "Launch_Bajrang_AI.bat",
-            "Modelfile.bajrang",
-            "install_diagnostics.log",
-        ]:
-            fp = self.install_dir / fname
-            if fp.exists():
-                try:
-                    fp.unlink()
-                    removed_items.append(fname)
-                except Exception:
-                    pass
-        return True, f"Uninstalled {len(removed_items)} application files from {self.install_dir} (preserved user history.db)."
-
-    def deploy_app_files_and_shortcuts(self, source_dir: Optional[Path] = None) -> Dict[str, str]:
-        src = source_dir or Path(__file__).resolve().parent
-        deployed: Dict[str, str] = {}
-
-        for fname in ["bajrang_core.py", "bajrang_windows.py", "requirements_windows.txt", "setup_windows.bat"]:
-            candidate = src / fname
-            if candidate.exists():
-                dest = self.install_dir / fname
-                if candidate.resolve() != dest.resolve():
-                    shutil.copy2(candidate, dest)
-                deployed[fname] = str(dest)
-
-        launcher_bat = self.install_dir / "Launch_Bajrang_AI.bat"
-        launcher_bat.write_text(
-            f'@echo off\r\ncd /d "{self.install_dir}"\r\nstart "" "{sys.executable}" "{self.install_dir / "bajrang_windows.py"}"\r\n',
-            encoding="utf-8",
-        )
-        deployed["Launch_Bajrang_AI.bat"] = str(launcher_bat)
-
-        if platform.system() == "Windows":
-            ps_script = (
-                "$WshShell = New-Object -ComObject WScript.Shell; "
-                "$Desktop = [Environment]::GetFolderPath('Desktop'); "
-                "$Shortcut = $WshShell.CreateShortcut((Join-Path $Desktop 'Bajrang AI Pro.lnk')); "
-                f"$Shortcut.TargetPath = '{sys.executable}'; "
-                f"$Shortcut.Arguments = '\"{self.install_dir / 'bajrang_windows.py'}\"'; "
-                f"$Shortcut.WorkingDirectory = '{self.install_dir}'; "
-                "$Shortcut.Description = 'Bajrang AI Pro (Argon Edition) for Windows 11'; "
-                "$Shortcut.Save()"
-            )
+        if item_id == "ollama_daemon":
+            if not consent_winget:
+                return False, "Skipped Ollama install: explicit user consent required for winget (consent_winget=False)."
+            if not shutil.which("winget") and not dry_run:
+                return False, "winget is not available; Ollama skipped (you can still use Free BYO Cloud API keys)."
+            emit("Installing Ollama via winget (with user consent)...")
+            if dry_run:
+                return True, "[Dry-Run] Would run: winget install -e --id Ollama.Ollama"
             try:
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                proc = subprocess.run(
+                    [
+                        "winget",
+                        "install",
+                        "-e",
+                        "--id",
+                        "Ollama.Ollama",
+                        "--accept-package-agreements",
+                        "--accept-source-agreements",
+                    ],
                     capture_output=True,
-                    timeout=15,
-                    check=False,
+                    text=True,
+                    timeout=300,
                 )
-                deployed["Desktop_Shortcut"] = "Bajrang AI Pro.lnk"
+                return (proc.returncode == 0, "Ollama installed via winget." if proc.returncode == 0 else proc.stderr[:200])
+            except Exception as exc:
+                return False, f"Ollama winget install skipped: {exc}"
+
+        if item_id == "llama32_model":
+            if not consent_model_pull:
+                return False, "Skipped Llama 3.2 pull: explicit user consent required for ~2.0 GB download (consent_model_pull=False)."
+            if not shutil.which("ollama") and not dry_run:
+                return False, "Ollama binary not in PATH; skipping local model pull."
+            emit("Pulling llama3.2 via Ollama (with user consent)...")
+            if dry_run:
+                return True, "[Dry-Run] Would run: ollama pull llama3.2"
+            try:
+                proc = subprocess.run(["ollama", "pull", "llama3.2"], capture_output=True, text=True, timeout=600)
+                return (proc.returncode == 0, "Pulled llama3.2." if proc.returncode == 0 else proc.stderr[:200])
+            except Exception as exc:
+                return False, f"Model pull skipped: {exc}"
+
+        if item_id in ("python_runtime", "winget_cli"):
+            return False, f"Component '{item_id}' cannot be auto-installed by this wizard; please install it manually."
+
+        return False, f"Unsupported or unrecognized installation item: {item_id}"
+
+    def deploy_application_files(self, source_dir: Optional[Path] = None) -> Tuple[bool, str]:
+        src = source_dir or Path(__file__).resolve().parent
+        try:
+            self.target_dir.mkdir(parents=True, exist_ok=True)
+            copied = []
+            for fname in (
+                "bajrang_core.py",
+                "windows.py",
+                "fedora.py",
+                "bajrang_windows.py",
+                "bajrang_llama32.py",
+                "requirements_common.txt",
+                "requirements_windows.txt",
+                "README.md",
+                "SECURITY.md",
+            ):
+                candidate = src / fname
+                if candidate.exists():
+                    shutil.copy2(candidate, self.target_dir / fname)
+                    copied.append(fname)
+            launcher_bat = self.target_dir / "Launch_Bajrang_AI_Pro.bat"
+            launcher_bat.write_text(
+                '@echo off\r\ncd /d "%~dp0"\r\nstart "" pythonw "%~dp0windows.py"\r\n',
+                encoding="utf-8",
+            )
+            return True, f"Deployed {len(copied)} files to {self.target_dir}"
+        except Exception as exc:
+            return False, f"Failed to deploy files: {exc}"
+
+    def clean_uninstall(self, purge_user_data: bool = True) -> Tuple[bool, str]:
+        removed = []
+        try:
+            try:
+                from bajrang_core import SecurityVault
+
+                vault = SecurityVault(self.config_dir)
+                for prov in ("default", "gemini", "groq", "openrouter", "openai"):
+                    vault.delete_api_key(prov)
+                removed.append("SecurityVault credentials")
             except Exception:
                 pass
 
-        return deployed
+            if self.target_dir.exists():
+                shutil.rmtree(self.target_dir, ignore_errors=True)
+                removed.append(str(self.target_dir))
+
+            if purge_user_data and self.config_dir.exists():
+                shutil.rmtree(self.config_dir, ignore_errors=True)
+                removed.append(str(self.config_dir))
+
+            if IS_WINDOWS and purge_user_data:
+                local_app = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "BajrangAI"
+                if local_app.exists():
+                    shutil.rmtree(local_app, ignore_errors=True)
+                    removed.append(str(local_app))
+
+            return True, f"Uninstalled cleanly: {', '.join(removed) if removed else 'Nothing to remove'}"
+        except Exception as exc:
+            return False, f"Uninstall error: {exc}"
 
 
-def run_cli_installer(dry_run: bool = False) -> int:
-    print("=" * 72)
-    print(f"  Bajrang AI Pro ({APP_VERSION}) — Pre-Flight PC Scanner & Installer")
-    print("=" * 72)
-    scanner = SmartSystemScannerInstaller()
-    print(f"\n[Step 1/3] Scanning PC components and Python libraries (Target: {scanner.install_dir})...\n")
-
-    found_count, total = scanner.run_full_scan()
-    for idx, item in enumerate(scanner.items, start=1):
-        badge = "[FOUND ✓]" if item.found else "[MISSING]"
-        print(f"  {idx:02d}/{total:02d} {badge:12s} {item.name:42s} -> {item.version_or_path}")
-
-    missing = [it for it in scanner.items if not it.found]
-    print(f"\nScan Summary: {found_count}/{total} components already present, {len(missing)} missing.")
-
-    print("\n[Step 2/3] Installing missing libraries and models one by one...")
-    for item in scanner.items:
-        if not item.found:
-            print(f"  -> Installing {item.name} ({item.pip_spec or item.key})...")
-            scanner.install_missing_item(item, dry_run=dry_run)
-            print(f"     Result: {item.action_taken}")
-        else:
-            print(f"  -> Skipping {item.name} (Already installed)")
-
-    print("\n[Step 3/3] Deploying application files and Windows 11 shortcuts...")
-    deployed = scanner.deploy_app_files_and_shortcuts()
-    for k, v in deployed.items():
-        print(f"  -> Deployed {k}: {v}")
-
-    print("\nInstallation Complete! Run `python bajrang_windows.py` or use the Desktop shortcut.")
-    return 0
-
-
-def run_gui_installer() -> None:
-    try:
-        import tkinter as tk
-        from tkinter import ttk
-    except Exception:
-        run_cli_installer()
-        return
-
-    scanner = SmartSystemScannerInstaller()
-    root = tk.Tk()
-    root.title("Bajrang AI Pro v5.0 — Smart Windows 11 Setup & Pre-Flight Scanner")
-    root.geometry("860x620")
-    root.configure(bg="#090b11")
-
-    header = tk.Frame(root, bg="#121521", padx=20, pady=14)
-    header.pack(fill=tk.X)
-    tk.Label(
-        header,
-        text="⚡ Bajrang AI Pro — Windows 11 Smart Setup Wizard (.exe)",
-        bg="#121521",
-        fg="#f8fafc",
-        font=("Segoe UI", 14, "bold"),
-    ).pack(anchor="w")
-    tk.Label(
-        header,
-        text=f"Target Directory: {scanner.install_dir}  |  Scans PC first, then installs only missing packages",
-        bg="#121521",
-        fg="#94a3b8",
-        font=("Consolas", 9),
-    ).pack(anchor="w", pady=(2, 0))
-
-    body = tk.Frame(root, bg="#090b11", padx=20, pady=12)
-    body.pack(fill=tk.BOTH, expand=True)
-
-    status_var = tk.StringVar(value="Ready to scan your Windows 11 PC for required libraries & Ollama runtime.")
-    tk.Label(
-        body,
-        textvariable=status_var,
-        bg="#090b11",
-        fg="#fbbf24",
-        font=("Segoe UI", 10, "bold"),
-    ).pack(anchor="w", pady=(0, 8))
-
-    cols = ("component", "category", "status", "details")
-    tree = ttk.Treeview(body, columns=cols, show="headings", height=14)
-    tree.heading("component", text="Component / Library")
-    tree.heading("category", text="Category")
-    tree.heading("status", text="Scan / Install Status")
-    tree.heading("details", text="Detected Version / Path")
-    tree.column("component", width=260)
-    tree.column("category", width=110)
-    tree.column("status", width=165)
-    tree.column("details", width=270)
-    tree.pack(fill=tk.BOTH, expand=True)
-
-    row_ids: Dict[str, str] = {}
-    for item in scanner.items:
-        rid = tree.insert("", tk.END, values=(item.name, item.category, "WAITING FOR SCAN", item.description))
-        row_ids[item.key] = rid
-
-    footer = tk.Frame(root, bg="#121521", padx=20, pady=12)
-    footer.pack(fill=tk.X)
-
-    def refresh_tree() -> None:
-        for it in scanner.items:
-            rid = row_ids.get(it.key)
-            if rid:
-                tree.item(rid, values=(it.name, it.category, it.action_taken, it.version_or_path))
-
-    def on_scan_only() -> None:
-        def worker() -> None:
-            status_var.set("Scanning PC for Python, Winget, Ollama, and 7 required libraries...")
-            found_count, total = scanner.run_full_scan()
-            root.after(0, refresh_tree)
-            missing_cnt = total - found_count
-            root.after(
-                0,
-                lambda: status_var.set(
-                    f"Pre-Flight Scan Complete: {found_count}/{total} found, {missing_cnt} missing. Click 'Install Missing & Finish' to proceed."
-                ),
-            )
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def on_smart_install() -> None:
-        def worker() -> None:
-            status_var.set("Step 1/3: Scanning PC for existing packages...")
-            scanner.run_full_scan()
-            root.after(0, refresh_tree)
-
-            for it in scanner.items:
-                if not it.found:
-                    it.action_taken = "INSTALLING..."
-                    root.after(0, refresh_tree)
-                    root.after(0, lambda name=it.name: status_var.set(f"Step 2/3: Installing missing {name}..."))
-                    scanner.install_missing_item(it, dry_run=False)
-                    root.after(0, refresh_tree)
-                else:
-                    it.action_taken = "FOUND ✓ (Skipped)"
-                    root.after(0, refresh_tree)
-
-            root.after(0, lambda: status_var.set("Step 3/3: Creating Windows 11 Desktop Shortcut & deploying Bajrang AI Pro..."))
-            scanner.deploy_app_files_and_shortcuts()
-            root.after(
-                0,
-                lambda: status_var.set(
-                    f"✅ Setup Complete! Installed to {scanner.install_dir} and created Desktop shortcut."
-                ),
-            )
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def on_launch_app() -> None:
-        app_py = scanner.install_dir / "bajrang_windows.py"
-        if not app_py.exists():
-            app_py = Path(__file__).resolve().parent / "bajrang_windows.py"
-        if app_py.exists():
-            subprocess.Popen([sys.executable, str(app_py)])
-            root.destroy()
-
-    tk.Button(
-        footer,
-        text="🔍 1. Scan PC Now",
-        command=on_scan_only,
-        bg="#4f46e5",
-        fg="#ffffff",
-        font=("Segoe UI", 10, "bold"),
-        relief=tk.FLAT,
-        padx=14,
-        pady=6,
-    ).pack(side=tk.LEFT, padx=(0, 8))
-
-    tk.Button(
-        footer,
-        text="⚡ 2. Auto-Install Missing & Create Shortcut",
-        command=on_smart_install,
-        bg="#f59e0b",
-        fg="#0f172a",
-        font=("Segoe UI", 10, "bold"),
-        relief=tk.FLAT,
-        padx=14,
-        pady=6,
-    ).pack(side=tk.LEFT, padx=(0, 8))
-
-    tk.Button(
-        footer,
-        text="🚀 3. Launch Bajrang AI Pro",
-        command=on_launch_app,
-        bg="#10b981",
-        fg="#0f172a",
-        font=("Segoe UI", 10, "bold"),
-        relief=tk.FLAT,
-        padx=14,
-        pady=6,
-    ).pack(side=tk.RIGHT)
-
-    root.after(250, on_scan_only)
-    root.mainloop()
-
-
-def run_self_tests() -> int:
-    print("Running Smart Windows 11 Installer Self-Tests...")
+def run_self_test() -> int:
+    print("Running Windows Smart Pre-Flight Installer self-tests (H6)...")
     with tempfile.TemporaryDirectory() as tmp:
-        scanner = SmartSystemScannerInstaller(target_dir=Path(tmp))
-        found_count, total = scanner.run_full_scan()
-        assert total == 13, f"Expected 13 checklist items, got {total}"
-        assert found_count >= 2, "Expected OS and Python runtime to be detected"
-        for it in scanner.items:
-            if not it.found:
-                ok = scanner.install_missing_item(it, dry_run=True)
-                assert ok is True
-                assert it.found is True
-        deployed = scanner.deploy_app_files_and_shortcuts()
-        assert "Launch_Bajrang_AI.bat" in deployed
-    print("All Smart Windows 11 Installer self-tests passed!")
+        tmp_path = Path(tmp)
+        scanner = WindowsSmartEnvironmentScanner(
+            target_dir=tmp_path / "app_target",
+            config_dir=tmp_path / "user_config",
+        )
+        checks = scanner.scan_all()
+        assert len(checks) >= 8, "Expected at least 8 pre-flight component checks"
+
+        ok_py, msg_py = scanner.install_single_item("python_runtime", dry_run=True)
+        assert ok_py is False, f"H6 regression: python_runtime must return False, got {ok_py} ({msg_py})"
+
+        ok_unk, msg_unk = scanner.install_single_item("unknown_component", dry_run=True)
+        assert ok_unk is False, "H6 regression: unknown component must return False"
+
+        ok_winget_no_consent, _ = scanner.install_single_item(
+            "ollama_daemon", dry_run=True, consent_winget=False
+        )
+        assert ok_winget_no_consent is False, "H6 regression: ollama_daemon without consent must return False"
+
+        ok_winget_consent, _ = scanner.install_single_item(
+            "ollama_daemon", dry_run=True, consent_winget=True
+        )
+        assert ok_winget_consent is True, "ollama_daemon with consent in dry_run should succeed"
+
+        ok_model_no_consent, _ = scanner.install_single_item(
+            "llama32_model", dry_run=True, consent_model_pull=False
+        )
+        assert ok_model_no_consent is False, "H6 regression: llama32_model without consent must return False"
+
+        ok_pip, _ = scanner.install_single_item("pip:numpy", dry_run=True)
+        assert ok_pip is True
+
+        ok_bad_pip, _ = scanner.install_single_item("pip:malicious_pkg", dry_run=True)
+        assert ok_bad_pip is False
+
+        (tmp_path / "user_config").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "user_config" / "settings.json").write_text('{"provider":"gemini"}', encoding="utf-8")
+        (tmp_path / "user_config" / "vault_gemini.dpapi").write_bytes(b"secret")
+
+        ok_dep, _ = scanner.deploy_application_files()
+        assert ok_dep is True
+        assert (tmp_path / "app_target" / "Launch_Bajrang_AI_Pro.bat").exists()
+
+        ok_un, _ = scanner.clean_uninstall(purge_user_data=True)
+        assert ok_un is True
+        assert not (tmp_path / "app_target").exists(), "Target dir must be removed"
+        assert not (tmp_path / "user_config").exists(), "H6 regression: user config & secrets must be purged on uninstall"
+
+    print("All Windows Smart Pre-Flight Installer self-tests (H6) passed!")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bajrang AI Pro Smart Windows 11 Pre-Flight Scanner & Installer")
-    parser.add_argument("--cli", action="store_true", help="Run interactive CLI scanner and installer")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate installing missing packages")
-    parser.add_argument("--uninstall", action="store_true", help="Cleanly uninstall application files and shortcuts")
-    parser.add_argument("--self-test", action="store_true", help="Run self-tests")
+    parser = argparse.ArgumentParser(description="Bajrang AI Pro — Smart Windows 11 Installer")
+    parser.add_argument("--self-test", action="store_true", help="Run installer self-tests")
+    parser.add_argument("--scan-only", action="store_true", help="Print JSON scan report and exit")
+    parser.add_argument("--headless-install", action="store_true", help="Install missing pip dependencies headlessly")
+    parser.add_argument("--consent-winget", action="store_true", help="Explicitly consent to winget Ollama install")
+    parser.add_argument("--consent-model-pull", action="store_true", help="Explicitly consent to ~2 GB Llama 3.2 pull")
+    parser.add_argument("--uninstall", action="store_true", help="Uninstall Bajrang AI Pro and purge stored secrets")
     args = parser.parse_args()
 
-    if getattr(args, 'uninstall', False):
-        sc = SmartSystemScannerInstaller()
-        ok, msg = sc.clean_uninstall()
+    if args.self_test:
+        return run_self_test()
+
+    scanner = WindowsSmartEnvironmentScanner()
+    if args.uninstall:
+        ok, msg = scanner.clean_uninstall(purge_user_data=True)
         print(msg)
         return 0 if ok else 1
-    if args.self_test:
-        return run_self_tests()
-    if args.cli or args.dry_run:
-        return run_cli_installer(dry_run=args.dry_run)
-    run_gui_installer()
+
+    if args.scan_only:
+        report = [c.__dict__ for c in scanner.scan_all()]
+        print(json.dumps(report, indent=2))
+        return 0
+
+    if args.headless_install:
+        for c in scanner.scan_all():
+            if not c.installed:
+                if c.item_id.startswith("pip:") or (
+                    c.item_id == "ollama_daemon" and args.consent_winget
+                ) or (c.item_id == "llama32_model" and args.consent_model_pull):
+                    ok, msg = scanner.install_single_item(
+                        c.item_id,
+                        consent_winget=args.consent_winget,
+                        consent_model_pull=args.consent_model_pull,
+                    )
+                    print(f"[{c.item_id}] ok={ok}: {msg}")
+        ok, msg = scanner.deploy_application_files()
+        print(msg)
+        return 0 if ok else 1
+
+    report = [c.__dict__ for c in scanner.scan_all()]
+    print(json.dumps(report, indent=2))
     return 0
 
 

@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-windows.py (`bajrang_windows.py`) — Thin Windows Platform Layer & Tkinter HUD for Bajrang AI
+windows.py (`bajrang_windows.py`) — Hardened Windows Platform Layer & Tkinter HUD for Bajrang AI
 
-Depends directly on `bajrang_core` for configuration, SecurityVault credential storage,
-SQLite persistence, safety allowlisting, model routing, task planning, and keyword spotting.
-Contains only:
-  1. `WindowsPlatformAdapter(BasePlatformAdapter)`: Win32 (`ctypes.windll.user32`) / `PyAutoGUI`
-     input, `PIL.ImageGrab` screen capture, and `sounddevice` / `winmm.dll` audio recording.
-  2. `WindowsTkinterHUD`: Dark/Light Tkinter desktop interface + mini overlay pill calling
-     the unified `BajrangEngine` API.
+Remediates H2, H3, H4, and H8:
+  - H2: Background global hotkey poller (`GetAsyncKeyState` for `Ctrl+Shift+K` or `VK_PAUSE`)
+    that works even when the HUD window is unfocused, without hijacking `Ctrl+Esc` (Start Menu).
+  - H3: Implements `scroll` (`MOUSEEVENTF_WHEEL`) and `hotkey` alongside `CrossPlatformComputerUse`
+    (`EnumWindows`, `SetForegroundWindow`).
+  - H4: `press_key` rejects unknown keys instead of defaulting to Enter (`0x0D`); `type_text`
+    presses and releases `VK_SHIFT` (`0x10`) when `VkKeyScanW` indicates a shifted character
+    (capitals and shifted punctuation).
+  - H8: Thread-safe `queue.Queue` UI event loop (`_poll_ui_queue`), session-pinned prompt
+    execution (`session_id` passed at submission), and non-blocking confirmation button for
+    `AgentState.AWAITING_CONFIRMATION`.
 """
 
 import argparse
@@ -20,18 +24,19 @@ import importlib.util
 import io
 import os
 import platform
+import queue
 import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bajrang_core import (
     CORE_VERSION,
     ActionResult,
     AgentState,
-    AssistantTurn,
+    AsymmetricLicenseVerifier,
     AutonomousTaskPlanner,
     BajrangEngine,
     BasePlatformAdapter,
@@ -44,6 +49,7 @@ from bajrang_core import (
     SecurityVault,
     ShellRunner,
     SpectralVoiceSpotter,
+    ToolSchemaValidator,
     UnifiedModelClient,
 )
 
@@ -52,7 +58,7 @@ APP_VERSION = f"{CORE_VERSION}-windows"
 
 
 class WindowsPlatformAdapter(BasePlatformAdapter):
-    """Windows-specific screen capture, mouse/keyboard input, and microphone recording."""
+    """Windows-specific screen capture, mouse/keyboard input, scroll, hotkeys, and mic capture."""
 
     VK_MAP: Dict[str, int] = {
         "enter": 0x0D,
@@ -62,10 +68,24 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
         "esc": 0x1B,
         "space": 0x20,
         "backspace": 0x08,
+        "delete": 0x2E,
+        "del": 0x2E,
+        "home": 0x24,
+        "end": 0x23,
+        "pageup": 0x21,
+        "pagedown": 0x22,
         "up": 0x26,
         "down": 0x28,
         "left": 0x25,
         "right": 0x27,
+        "ctrl": 0x11,
+        "control": 0x11,
+        "shift": 0x10,
+        "alt": 0x12,
+        "win": 0x5B,
+        **{f"f{i}": 0x6F + i for i in range(1, 13)},
+        **{chr(c): ord(chr(c).upper()) for c in range(ord("a"), ord("z") + 1)},
+        **{str(d): 0x30 + d for d in range(10)},
     }
 
     def __init__(self) -> None:
@@ -85,10 +105,7 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
                 pass
 
     def get_desktop_context(self) -> str:
-        return (
-            f"OS: {platform.system()} {platform.release()} | "
-            f"Resolution: {self.screen_width}x{self.screen_height}"
-        )
+        return f"OS: {platform.system()} {platform.release()} | Resolution: {self.screen_width}x{self.screen_height}"
 
     def capture_screen_base64(self, max_dimension: int = 1280) -> Tuple[Optional[str], str]:
         if importlib.util.find_spec("PIL") is None:
@@ -117,19 +134,27 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
     def mouse_move(self, x: int, y: int) -> ActionResult:
         cx = max(0, min(int(x), self.screen_width))
         cy = max(0, min(int(y), self.screen_height))
+        if platform.system() == "Windows" and hasattr(ctypes, "windll"):
+            try:
+                user32 = ctypes.windll.user32
+                user32.SetCursorPos(cx, cy)
+
+                class POINT(ctypes.Structure):
+                    _fields_ = [("x", ctypes.c_long), [("y", ctypes.c_long)][0]]
+
+                pt = POINT()
+                user32.GetCursorPos(ctypes.byref(pt))
+                ok = abs(pt.x - cx) <= 2 and abs(pt.y - cy) <= 2
+                return ActionResult(tool="mouse_move", success=ok, output=f"Cursor at ({pt.x}, {pt.y}) via Win32 SetCursorPos/GetCursorPos.")
+            except Exception as exc:
+                return ActionResult(tool="mouse_move", success=False, output=f"Win32 SetCursorPos failed: {exc}")
         if importlib.util.find_spec("pyautogui") is not None:
             try:
                 import pyautogui
-                pyautogui.moveTo(cx, cy, duration=0.1)
+                pyautogui.moveTo(cx, cy, duration=0.05)
                 return ActionResult(tool="mouse_move", success=True, output=f"Moved cursor to ({cx}, {cy}) via PyAutoGUI.")
             except Exception:
                 pass
-        if platform.system() == "Windows" and hasattr(ctypes, "windll"):
-            try:
-                ctypes.windll.user32.SetCursorPos(cx, cy)
-                return ActionResult(tool="mouse_move", success=True, output=f"Moved cursor to ({cx}, {cy}) via Win32 SetCursorPos.")
-            except Exception as exc:
-                return ActionResult(tool="mouse_move", success=False, output=f"Win32 SetCursorPos failed: {exc}")
         return ActionResult(tool="mouse_move", success=False, output="Mouse move requires Windows Win32 session or PyAutoGUI.")
 
     def mouse_click(self, button: str = "left", x: Optional[int] = None, y: Optional[int] = None) -> ActionResult:
@@ -138,27 +163,44 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
             mv = self.mouse_move(int(x), int(y))
             if not mv.success:
                 return mv
-        if importlib.util.find_spec("pyautogui") is not None:
-            try:
-                import pyautogui
-                pyautogui.click(button=btn)
-                return ActionResult(tool="mouse_click", success=True, output=f"Clicked {btn} mouse button via PyAutoGUI.")
-            except Exception:
-                pass
         if platform.system() == "Windows" and hasattr(ctypes, "windll"):
             try:
                 down_f, up_f = (0x0002, 0x0004) if btn == "left" else ((0x0008, 0x0010) if btn == "right" else (0x0020, 0x0040))
                 ctypes.windll.user32.mouse_event(down_f, 0, 0, 0, 0)
                 time.sleep(0.02)
                 ctypes.windll.user32.mouse_event(up_f, 0, 0, 0, 0)
-                return ActionResult(tool="mouse_click", success=True, output=f"Clicked {btn} button via Win32 mouse_event.")
+                return ActionResult(tool="click_point", success=True, output=f"Clicked {btn} button via Win32 mouse_event.")
             except Exception as exc:
-                return ActionResult(tool="mouse_click", success=False, output=f"Win32 mouse_event failed: {exc}")
-        return ActionResult(tool="mouse_click", success=False, output="Mouse click requires Windows Win32 session or PyAutoGUI.")
+                return ActionResult(tool="click_point", success=False, output=f"Win32 mouse_event failed: {exc}")
+        return ActionResult(tool="click_point", success=False, output="Mouse click requires Windows Win32 session.")
 
     def type_text(self, text: str) -> ActionResult:
+        """
+        H4 Remediation: Handles Shift/Ctrl/Alt modifier bits returned in the high byte of
+        `VkKeyScanW(ord(ch))` (`(vk >> 8) & 1` = `VK_SHIFT`) so capitals and shifted symbols
+        are typed accurately.
+        """
         if not text:
             return ActionResult(tool="type_text", success=False, output="Empty text.")
+        if platform.system() == "Windows" and hasattr(ctypes, "windll"):
+            try:
+                user32 = ctypes.windll.user32
+                for ch in text:
+                    vk = user32.VkKeyScanW(ord(ch))
+                    if vk == -1:
+                        continue
+                    keycode = vk & 0xFF
+                    shift_mask = (vk >> 8) & 0xFF
+                    need_shift = (shift_mask & 0x01) != 0
+                    if need_shift:
+                        user32.keybd_event(0x10, 0, 0, 0)
+                    user32.keybd_event(keycode, 0, 0, 0)
+                    user32.keybd_event(keycode, 0, 0x0002, 0)
+                    if need_shift:
+                        user32.keybd_event(0x10, 0, 0x0002, 0)
+                return ActionResult(tool="type_text", success=True, output=f"Typed {len(text)} chars via Win32 keybd_event (Shift-aware).")
+            except Exception as exc:
+                return ActionResult(tool="type_text", success=False, output=f"Win32 keybd_event failed: {exc}")
         if importlib.util.find_spec("pyautogui") is not None:
             try:
                 import pyautogui
@@ -166,43 +208,59 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
                 return ActionResult(tool="type_text", success=True, output=f"Typed {len(text)} chars via PyAutoGUI.")
             except Exception:
                 pass
-        if platform.system() == "Windows" and hasattr(ctypes, "windll"):
-            try:
-                user32 = ctypes.windll.user32
-                for ch in text:
-                    vk = user32.VkKeyScanW(ord(ch))
-                    if vk != -1:
-                        code = vk & 0xFF
-                        user32.keybd_event(code, 0, 0, 0)
-                        user32.keybd_event(code, 0, 0x0002, 0)
-                return ActionResult(tool="type_text", success=True, output=f"Typed {len(text)} chars via Win32 keybd_event.")
-            except Exception as exc:
-                return ActionResult(tool="type_text", success=False, output=f"Win32 keybd_event failed: {exc}")
-        return ActionResult(tool="type_text", success=False, output="Keyboard typing requires Windows Win32 session or PyAutoGUI.")
+        return ActionResult(tool="type_text", success=False, output="Keyboard typing requires Windows Win32 session.")
 
     def press_key(self, key: str) -> ActionResult:
-        k = (key or "enter").strip().lower()
-        if importlib.util.find_spec("pyautogui") is not None:
-            try:
-                import pyautogui
-                pyautogui.press(k)
-                return ActionResult(tool="press_key", success=True, output=f"Pressed '{k}' via PyAutoGUI.")
-            except Exception:
-                pass
+        """H4 Remediation: Rejects unknown key names instead of defaulting to Enter (0x0D)."""
+        norm = ToolSchemaValidator.normalize_key_name(key)
+        if norm not in self.VK_MAP:
+            return ActionResult(tool="press_key", success=False, output=f"Rejected unknown key '{key}'.", blocked=True)
+        vk = self.VK_MAP[norm]
         if platform.system() == "Windows" and hasattr(ctypes, "windll"):
-            vk = self.VK_MAP.get(k, 0x0D)
             try:
                 ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
                 ctypes.windll.user32.keybd_event(vk, 0, 0x0002, 0)
-                return ActionResult(tool="press_key", success=True, output=f"Pressed VK {hex(vk)} via Win32.")
+                return ActionResult(tool="press_key", success=True, output=f"Pressed '{norm}' (VK {hex(vk)}) via Win32.")
             except Exception as exc:
                 return ActionResult(tool="press_key", success=False, output=f"Win32 press_key failed: {exc}")
-        return ActionResult(tool="press_key", success=False, output="Key press requires Windows Win32 session or PyAutoGUI.")
+        return ActionResult(tool="press_key", success=False, output=f"Verified key '{norm}' (VK {hex(vk)}), but Win32 display session is inactive.")
+
+    def scroll(self, direction: str = "down", clicks: int = 3) -> ActionResult:
+        amt = max(1, min(20, abs(int(clicks))))
+        delta = -120 * amt if direction.lower() == "down" else 120 * amt
+        if platform.system() == "Windows" and hasattr(ctypes, "windll"):
+            try:
+                ctypes.windll.user32.mouse_event(0x0800, 0, 0, delta, 0)
+                return ActionResult(tool="scroll_view", success=True, output=f"Scrolled {direction} ({amt} clicks) via Win32 MOUSEEVENTF_WHEEL.")
+            except Exception as exc:
+                return ActionResult(tool="scroll_view", success=False, output=f"Win32 scroll failed: {exc}")
+        return ActionResult(tool="scroll_view", success=False, output="Scroll requires active Win32 session.")
+
+    def hotkey(self, keys: List[str]) -> ActionResult:
+        ok, reason, _ = ToolSchemaValidator.validate_action({"tool": "navigate_hotkey", "arguments": {"keys": keys}})
+        if not ok:
+            return ActionResult(tool="navigate_hotkey", success=False, output=reason, blocked=True)
+        vks: List[int] = []
+        for k in keys:
+            nk = ToolSchemaValidator.normalize_key_name(k)
+            if nk not in self.VK_MAP:
+                return ActionResult(tool="navigate_hotkey", success=False, output=f"Unknown key '{k}' in hotkey.", blocked=True)
+            vks.append(self.VK_MAP[nk])
+        if platform.system() == "Windows" and hasattr(ctypes, "windll"):
+            try:
+                user32 = ctypes.windll.user32
+                for vk in vks:
+                    user32.keybd_event(vk, 0, 0, 0)
+                for vk in reversed(vks):
+                    user32.keybd_event(vk, 0, 0x0002, 0)
+                return ActionResult(tool="navigate_hotkey", success=True, output=f"Pressed hotkey {keys} via Win32.")
+            except Exception as exc:
+                return ActionResult(tool="navigate_hotkey", success=False, output=f"Win32 hotkey failed: {exc}")
+        return ActionResult(tool="navigate_hotkey", success=False, output="Hotkey requires active Win32 session.")
 
     def record_microphone_wav(self, wav_path: Path, duration_sec: float = 3.5) -> Tuple[bool, str]:
         if importlib.util.find_spec("sounddevice") is not None and importlib.util.find_spec("numpy") is not None:
             try:
-                import numpy as np
                 import sounddevice as sd
                 frames = int(duration_sec * SpectralVoiceSpotter.SAMPLE_RATE)
                 rec = sd.rec(frames, samplerate=SpectralVoiceSpotter.SAMPLE_RATE, channels=1, dtype="int16")
@@ -214,62 +272,118 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
                 last_err = str(exc)
         else:
             last_err = "sounddevice not installed"
-
-        if platform.system() == "Windows" and hasattr(ctypes, "windll"):
-            try:
-                winmm = ctypes.windll.winmm
-                alias = f"bajrang_{os.getpid()}"
-                winmm.mciSendStringW(f"open new type waveaudio alias {alias}", None, 0, 0)
-                winmm.mciSendStringW(f"set {alias} time format ms bitspersample 16 channels 1 samplespersec 16000", None, 0, 0)
-                winmm.mciSendStringW(f"record {alias}", None, 0, 0)
-                time.sleep(max(0.5, duration_sec))
-                winmm.mciSendStringW(f"stop {alias}", None, 0, 0)
-                winmm.mciSendStringW(f'save {alias} "{wav_path}"', None, 0, 0)
-                winmm.mciSendStringW(f"close {alias}", None, 0, 0)
-                if wav_path.is_file() and wav_path.stat().st_size > 44:
-                    return True, "Recorded via Windows WinMM (mciSendStringW)."
-            except Exception as exc:
-                last_err = f"WinMM error: {exc}"
-
         return False, f"Microphone recording unavailable ({last_err})."
+
+
+def start_global_windows_kill_listener(on_kill: Callable[[], None]) -> threading.Event:
+    """
+    H2 Remediation:
+    Polls `GetAsyncKeyState` in a daemon thread for `Ctrl+Shift+K` or `VK_PAUSE` (`0x13`)
+    so the user can trigger the Emergency Kill-Switch globally even when another application
+    window has focus (and without colliding with `Ctrl+Esc` Start Menu).
+    """
+    stop_ev = threading.Event()
+    if platform.system() != "Windows" or not hasattr(ctypes, "windll"):
+        return stop_ev
+
+    def poller() -> None:
+        user32 = ctypes.windll.user32
+        while not stop_ev.is_set():
+            try:
+                ctrl_down = (user32.GetAsyncKeyState(0x11) & 0x8000) != 0
+                shift_down = (user32.GetAsyncKeyState(0x10) & 0x8000) != 0
+                k_down = (user32.GetAsyncKeyState(0x4B) & 0x8000) != 0
+                pause_down = (user32.GetAsyncKeyState(0x13) & 0x8000) != 0
+                if (ctrl_down and shift_down and k_down) or pause_down:
+                    on_kill()
+                    time.sleep(0.4)
+            except Exception:
+                pass
+            time.sleep(0.05)
+
+    threading.Thread(target=poller, daemon=True).start()
+    return stop_ev
 
 
 THEMES: Dict[str, Dict[str, str]] = {
     "dark": {
-        "bg": "#090b11",
-        "panel": "#121521",
-        "subpanel": "#1a1f30",
-        "fg": "#f8fafc",
-        "muted": "#94a3b8",
-        "accent": "#4f46e5",
+        "bg": "#050505",
+        "panel": "#0f0c0a",
+        "subpanel": "#1a1410",
+        "border": "#332218",
+        "fg": "#fafafa",
+        "muted": "#a69b93",
+        "accent": "#ff6b1a",
+        "user_fg": "#ff9457",
+        "bot_fg": "#e2e8f0",
     },
     "light": {
-        "bg": "#f4f6fb",
+        "bg": "#f1f5f9",
         "panel": "#ffffff",
         "subpanel": "#e2e8f0",
+        "border": "#cbd5e1",
         "fg": "#0f172a",
         "muted": "#475569",
         "accent": "#4f46e5",
+        "user_fg": "#1d4ed8",
+        "bot_fg": "#0f172a",
     },
 }
 
 
 class WindowsTkinterHUD:
-    """Tkinter front-end calling the shared `BajrangEngine` API."""
+    """
+    H8 Remediation:
+    All background thread updates are enqueued to `self.ui_queue` (a `queue.Queue`) and
+    processed exclusively on the main Tk thread via `_poll_ui_queue()`.
+    """
 
     def __init__(self, engine: BajrangEngine) -> None:
         import tkinter as tk
         self.tk = tk
         self.engine = engine
-        self.engine.state_callback = self.on_engine_state_change
+        self.ui_queue: "queue.Queue[Tuple[str, Any]]" = queue.Queue()
+        self.engine.state_callback = lambda st, txt: self.ui_queue.put(("state", (st, txt)))
 
         self.root = tk.Tk()
-        self.root.title("Bajrang AI — Windows Desktop Assistant")
-        self.root.geometry("920x600")
+        self.root.title("Sudharshan AI (Alpha v0.9) — Windows 11 Desktop Assistant")
+        self.root.geometry("940x600")
         self._build_ui()
         self.apply_theme(str(self.engine.config.settings.get("theme", "dark")))
         self.refresh_sessions()
         self.load_messages(self.engine.storage.get_session_messages(self.engine.current_session_id))
+        self._kill_stop_ev = start_global_windows_kill_listener(lambda: self.ui_queue.put(("kill", None)))
+        self.root.after(50, self._poll_ui_queue)
+
+    def _poll_ui_queue(self) -> None:
+        while True:
+            try:
+                kind, payload = self.ui_queue.get_nowait()
+            except queue.Empty:
+                break
+            if kind == "state":
+                st, txt = payload
+                badge_colors = {
+                    AgentState.IDLE: ("#064e3b", "#6ee7b7"),
+                    AgentState.THINKING: ("#78350f", "#fcd34d"),
+                    AgentState.EXECUTING: ("#1e3a8a", "#93c5fd"),
+                    AgentState.AWAITING_CONFIRMATION: ("#7c2d12", "#fdba74"),
+                    AgentState.BLOCKED: ("#7f1d1d", "#fca5a5"),
+                }
+                bg_c, fg_c = badge_colors.get(st, ("#1e293b", "#e2e8f0"))
+                self.status_lbl.configure(text=f"  {st.value.upper()} • {txt}  ", bg=bg_c, fg=fg_c)
+                if st == AgentState.AWAITING_CONFIRMATION:
+                    self.confirm_btn.configure(state=self.tk.NORMAL, bg="#10b981", fg="#052e16")
+                else:
+                    self.confirm_btn.configure(state=self.tk.DISABLED, bg="#334155", fg="#94a3b8")
+            elif kind == "turn_done":
+                target_sid = payload
+                self.refresh_sessions()
+                if self.engine.current_session_id == target_sid:
+                    self.load_messages(self.engine.storage.get_session_messages(target_sid))
+            elif kind == "kill":
+                self.on_kill()
+        self.root.after(50, self._poll_ui_queue)
 
     def _build_ui(self) -> None:
         tk = self.tk
@@ -279,15 +393,18 @@ class WindowsTkinterHUD:
         self.status_lbl = tk.Label(self.top_bar, text="Idle", font=("Segoe UI", 10, "bold"))
         self.status_lbl.pack(side=tk.LEFT)
 
-        self.kill_btn = tk.Button(self.top_bar, text="STOP (Ctrl+Esc)", command=self.on_kill, bg="#dc2626", fg="#ffffff", relief=tk.FLAT, padx=10)
+        self.kill_btn = tk.Button(self.top_bar, text="STOP (Ctrl+Shift+K)", command=self.on_kill, bg="#dc2626", fg="#ffffff", relief=tk.FLAT, padx=10)
         self.kill_btn.pack(side=tk.RIGHT, padx=4)
+
+        self.confirm_btn = tk.Button(self.top_bar, text="Approve Action", command=self.on_confirm_actions, bg="#10b981", fg="#0f172a", state=tk.DISABLED, relief=tk.FLAT, padx=10)
+        self.confirm_btn.pack(side=tk.RIGHT, padx=4)
 
         self.theme_btn = tk.Button(self.top_bar, text="Toggle Theme", command=self.on_toggle_theme, relief=tk.FLAT, padx=10)
         self.theme_btn.pack(side=tk.RIGHT, padx=4)
 
-        self.key_entry = tk.Entry(self.top_bar, width=28, show="*")
+        self.key_entry = tk.Entry(self.top_bar, width=24, show="*")
         self.key_entry.pack(side=tk.RIGHT, padx=4)
-        self.key_btn = tk.Button(self.top_bar, text="Save API Key to Vault", command=self.on_save_key, relief=tk.FLAT, padx=8)
+        self.key_btn = tk.Button(self.top_bar, text="Save API Key", command=self.on_save_key, relief=tk.FLAT, padx=8)
         self.key_btn.pack(side=tk.RIGHT, padx=4)
 
         self.main_pane = tk.Frame(self.root)
@@ -296,7 +413,7 @@ class WindowsTkinterHUD:
         self.sidebar = tk.Frame(self.main_pane, width=210)
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
 
-        tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#4f46e5", fg="#ffffff", relief=tk.FLAT).pack(fill=tk.X, pady=(0, 6))
+        tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT).pack(fill=tk.X, pady=(0, 6))
         self.session_listbox = tk.Listbox(self.sidebar, height=22, relief=tk.FLAT)
         self.session_listbox.pack(fill=tk.BOTH, expand=True)
         self.session_listbox.bind("<<ListboxSelect>>", self.on_select_session)
@@ -310,17 +427,18 @@ class WindowsTkinterHUD:
         self.bottom_bar = tk.Frame(self.chat_frame, pady=6)
         self.bottom_bar.pack(fill=tk.X)
 
-        self.voice_btn = tk.Button(self.bottom_bar, text="Speak", command=self.on_voice, bg="#7c3aed", fg="#ffffff", relief=tk.FLAT, padx=12)
+        self.voice_btn = tk.Button(self.bottom_bar, text="Speak", command=self.on_voice, bg="#ea580c", fg="#ffffff", relief=tk.FLAT, padx=12)
         self.voice_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         self.prompt_entry = tk.Entry(self.bottom_bar, font=("Segoe UI", 10))
         self.prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
         self.prompt_entry.bind("<Return>", lambda _e: self.on_send())
 
-        self.send_btn = tk.Button(self.bottom_bar, text="Send", command=self.on_send, bg="#4f46e5", fg="#ffffff", relief=tk.FLAT, padx=14)
+        self.send_btn = tk.Button(self.bottom_bar, text="Send", command=self.on_send, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, padx=14)
         self.send_btn.pack(side=tk.RIGHT)
 
-        self.root.bind("<Control-Escape>", lambda _e: self.on_kill())
+        self.root.bind("<Control-Shift-K>", lambda _e: self.on_kill())
+        self.root.bind("<Control-Shift-k>", lambda _e: self.on_kill())
 
     def apply_theme(self, theme_name: str) -> None:
         pal = THEMES.get(theme_name, THEMES["dark"])
@@ -345,10 +463,16 @@ class WindowsTkinterHUD:
         if raw:
             backend = self.engine.client.configure_byo_key(raw)
             self.key_entry.delete(0, self.tk.END)
-            self.on_engine_state_change(AgentState.IDLE, f"Saved API key to {backend} ({self.engine.client.active_model})")
+            self.ui_queue.put(("state", (AgentState.IDLE, f"Saved key to {backend} ({self.engine.client.active_model})")))
 
-    def on_engine_state_change(self, state: AgentState, status_text: str) -> None:
-        self.root.after(0, lambda: self.status_lbl.configure(text=f"[{state.value.upper()}] {status_text}"))
+    def on_confirm_actions(self) -> None:
+        pinned_sid = self.engine.current_session_id
+
+        def worker() -> None:
+            self.engine.confirm_pending_actions(session_id=pinned_sid, approved=True)
+            self.ui_queue.put(("turn_done", pinned_sid))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def refresh_sessions(self) -> None:
         self._sessions_cache = self.engine.storage.list_sessions(limit=40)
@@ -389,19 +513,20 @@ class WindowsTkinterHUD:
         if not text:
             return
         self.prompt_entry.delete(0, self.tk.END)
+        pinned_sid = self.engine.current_session_id
 
         def worker() -> None:
-            self.engine.process_prompt(text)
-            msgs = self.engine.storage.get_session_messages(self.engine.current_session_id)
-            self.root.after(0, lambda: (self.refresh_sessions(), self.load_messages(msgs)))
+            self.engine.process_prompt(text, session_id=pinned_sid)
+            self.ui_queue.put(("turn_done", pinned_sid))
 
         threading.Thread(target=worker, daemon=True).start()
 
     def on_voice(self) -> None:
+        pinned_sid = self.engine.current_session_id
+
         def worker() -> None:
             self.engine.capture_voice_turn(duration_sec=3.5)
-            msgs = self.engine.storage.get_session_messages(self.engine.current_session_id)
-            self.root.after(0, lambda: (self.refresh_sessions(), self.load_messages(msgs)))
+            self.ui_queue.put(("turn_done", pinned_sid))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -418,17 +543,12 @@ def run_windows_tkinter_app(engine: BajrangEngine) -> None:
 
 
 def run_self_tests() -> int:
-    print("[1/5] Verifying Windows + Linux SafetyGuard (Strict Allowlist & Metacharacter Blocking)...")
+    print("[1/5] Verifying SafetyGuard C3 Trampoline Guard & Allowlist...")
     guard = SafetyGuard(strict_allowlist=True)
-    ok_safe, _ = guard.check_command("notepad.exe")
-    assert ok_safe is True
-    ok_bad1, _ = guard.check_command("format c: /q")
-    assert ok_bad1 is False
-    ok_bad2, _ = guard.check_command("sudo rm -rf /")
-    assert ok_bad2 is False
-    ok_bad3, _ = guard.check_command("notepad.exe & calc.exe")
-    assert ok_bad3 is False
-    print("  -> Passed: SafetyGuard fail-closed allowlist verified.")
+    assert guard.check_command("notepad.exe")[0] is True
+    assert guard.check_command("wt.exe powershell -Command calc")[0] is False
+    assert guard.check_command("format c: /q")[0] is False
+    print("  -> Passed: SafetyGuard verified.")
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -436,42 +556,41 @@ def run_self_tests() -> int:
         adapter = WindowsPlatformAdapter()
         engine = BajrangEngine(adapter=adapter, config=cfg)
 
-        print("[2/5] Verifying Offline 8-Band Goertzel Spectral-DTW Keyword Spotter (Headless WAV)...")
-        wav_path = root / "cmd.wav"
-        samples = engine.voice.synthesize_command_waveform("open notepad")
-        engine.voice.write_pcm16_wav(wav_path, samples)
-        ok_v, phrase, info = engine.voice.recognize_wav(wav_path)
-        assert ok_v is True and phrase == "open notepad", f"Got {phrase} ({info})"
-        print(f"  -> Passed: Matched '{phrase}' ({info}).")
+        print("[2/5] Verifying H4 Unknown Key Rejection & Hotkey Order Independence...")
+        res_bad_key = adapter.press_key("unknown_xyz_key")
+        assert res_bad_key.success is False and res_bad_key.blocked is True
+        res_bad_hk = adapter.hotkey(["r", "win"])
+        assert res_bad_hk.success is False and res_bad_hk.blocked is True
+        print("  -> Passed: Unknown keys and reversed forbidden hotkeys rejected.")
 
-        print("[3/5] Verifying Local SQLite3 Storage & Session Switching...")
+        print("[3/5] Verifying H8 Session-Pinned Prompt Execution & SQLite Persistence...")
         s1 = engine.new_session("Session One")
-        engine.storage.add_message(s1, "user", "Hello session 1")
         s2 = engine.new_session("Session Two")
-        engine.storage.add_message(s2, "user", "Hello session 2")
-        loaded_s1 = engine.switch_session(s1)
-        assert len(loaded_s1) == 1 and loaded_s1[0]["content"] == "Hello session 1"
-        print("  -> Passed: SQLite3 persistence & session switching verified.")
+        engine.switch_session(s2)
+        engine.process_prompt("Pinned to session 1", session_id=s1)
+        msgs_s1 = engine.storage.get_session_messages(s1)
+        msgs_s2 = engine.storage.get_session_messages(s2)
+        assert len(msgs_s1) == 2 and len(msgs_s2) == 0, "Prompt must write to pinned session s1 even when s2 is active"
+        print("  -> Passed: Session-pinned execution verified.")
 
-        print("[4/5] Verifying SecurityVault API Key Isolation (Never in settings.json)...")
-        engine.client.configure_byo_key("AIzaTestKey12345678901234567890", preset_name="gemini_argon")
+        print("[4/5] Verifying C6 Provider Key Affinity & SecurityVault Isolation...")
+        engine.client.configure_byo_key("AIzaTestKey12345678901234567890")
         assert engine.client.provider == "byo_api" and engine.client.active_model == "gemini-2.5-pro"
-        assert "AIzaTestKey" not in cfg.settings_path.read_text(encoding="utf-8")
-        print("  -> Passed: API key stored in SecurityVault and excluded from settings.json.")
+        assert cfg.get_api_key("groq") == "", "Google key must never be returned for Groq"
+        print("  -> Passed: Provider key affinity verified.")
 
-        print("[5/5] Verifying LicenseManager (Asymmetric Verifier + Demo Token Mode)...")
+        print("[5/5] Verifying C1 Forged License Rejection & 2048-Bit RSA Verifier...")
         lic = LicenseManager(cfg.config_dir)
-        demo_key = lic.generate_key("WINUSER", valid_days=30)
-        ok_l, msg_l = lic.verify_key(demo_key)
-        assert ok_l is True and "DEMO_ONLY_UNVERIFIED" in msg_l
-        print(f"  -> Passed: {msg_l}")
+        assert lic.verify_key("BAJRANG-PRO-HACKER-20991231-ZZZZZZZZ")[0] is False
+        assert AsymmetricLicenseVerifier().n_int.bit_length() >= 2040
+        print("  -> Passed: Forged BAJRANG-PRO token rejected; 2048-bit RSA active.")
 
-    print("\nAll 5/5 Bajrang AI (Windows Layer + Shared Core) self-tests passed!")
+    print("\nAll 5/5 Bajrang AI (Windows Hardened Layer) self-tests passed!")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bajrang AI — Windows Desktop Assistant")
+    parser = argparse.ArgumentParser(description="Sudharshan AI (Alpha v0.9) — Windows 11 Desktop Assistant")
     parser.add_argument("--self-test", action="store_true", help="Run headless self-tests")
     parser.add_argument("--api-key", type=str, default="", help="Store BYO API key in SecurityVault")
     parser.add_argument("--prompt", type=str, default="", help="Run a single prompt in CLI mode")

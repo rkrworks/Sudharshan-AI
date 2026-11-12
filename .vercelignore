@@ -1,0 +1,12 @@
+*.py
+*.db
+*.sqlite
+*.sqlite3
+*.dpapi
+*.bin
+*.key
+*.pem
+.env*
+__pycache__/
+.venv/
+tests/

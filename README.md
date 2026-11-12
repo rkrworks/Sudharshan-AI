@@ -1,42 +1,36 @@
-# Bajrang AI — Cross-Platform Desktop Assistant (Windows & Fedora Linux)
+# Sudharshan AI (Alpha v0.9 • Hardened Core) — Cross-Platform Desktop Assistant
 
-Bajrang AI is a local-first Python desktop assistant for **Windows 11** (`windows.py`) and **Fedora Linux (GNOME / Wayland)** (`fedora.py`), built around a single shared core library (`bajrang_core.py`).
+Sudharshan AI (Alpha Edition, formerly Bajrang AI Pro) is a modular, security-hardened desktop AI assistant for **Windows 11** (`windows.py`, Tkinter + Win32 `ctypes`) and **Fedora Linux** (`fedora.py`, GTK4/Libadwaita + Wayland/PipeWire) built on a single shared core (`bajrang_core.py`).
 
-## 1. Repository Structure
-- **`bajrang_core.py`**: Shared core package containing configuration (`ConfigManager`), OS credential storage (`SecurityVault`), SQLite chat/memory persistence (`LocalChatStorage`), fail-closed command allowlisting (`SafetyGuard`, `ShellRunner`, `KillSwitchManager`), model client (`UnifiedModelClient` for local [Ollama Llama 3.2](https://ollama.com/library/llama3.2) and BYO cloud API keys), folder organization planner (`AutonomousTaskPlanner`), offline keyword spotter (`SpectralVoiceSpotter`), and the unified `BajrangEngine`.
-- **`windows.py` (`bajrang_windows.py`)**: Thin Windows platform adapter (`WindowsPlatformAdapter` using [PyAutoGUI](https://pypi.org/project/PyAutoGUI/) / Win32 `ctypes.windll.user32`, `PIL.ImageGrab`, and `sounddevice` / `winmm.dll`) and Tkinter desktop HUD (`WindowsTkinterHUD`).
-- **`fedora.py` (`bajrang_llama32.py`)**: Thin Fedora GNOME Wayland adapter (`FedoraWaylandAdapter` using [ydotool](https://github.com/ReimuNotMoe/ydotool), GNOME Shell D-Bus / `gnome-screenshot` / `grim`, and [PipeWire](https://pipewire.org/) `pw-record` / ALSA `arecord`), [GNOME Shell 45–49 ESM](https://gjs.guide/extensions/upgrading/gnome-shell-45.html) extension generator, and [PyGObject GTK4](https://pygobject.gnome.org/) HUD.
-- **`requirements-common.txt` / `requirements-windows.txt` / `requirements-fedora.txt`**: Split dependency manifests.
+## Architecture Overview
 
-## 2. What Works Today vs. Experimental / Optional Components
+- **`bajrang_core.py` (Shared Core Package)**:
+  - `AsymmetricLicenseVerifier` & `LicenseManager`: 2048-bit RSA public-key certificate verification (`BAJRANG-V6-<payload>.<sig>`).
+  - `SecurityVault` & `ConfigManager`: OS keyring / Windows DPAPI / `secret-tool` per-provider API key storage; strips secrets from `settings.json`.
+  - `SafetyGuard` & `ShellRunner`: Zero-argument application launcher allowlist (`shell=False`) and order-independent hotkey blocklist.
+  - `ToolSchemaValidator` & `BajrangEngine`: Strict schema validation, confirmation queue (`pending_actions` / `confirm_pending_actions()`), and session-pinned prompt execution.
+  - `AutonomousTaskPlanner`: Non-destructive file organizer with collision-free renaming (`report_1.pdf`), `.bajrang_trash/<plan_id>/` staging, `undo_plan()`, and per-file cancellation checks.
+  - `ModularAIRouter`: Provider-scoped API key affinity (`is_key_compatible_with_provider`) and `x-goog-api-key` header authentication for Gemini.
+- **`windows.py` (`bajrang_windows.py`)**:
+  - Windows 11 adapter and Tkinter HUD with `queue.Queue` main-thread UI dispatching, global `GetAsyncKeyState` kill-switch polling (`Ctrl+Shift+K` / `Pause`), `VK_SHIFT` typing support, and non-blocking SAPI5 barge-in TTS.
+- **`fedora.py` (`bajrang_llama32.py`)**:
+  - Fedora Workstation (GNOME / Wayland) adapter with PipeWire audio capture, UNIX domain kill-switch socket (`/tmp/bajrang_kill_<uid>.sock`), complete evdev keycode mapping, and GNOME Shell 45–49 extension installer.
+- **`razorpay_server.py`**:
+  - Multi-threaded HTTP server (`ThreadingHTTPServer`) for order creation, HMAC-SHA256 payment verification, server-authenticated admin approvals, and 2048-bit RSA `BAJRANG-V6-` certificate signing.
+- **`installer_windows.py`**:
+  - Consent-gated Windows pre-flight scanner, dependency installer, and clean uninstaller (`--uninstall` purges `SecurityVault` secrets and user configuration).
+- **`web/index.html`**:
+  - Isolated static web portal (`vercel.json` / `deploy.yml` serve only `web/`).
 
-| Subsystem | Status | Honest Technical Scope & Requirements |
-| :--- | :--- | :--- |
-| **Shared Core, SQLite History & Memory (`bajrang_core.py`)** | **Working (Production)** | Stores chat sessions, messages, and categorized memories in SQLite3 (`WAL` mode) with schema migrations (`v1`→`v3`) and automatic API key redaction. |
-| **Model Inference (`UnifiedModelClient`)** | **Working (Production)** | Connects to local [Ollama](https://ollama.com/library/llama3.2) (`http://127.0.0.1:11434`) or cloud endpoints (Google Gemini, Groq, OpenRouter, OpenAI) using keys stored in `SecurityVault`. |
-| **Safety Allowlist & Kill-Switch (`SafetyGuard`, `KillSwitchManager`)** | **Working (Production)** | Fails closed (`strict_allowlist=True`, `shell=False`), blocks shell metacharacters and privilege escalation, and terminates child processes on `Ctrl+Escape`. |
-| **Folder Organizer (`AutonomousTaskPlanner`)** | **Working (Production)** | Categorizes files in user directories, detects exact duplicates via SHA-256 hashing, and requires explicit confirmation (`user_confirmed=True`) before moving or deleting files. |
-| **Voice Recognition (`SpectralVoiceSpotter`)** | **Experimental / Hybrid** | Requires `faster-whisper` or `vosk` for general speech-to-text transcription. When neither is installed, falls back to a lightweight 8-band Goertzel + DTW keyword spotter suitable only for matching short enrolled command templates. |
-| **Wayland & Win32 Input Automation** | **Environment-Dependent** | Windows input uses `PyAutoGUI` or Win32 `user32.dll`. Fedora Wayland input requires `ydotool` and a running `ydotoold` daemon with `/dev/uinput` permissions. |
-| **Licensing (`LicenseManager`)** | **Demo / Server-Dependent** | Supports RSA public-key verification (`BAJRANG-V6-...`) when paired with an external signing server (`razorpay_server.py`); local `generate_key()` tokens are explicitly marked `[DEMO_ONLY_UNVERIFIED]`. |
+## Running Self-Tests
 
-## 3. Installation & Running Self-Tests
-Install the dependencies for your platform:
-```bash
-# Common only (headless / tests)
-pip install -r requirements-common.txt
+Every module includes a headless self-test suite that runs on any machine without audio or display hardware:
 
-# Windows 11
-pip install -r requirements-windows.txt
-
-# Fedora Workstation
-pip install -r requirements-fedora.txt
-```
-
-Run the headless self-tests (requires no audio hardware or display server):
 ```bash
 python3 -m bajrang_core --self-test
 python3 -m windows --self-test
 python3 -m fedora --self-test
+python3 razorpay_server.py --self-test
+python3 installer_windows.py --self-test
 python3 test_bajrang_suite.py
 ```

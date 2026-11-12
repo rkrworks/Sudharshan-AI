@@ -1,82 +1,63 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="${BAJRANG_INSTALL_DIR:-$HOME/bajrang-ai}"
-EXT_DIR="$HOME/.local/share/gnome-shell/extensions/bajrang-ai@fedora.local"
-LOG_FILE="$PROJECT_DIR/install_diagnostics.log"
+echo "=================================================================="
+echo "  Bajrang AI Pro (Hardened v3.0) — Fedora Workstation Setup"
+echo "=================================================================="
 
-if [[ "${1:-}" == "--uninstall" ]]; then
-    echo "[UNINSTALL] Disabling GNOME extension and removing Bajrang AI Pro v6.0 files..."
-    if command -v gnome-extensions >/dev/null 2>&1; then
-        gnome-extensions disable bajrang-ai@fedora.local 2>/dev/null || true
-    fi
-    rm -rf "$EXT_DIR"
-    rm -f "$PROJECT_DIR/bajrang_core.py" "$PROJECT_DIR/bajrang_llama32.py" "$PROJECT_DIR/run.sh"
-    echo "[UNINSTALL] Complete. User SQLite database (~/.local/share/bajrang-ai/history.db) preserved."
-    exit 0
-fi
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${BAJRANG_INSTALL_DIR:-$HOME/bajrang-ai-pro}"
 mkdir -p "$PROJECT_DIR"
-echo "[$(date -Iseconds)] Starting Bajrang AI Pro v6.0 Fedora Setup" > "$LOG_FILE"
 
-echo "======================================================================"
-echo "  Bajrang AI Pro (v6.0) — Fedora Workstation (GNOME / Wayland) Setup"
-echo "  Diagnostic Log: $LOG_FILE"
-echo "======================================================================"
+echo "[1/5] Copying Bajrang AI Pro core & Fedora modules into $PROJECT_DIR..."
+for f in bajrang_core.py fedora.py windows.py bajrang_llama32.py bajrang_windows.py requirements_common.txt requirements_fedora.txt README.md SECURITY.md; do
+    if [ -f "$SCRIPT_DIR/$f" ]; then
+        cp -f "$SCRIPT_DIR/$f" "$PROJECT_DIR/$f"
+    fi
+done
 
-if [[ "$(uname -s)" != "Linux" ]]; then
-    echo "[ERROR] setup_fedora.sh requires a Linux environment (detected $(uname -s))." | tee -a "$LOG_FILE"
+if [ ! -f "$PROJECT_DIR/fedora.py" ] || [ ! -f "$PROJECT_DIR/bajrang_core.py" ]; then
+    echo "ERROR: Required files (bajrang_core.py, fedora.py) were not found in $SCRIPT_DIR." >&2
     exit 1
 fi
 
-if [[ -f /etc/os-release ]]; then
-    . /etc/os-release
-    echo "[1/6] Detected OS: ${PRETTY_NAME:-Linux} (Wayland=${WAYLAND_DISPLAY:-unset})" | tee -a "$LOG_FILE"
+chmod +x "$PROJECT_DIR/fedora.py"
+
+if [ "${BAJRANG_SKIP_SYSTEM_PKGS:-0}" != "1" ]; then
+    echo "[2/5] Installing Fedora system dependencies (GTK4, Libadwaita, PipeWire, ydotool, grim)..."
+    sudo dnf install -y \
+        python3 python3-pip python3-gobject gtk4 libadwaita \
+        pipewire-utils speech-dispatcher ydotool grim slurp wl-clipboard
+else
+    echo "[2/5] Skipping dnf system packages (BAJRANG_SKIP_SYSTEM_PKGS=1)."
 fi
 
-echo "[2/6] Auditing required system binaries (non-root pre-flight scan)..."
-MISSING_PKGS=()
-for cmd_pkg in "python3:python3" "pip3:python3-pip" "sqlite3:sqlite" "pw-record:pipewire-utils" "spd-say:speech-dispatcher-utils" "ydotool:ydotool" "gnome-screenshot:gnome-screenshot"; do
-    bin_name="${cmd_pkg%%:*}"
-    pkg_name="${cmd_pkg##*:}"
-    if command -v "$bin_name" >/dev/null 2>&1; then
-        echo "  [FOUND OK] $bin_name" | tee -a "$LOG_FILE"
-    else
-        echo "  [MISSING]  $bin_name (package: $pkg_name)" | tee -a "$LOG_FILE"
-        MISSING_PKGS+=("$pkg_name")
-    fi
-done
+echo "[3/5] Setting up Python virtual environment..."
+python3 -m venv --system-site-packages "$PROJECT_DIR/.venv"
+source "$PROJECT_DIR/.venv/bin/activate"
+pip install --upgrade pip
 
-if [[ ${#MISSING_PKGS[@]} -gt 0 ]] && command -v dnf >/dev/null 2>&1; then
-    if [[ "${BAJRANG_SKIP_SUDO:-0}" == "1" ]]; then
-        echo "  [NOTICE] Skipping sudo dnf install (BAJRANG_SKIP_SUDO=1). Missing: ${MISSING_PKGS[*]}" | tee -a "$LOG_FILE"
-    else
-        echo "  -> Installing missing Fedora packages via sudo dnf: ${MISSING_PKGS[*]}"
-        sudo dnf install -y "${MISSING_PKGS[@]}" python3-gobject python3-pillow gtk4 libadwaita
-    fi
+if [ -f "$PROJECT_DIR/requirements_fedora.txt" ]; then
+    pip install -r "$PROJECT_DIR/requirements_fedora.txt" || true
 fi
 
-echo "[3/6] Checking Python packages (user scope, non-root)..."
-for py_mod in "PIL:Pillow" "numpy:numpy" "faster_whisper:faster-whisper" "keyring:keyring"; do
-    mod_name="${py_mod%%:*}"
-    pip_name="${py_mod##*:}"
-    if python3 -c "import $mod_name" >/dev/null 2>&1; then
-        echo "  [FOUND OK] Python module '$mod_name'" | tee -a "$LOG_FILE"
-    else
-        echo "  [INSTALL]  pip3 install --user $pip_name" | tee -a "$LOG_FILE"
-        pip3 install --user --upgrade "$pip_name" || true
-    fi
-done
+echo "[4/5] Writing verified launcher script ($PROJECT_DIR/run.sh)..."
+cat << 'EOF' > "$PROJECT_DIR/run.sh"
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$DIR/.venv/bin/activate" ]; then
+    source "$DIR/.venv/bin/activate"
+fi
+exec python3 "$DIR/fedora.py" "$@"
+EOF
+chmod +x "$PROJECT_DIR/run.sh"
 
-echo "[4/6] Deploying Bajrang AI Pro v6.0 to $PROJECT_DIR..."
-cp -f bajrang_core.py "$PROJECT_DIR/bajrang_core.py" 2>/dev/null || true
-cp -f bajrang_llama32.py "$PROJECT_DIR/bajrang_llama32.py"
-chmod +x "$PROJECT_DIR/bajrang_llama32.py"
+echo "[5/5] Installing GNOME Shell extension & running self-tests..."
+python3 "$PROJECT_DIR/fedora.py" --install-extension "$PROJECT_DIR"
+python3 "$PROJECT_DIR/fedora.py" --self-test
 
-python3 "$PROJECT_DIR/bajrang_llama32.py" --export-project "$PROJECT_DIR" | tee -a "$LOG_FILE"
-python3 "$PROJECT_DIR/bajrang_llama32.py" --install-gnome-extension | tee -a "$LOG_FILE"
-
-echo "[5/6] Running self-test verification suite..."
-python3 "$PROJECT_DIR/bajrang_llama32.py" --self-test | tee -a "$LOG_FILE"
-
-echo "[6/6] Setup complete! Run '$PROJECT_DIR/run.sh' to launch the GTK4 HUD or '--uninstall' to remove."
+echo "=================================================================="
+echo "  Setup Complete! Launch with: $PROJECT_DIR/run.sh"
+echo "  Emergency Kill-Switch: $PROJECT_DIR/run.sh --kill-running"
+echo "=================================================================="

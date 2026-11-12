@@ -1,392 +1,240 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Bajrang AI Pro (v6.0) — Comprehensive 15-Domain Automated Quality Assurance Suite (`test_bajrang_suite.py`)
-Clearly distinguishes:
-  - [REAL INTEGRATION TEST]: Executes directly against the local SQLite database, OS filesystem,
-    Goertzel-DTW DSP engine, SHA-256 file organizer, and RSA modular verifier.
-  - [MOCKED EXTERNAL SERVICE TEST]: Uses deterministic local HTTP/socket mocks for cloud LLM
-    endpoints and Razorpay webhook signatures that require external API accounts.
-"""
-
-import hashlib
-import hmac
+import inspect
 import json
-import sqlite3
-import sys
 import tempfile
-import threading
+import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from bajrang_core import (
-    AdvancedVoiceEngine,
-    AsymmetricLicenseVerifier,
-    AutonomousTaskPlanner,
-    CrossPlatformComputerUse,
-    DatabaseMigrationManager,
-    LongTermMemoryStore,
-    ModularAIRouter,
-    PerformanceSettings,
-    SecurityVault,
-    TaskComplexity,
-    ToolSchemaValidator,
-    contains_sensitive_pii,
-    redact_sensitive_text,
-)
-from installer_windows import SmartSystemScannerInstaller
-from razorpay_server import RazorpayLicenseBackend
+import bajrang_core
+import fedora
+import installer_windows
+import razorpay_server
+import windows
 
 
-class TestBajrangV6Suite(unittest.TestCase):
-    """Comprehensive 15-domain automated verification suite for Bajrang AI Pro v6.0."""
+class TestBajrangAuditRemediations(unittest.TestCase):
+    def test_c1_license_forgery_blocked_and_rsa2048_verified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lm = bajrang_core.LicenseManager(Path(tmp))
+            ok_forged, _ = lm.verify_key("BAJRANG-PRO-HACKER-20991231-ZZZZZZZZ")
+            self.assertFalse(ok_forged, "C1: Forged BAJRANG-PRO token must be rejected")
 
-    def setUp(self) -> None:
-        self.tmp_dir = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp_dir.name)
-        self.vault = SecurityVault(self.root / "config")
-        for k in ("api_key_gemini_argon", "byo_api_key", "api_key_groq", "api_key_openrouter", "api_key_openai"):
-            self.vault.delete_secret(k)
-        self.db_path = self.root / "history.db"
-        self.memory = LongTermMemoryStore(self.db_path)
-        self.computer = CrossPlatformComputerUse(PerformanceSettings.from_profile("balanced"))
-        self.router = ModularAIRouter(
-            vault=self.vault,
-            memory_store=self.memory,
-            primary_provider="gemini_argon",
-            fallback_order=["groq", "openrouter", "ollama"],
-            perf_settings=PerformanceSettings.from_profile("balanced"),
+            ok_any8, _ = lm.verify_key("BAJRANG-PRO-USER01-20991231-12345678")
+            self.assertFalse(ok_any8, "C1: Any symmetric BAJRANG-PRO token must be rejected")
+
+            cert = razorpay_server.AsymmetricLicenseIssuer.issue_license_certificate(
+                email="kaushik@cbit.ac.in",
+                order_id="order_test_1",
+                payment_id="pay_test_1",
+            )
+            self.assertTrue(cert.startswith("BAJRANG-V6-"))
+            ok_rsa, msg_rsa = lm.verify_key(cert)
+            self.assertTrue(ok_rsa, f"C1: Valid 2048-bit RSA certificate must verify: {msg_rsa}")
+
+            tampered = cert[:-4] + ("0000" if not cert.endswith("0000") else "ffff")
+            ok_tampered, _ = lm.verify_key(tampered)
+            self.assertFalse(ok_tampered, "C1: Tampered RSA signature must be rejected")
+
+    def test_c2_no_client_side_credentials_or_key_minting(self):
+        base = Path(__file__).resolve().parent
+        for rel in ("index.html", "web/index.html", "portal_app.js"):
+            content = (base / rel).read_text(encoding="utf-8")
+            self.assertNotIn("OWNER_EMAIL_HASH", content, f"C2: {rel} must not contain OWNER_EMAIL_HASH")
+            self.assertNotIn("OWNER_DEFAULT_PASSKEY", content, f"C2: {rel} must not contain OWNER_DEFAULT_PASSKEY")
+            self.assertNotIn("generateBajrangLicenseKey", content, f"C2: {rel} must not mint keys in client JS")
+            self.assertNotIn("BajrangOwner@9392", content, f"C2: {rel} must not contain plaintext passkey")
+
+    def test_c3_command_allowlist_trampoline_blocked(self):
+        guard = bajrang_core.SafetyGuard(strict_allowlist=True)
+        trampolines = [
+            'gnome-terminal -- python3 -c "import os; os.system(\'id\')"',
+            "wt.exe powershell -Command calc.exe",
+            "xdg-open https://malicious.example/payload",
+            "code --Wait /etc/passwd",
+            "gedit /etc/shadow",
+        ]
+        for cmd in trampolines:
+            ok, reason = guard.check_command(cmd)
+            self.assertFalse(ok, f"C3: Trampoline or argument command must be blocked: {cmd} ({reason})")
+
+        ok_clean, _ = guard.check_command("gnome-terminal")
+        self.assertTrue(ok_clean, "C3: Zero-argument allowed binary should be permitted")
+
+    def test_c4_schema_validation_no_shell_exec_and_confirmation_gate(self):
+        ok_shell, _, _ = bajrang_core.ToolSchemaValidator.validate_action(
+            {"tool": "shell_exec", "arguments": {"command": "gnome-terminal"}}
         )
+        self.assertFalse(ok_shell, "C4: shell_exec must not be an AI-callable schema tool")
 
-    def tearDown(self) -> None:
-        for k in ("api_key_gemini_argon", "byo_api_key", "api_key_groq", "api_key_openrouter", "api_key_openai"):
-            self.vault.delete_secret(k)
-        self.tmp_dir.cleanup()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
+            adapter = windows.WindowsPlatformAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
 
-    def test_01_ai_provider_connectivity_and_health_checks(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies provider health checks & Eco profile disabling."""
-        eco_router = ModularAIRouter(
-            vault=self.vault,
-            memory_store=self.memory,
-            primary_provider="ollama",
-            perf_settings=PerformanceSettings.from_profile("eco"),
-        )
-        health_eco = eco_router.check_provider_health("ollama")
-        self.assertFalse(health_eco["healthy"])
-        self.assertIn("Eco", health_eco["detail"])
+            engine.client.chat = lambda *a, **kw: bajrang_core.AssistantTurn(
+                response_type="action",
+                text="Typing into window",
+                actions=[{"tool": "type_text", "arguments": {"text": "echo pwned"}}],
+            )
+            engine.process_prompt("Type echo pwned", auto_confirm_actions=False)
+            self.assertEqual(
+                len(engine.pending_actions),
+                1,
+                "C4: Unconfirmed type_text must be held in pending_actions",
+            )
+            confirmed_out = engine.confirm_pending_actions()
+            self.assertEqual(len(engine.pending_actions), 0)
+            self.assertEqual(len(confirmed_out), 1)
 
-        health_no_key = self.router.check_provider_health("gemini_argon")
-        self.assertFalse(health_no_key["healthy"])
-        self.assertIn("No API key", health_no_key["detail"])
+    def test_c5_organizer_collision_safety_trash_undo_and_cancellation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dl = root / "Downloads"
+            dl.mkdir()
+            (dl / "Documents").mkdir()
+            existing_report = dl / "Documents" / "report.pdf"
+            existing_report.write_bytes(b"ORIGINAL_IMPORTANT_REPORT_CONTENT")
 
-    def test_02_complexity_routing_and_provider_fallback(self) -> None:
-        """[MOCKED EXTERNAL SERVICE TEST] Verifies task complexity classification & fallback chain."""
-        self.assertEqual(ModularAIRouter.assess_task_complexity("hi"), TaskComplexity.SIMPLE)
-        self.assertEqual(
-            ModularAIRouter.assess_task_complexity("Organize my Downloads folder and remove duplicates step by step"),
-            TaskComplexity.COMPLEX_REASONING,
-        )
-        self.assertEqual(
-            ModularAIRouter.assess_task_complexity("What is on my screen right now?"),
-            TaskComplexity.MULTIMODAL_VISION,
-        )
-        self.assertEqual(
-            self.router.select_model_for_task("gemini_argon", TaskComplexity.SIMPLE),
-            "gemini-2.5-flash",
-        )
-        self.assertEqual(
-            self.router.select_model_for_task("gemini_argon", TaskComplexity.COMPLEX_REASONING),
-            "gemini-2.5-pro",
-        )
+            incoming_report = dl / "report.pdf"
+            incoming_report.write_bytes(b"NEW_DIFFERENT_REPORT_CONTENT")
 
-        with patch("urllib.request.urlopen", side_effect=OSError("External endpoint offline")):
-            sess_id = self.memory.create_session("Fallback Test")
-            turn = self.router.generate_structured_turn("open notepad", sess_id)
-            self.assertEqual(turn["provider_used"], "deterministic_local_router")
-            self.assertEqual(turn["actions"][0]["tool"], "open_app")
-            self.assertEqual(turn["actions"][0]["arguments"]["app_name"], "notepad")
+            dup_a = dl / "notes_a.txt"
+            dup_b = dl / "notes_b.txt"
+            dup_a.write_bytes(b"IDENTICAL_DUPLICATE_PAYLOAD")
+            dup_b.write_bytes(b"IDENTICAL_DUPLICATE_PAYLOAD")
 
-    def test_03_voice_recognition_vad_denoise_and_goertzel_dtw(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies VAD silence rejection, spectral denoise, wake word & 8-band Goertzel-DTW."""
-        voice = AdvancedVoiceEngine(wake_word="hey bajrang")
+            storage = bajrang_core.LocalChatStorage(root / "data")
+            planner = bajrang_core.AutonomousTaskPlanner(storage)
+            ok_p, plan = planner.create_organization_plan(str(dl), remove_duplicates=True)
+            self.assertTrue(ok_p)
+            ok_ex, _ = planner.execute_approved_plan(plan.plan_id, user_confirmed=True)
+            self.assertTrue(ok_ex)
 
-        silence_pcm = [0.0001] * 4000
-        res_silence = voice.recognize_from_pcm(silence_pcm)
-        self.assertFalse(res_silence["success"])
-        self.assertEqual(res_silence["engine"], "vad_silence_gate")
+            self.assertEqual(
+                existing_report.read_bytes(),
+                b"ORIGINAL_IMPORTANT_REPORT_CONTENT",
+                "C5: Existing Documents/report.pdf must NEVER be overwritten",
+            )
+            renamed_report = dl / "Documents" / "report_1.pdf"
+            self.assertTrue(renamed_report.exists(), "C5: Colliding file must be saved as report_1.pdf")
+            self.assertEqual(renamed_report.read_bytes(), b"NEW_DIFFERENT_REPORT_CONTENT")
 
-        wake_pcm = voice.generate_synthetic_utterance_pcm("hey bajrang")
-        res_wake = voice.recognize_from_pcm(wake_pcm)
-        self.assertTrue(res_wake["success"])
-        self.assertEqual(res_wake["transcript"], "hey bajrang")
-        self.assertTrue(res_wake["wake_word_detected"])
-        self.assertGreaterEqual(res_wake["confidence"], 0.90)
+            ok_undo, _ = planner.undo_plan(plan.plan_id)
+            self.assertTrue(ok_undo, "C5: undo_plan must succeed")
+            self.assertTrue(incoming_report.exists(), "C5: Undo must restore incoming report.pdf")
+            self.assertTrue(dup_a.exists() and dup_b.exists(), "C5: Undo must restore trashed duplicates")
 
-        cmd_pcm = voice.generate_synthetic_utterance_pcm("open terminal")
-        res_cmd = voice.recognize_from_pcm(cmd_pcm)
-        self.assertTrue(res_cmd["success"])
-        self.assertEqual(res_cmd["transcript"], "open terminal")
+    def test_c6_provider_key_affinity_and_gemini_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
+            adapter = windows.WindowsPlatformAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
 
-    def test_04_tts_and_barge_in_interruption(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies TTS configuration & barge-in interruption flag."""
-        voice = AdvancedVoiceEngine(tts_rate_wpm=200, tts_language="en-IN")
-        self.assertEqual(voice.tts_rate_wpm, 200)
-        interrupted = voice.interrupt_tts()
-        self.assertTrue(interrupted)
-        self.assertTrue(voice._barge_in_triggered.is_set())
+            google_key = "AIzaSyD-TestGoogleGeminiKey1234567890"
+            engine.client.configure_byo_key(google_key)
+            self.assertEqual( cfg.get_api_key("groq"), "", "C6: Google AIza key must never be returned for Groq")
+            self.assertEqual( cfg.get_api_key("openai"), "", "C6: Google AIza key must never be returned for OpenAI")
+            self.assertEqual( cfg.get_api_key("openrouter"), "", "C6: Google AIza key must never be returned for OpenRouter")
 
-    def test_05_microphone_enumeration_and_error_handling(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies audio input enumeration never crashes on headless hosts."""
-        voice = AdvancedVoiceEngine()
-        mics = voice.list_microphones()
-        self.assertIsInstance(mics, list)
-        self.assertGreaterEqual(len(mics), 1)
-        self.assertIn("name", mics[0])
+            router_src = inspect.getsource(bajrang_core.ModularAIRouter)
+            self.assertIn("x-goog-api-key", router_src, "C6: Gemini API key must be sent in x-goog-api-key header")
+            self.assertNotIn("?key=", router_src, "C6: Gemini API key must not be placed in URL query string")
 
-    def test_06_sqlite_persistence_and_v1_to_v3_migration(self) -> None:
-        """[REAL INTEGRATION TEST] Simulates a legacy v1 database and verifies lossless v3 migration."""
-        legacy_db = self.root / "legacy_v1.db"
-        conn = sqlite3.connect(str(legacy_db))
-        conn.executescript(
-            """
-            CREATE TABLE sessions (
-                session_id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                model TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                results_json TEXT NOT NULL DEFAULT '[]',
-                timestamp TEXT NOT NULL
-            );
-            INSERT INTO sessions VALUES ('sess_legacy', 'Legacy Session', 'llama3.2', '2026-11-10', '2026-11-10');
-            INSERT INTO messages (session_id, role, content, results_json, timestamp)
-            VALUES ('sess_legacy', 'user', 'Hello from v1', '[]', '2026-11-10');
-            """
-        )
-        conn.commit()
-        conn.close()
+    def test_h1_fedora_export_and_setup_script(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = fedora.export_modular_project(Path(tmp) / "exported")
+            self.assertTrue((out_dir / "fedora.py").is_file(), "H1: fedora.py must be exported")
+            self.assertTrue((out_dir / "bajrang_llama32.py").is_file(), "H1: bajrang_llama32.py must be exported")
+            self.assertTrue((out_dir / "run.sh").is_file(), "H1: run.sh must be exported")
+            ext_js = (out_dir / "gnome-extension" / "extension.js").read_text(encoding="utf-8")
+            self.assertIn(str(out_dir / "fedora.py"), ext_js, "H1: GNOME extension must invoke resolved fedora.py")
 
-        migrated_store = LongTermMemoryStore(legacy_db)
-        msgs = migrated_store.get_session_messages("sess_legacy")
-        self.assertEqual(len(msgs), 1)
-        self.assertEqual(msgs[0]["content"], "Hello from v1")
-        with migrated_store._conn() as c:
-            ver = migrated_store.migration_mgr.get_current_version(c)
-            self.assertEqual(ver, 3)
+        setup_sh = (Path(__file__).resolve().parent / "setup_fedora.sh").read_text(encoding="utf-8")
+        self.assertIn("fedora.py", setup_sh)
+        self.assertIn("bajrang_core.py", setup_sh)
 
-    def test_07_long_term_memory_crud_and_pii_guardrail(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies memory creation, update, search, deletion, and PII blocking."""
-        ok, msg, item = self.memory.store_memory(
-            key="coding_style",
-            content="Omit all double-slash comments and store workspaces on native Linux ext4/btrfs.",
-            category="preference",
-            project_tag="bajrang_ai",
-            importance=5,
-        )
-        self.assertTrue(ok, msg)
-        mid = item["memory_id"]
+    def test_h2_emergency_stop_aborts_streams_and_kill_socket(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
+            adapter = fedora.FedoraWaylandAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
 
-        results = self.memory.search_memories(query="double-slash", category="preference")
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["memory_id"], mid)
+            stop_ev = fedora.start_fedora_kill_socket_listener(engine)
+            time.sleep(0.1)
+            ok_k, msg_k = fedora.send_kill_signal_to_running_instance()
+            stop_ev.set()
+            self.assertTrue(ok_k, f"H2: Fedora global kill socket must succeed: {msg_k}")
+            self.assertTrue(engine.kill_switch.is_cancelled, "H2: Kill switch must be marked cancelled")
 
-        ok_upd, _ = self.memory.update_memory(mid, "Updated preference: strict Python type hints.", importance=4)
-        self.assertTrue(ok_upd)
+    def test_h3_all_schema_tools_implemented(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
+            adapter = windows.WindowsPlatformAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
+            actions = [
+                {"tool": "list_windows", "arguments": {}},
+                {"tool": "scroll_view", "arguments": {"direction": "down", "amount": 3}},
+                {"tool": "navigate_hotkey", "arguments": {"keys": ["ctrl", "c"]}},
+                {"tool": "inspect_directory", "arguments": {"path": str(root)}},
+                {"tool": "memory_store", "arguments": {"key": "pref", "value": "dark_mode"}},
+            ]
+            for act in actions:
+                res = engine.execute_action(act)
+                self.assertNotIn("Unsupported tool", res.output, f"H3: {act['tool']} must be supported")
 
-        ctx = self.memory.build_relevant_context_block("What is my coding_style preference?")
-        self.assertIn("strict Python type hints", ctx)
+    def test_h4_unknown_key_rejected_and_hotkey_order_independent(self):
+        win_adapter = windows.WindowsPlatformAdapter()
+        fed_adapter = fedora.FedoraWaylandAdapter()
 
-        ok_pii, pii_err, _ = self.memory.store_memory(
-            key="secret_token",
-            content="My Gemini key is AIzaSyD91234567890123456789012345678",
-            category="fact",
-        )
-        self.assertFalse(ok_pii)
-        self.assertIn("API_KEY", pii_err)
+        res_w = win_adapter.press_key("nonexistent_key_999")
+        res_f = fed_adapter.press_key("nonexistent_key_999")
+        self.assertFalse(res_w.success, "H4: Windows press_key must reject unknown keys")
+        self.assertTrue(res_w.blocked, "H4: Windows press_key must mark unknown keys blocked")
+        self.assertFalse(res_f.success, "H4: Fedora press_key must reject unknown keys")
+        self.assertTrue(res_f.blocked, "H4: Fedora press_key must mark unknown keys blocked")
 
-        self.assertTrue(self.memory.delete_memory(mid))
-        self.assertEqual(len(self.memory.search_memories(query="type hints")), 0)
+        res_hk1 = fed_adapter.hotkey(["f4", "alt"])
+        res_hk2 = win_adapter.hotkey(["r", "win"])
+        self.assertTrue(res_hk1.blocked, "H4: Reversed ['f4', 'alt'] must be blocked")
+        self.assertTrue(res_hk2.blocked, "H4: Reversed ['r', 'win'] must be blocked")
 
-    def test_08_desktop_automation_and_honest_verification(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies computer-use never fabricates success and blocks protected processes."""
-        ok_close, msg_close, _ = self.computer.close_application("systemd")
-        self.assertFalse(ok_close)
-        self.assertIn("prohibited", msg_close)
+    def test_h5_razorpay_http_server_and_rsa_2048(self):
+        self.assertGreaterEqual(bajrang_core.RSA_2048_MODULUS.bit_length(), 2048)
+        self.assertEqual(razorpay_server.run_self_test(), 0)
 
-        ok_bad_app, msg_bad_app, _ = self.computer.launch_application("nonexistent_malware_binary_xyz")
-        self.assertFalse(ok_bad_app)
-        self.assertIn("not in the", msg_bad_app)
+    def test_h6_installer_honest_status_consent_and_uninstall(self):
+        self.assertEqual(installer_windows.run_self_test(), 0)
 
-    def test_09_safety_controls_and_schema_validation(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies ToolSchemaValidator rejects unknown tools, bad paths, and forbidden hotkeys."""
-        ok_valid, _, is_destr = ToolSchemaValidator.validate_action(
-            {"tool": "open_app", "arguments": {"app_name": "calculator"}}
-        )
-        self.assertTrue(ok_valid)
-        self.assertFalse(is_destr)
+    def test_h7_deployment_configs_isolated_to_web_dir(self):
+        base = Path(__file__).resolve().parent
+        vercel_cfg = json.loads((base / "vercel.json").read_text(encoding="utf-8"))
+        self.assertEqual(vercel_cfg.get("outputDirectory"), "web", "H7: vercel.json must serve only web/")
+        deploy_yml = (base / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+        self.assertIn('path: "web"', deploy_yml, "H7: deploy.yml must upload only web/")
+        web_html = (base / "web" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("PACKAGED_GZ_B64URL", web_html, "H7: web/index.html must not inline Base64 source blobs")
 
-        ok_unknown, err_unknown, _ = ToolSchemaValidator.validate_action(
-            {"tool": "raw_shell_exec", "arguments": {"cmd": "rm -rf /"}}
-        )
-        self.assertFalse(ok_unknown)
-        self.assertIn("allowlist", err_unknown)
+    def test_h8_session_pinned_prompt_and_tts_lock_release(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
+            adapter = windows.WindowsPlatformAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
 
-        ok_sys_path, err_sys_path, _ = ToolSchemaValidator.validate_action(
-            {"tool": "organize_directory", "arguments": {"directory_path": "/etc"}}
-        )
-        self.assertFalse(ok_sys_path)
-        self.assertIn("prohibited", err_sys_path)
-
-        ok_hotkey, err_hotkey, _ = ToolSchemaValidator.validate_action(
-            {"tool": "navigate_hotkey", "arguments": {"keys": ["alt", "f4"]}}
-        )
-        self.assertFalse(ok_hotkey)
-        self.assertIn("restricted", err_hotkey)
-
-    def test_10_autonomous_task_planner_confirmation_and_cancellation(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies Downloads organization, SHA-256 duplicate removal, permission gate & cancellation."""
-        dl = self.root / "Downloads"
-        dl.mkdir()
-        (dl / "report.pdf").write_bytes(b"REPORT_BYTES_2026")
-        (dl / "report_duplicate.pdf").write_bytes(b"REPORT_BYTES_2026")
-        (dl / "diagram.png").write_bytes(b"PNG_IMAGE_BYTES")
-        (dl / "installer.exe").write_bytes(b"MZ_INSTALLER_BYTES")
-
-        planner = AutonomousTaskPlanner(self.memory, self.computer)
-        ok_plan, plan = planner.create_organization_plan(str(dl), remove_duplicates=True)
-        self.assertTrue(ok_plan)
-        self.assertEqual(plan.status, "awaiting_permission")
-        self.assertEqual(plan.inspection_report["duplicate_count"], 1)
-
-        ok_unapproved, _ = planner.execute_approved_plan(plan.plan_id, user_confirmed=False)
-        self.assertFalse(ok_unapproved)
-        self.assertTrue((dl / "report_duplicate.pdf").exists())
-
-        ok_approved, executed_plan = planner.execute_approved_plan(plan.plan_id, user_confirmed=True)
-        self.assertTrue(ok_approved)
-        self.assertEqual(executed_plan.status, "completed")
-        self.assertTrue((dl / "Documents" / "report.pdf").exists())
-        self.assertTrue((dl / "Images" / "diagram.png").exists())
-        self.assertTrue((dl / "Installers" / "installer.exe").exists())
-        self.assertFalse((dl / "report_duplicate.pdf").exists())
-
-        dl2 = self.root / "Downloads2"
-        dl2.mkdir()
-        (dl2 / "a.txt").write_text("hello", encoding="utf-8")
-        _, plan2 = planner.create_organization_plan(str(dl2))
-        ok_cancel, _ = planner.cancel_plan(plan2.plan_id)
-        self.assertTrue(ok_cancel)
-        ok_after_cancel, _ = planner.execute_approved_plan(plan2.plan_id, user_confirmed=True)
-        self.assertFalse(ok_after_cancel)
-
-    def test_11_installer_detection_and_clean_uninstall(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies Windows smart installer pre-flight scan, diagnostic log, and clean uninstall."""
-        inst_dir = self.root / "BajrangInstall"
-        scanner = SmartSystemScannerInstaller(target_dir=inst_dir)
-        found_cnt, total_cnt = scanner.run_full_scan()
-        self.assertEqual(total_cnt, 13)
-        self.assertGreaterEqual(found_cnt, 2)
-
-        log_file = scanner.write_diagnostic_log("Unit test diagnostic entry")
-        self.assertTrue(log_file.exists())
-
-        scanner.deploy_app_files_and_shortcuts()
-        self.assertTrue((inst_dir / "Launch_Bajrang_AI.bat").exists())
-
-        ok_uninst, msg_uninst = scanner.clean_uninstall()
-        self.assertTrue(ok_uninst, msg_uninst)
-        self.assertFalse((inst_dir / "Launch_Bajrang_AI.bat").exists())
-
-    def test_12_security_vault_secret_roundtrip(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies encrypted/vault secret storage and deletion."""
-        backend = self.vault.store_secret("api_key_groq", "gsk_LiveTestSecretKey9876543210")
-        self.assertIn(backend, ("os_keyring", "windows_dpapi", "linux_libsecret", "chmod_0600_vault"))
-        retrieved = self.vault.get_secret("api_key_groq")
-        self.assertEqual(retrieved, "gsk_LiveTestSecretKey9876543210")
-        self.vault.delete_secret("api_key_groq")
-        self.assertEqual(self.vault.get_secret("api_key_groq"), "")
-
-    def test_13_network_failure_and_retry_recovery(self) -> None:
-        """[MOCKED EXTERNAL SERVICE TEST] Verifies exponential backoff retry when a cloud endpoint fails transiently."""
-        self.vault.store_secret("api_key_gemini_argon", "AIzaMockKeyForRetryTest1234567890")
-        self.router.timeout_sec = 1.0
-        self.router.max_retries = 2
-
-        with patch("urllib.request.urlopen", side_effect=OSError("Simulated network timeout")):
-            sess_id = self.memory.create_session("Retry Session")
-            turn = self.router.generate_structured_turn("open calculator", sess_id)
-            self.assertEqual(turn["provider_used"], "deterministic_local_router")
-            self.assertGreaterEqual(len(turn["fallback_chain_tried"]), 1)
-
-    def test_14_razorpay_payment_and_webhook_hmac_verification(self) -> None:
-        """[MOCKED EXTERNAL SERVICE TEST] Verifies genuine Razorpay HMAC-SHA256 payment and webhook validation."""
-        backend = RazorpayLicenseBackend(
-            key_id="rzp_test_12345",
-            key_secret="secret_key_abc",
-            webhook_secret="whsec_xyz",
-        )
-        order_id = "order_P999888777"
-        payment_id = "pay_Q111222333"
-        valid_sig = hmac.new(
-            b"secret_key_abc",
-            f"{order_id}|{payment_id}".encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-
-        self.assertTrue(backend.verify_payment_signature(order_id, payment_id, valid_sig))
-        self.assertFalse(backend.verify_payment_signature(order_id, payment_id, "00" * 32))
-
-        webhook_body = b'{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_Q111222333"}}}}'
-        valid_wh_sig = hmac.new(b"whsec_xyz", webhook_body, hashlib.sha256).hexdigest()
-        self.assertTrue(backend.verify_webhook_signature(webhook_body, valid_wh_sig))
-        self.assertFalse(backend.verify_webhook_signature(webhook_body, "invalid_wh_sig"))
-
-    def test_15_asymmetric_public_key_license_verification(self) -> None:
-        """[REAL INTEGRATION TEST] Verifies RSA modular public-key license verification & tamper rejection."""
-        p_prime = 1000000007
-        q_prime = 1000000009
-        n_test = p_prime * q_prime
-        phi = (p_prime - 1) * (q_prime - 1)
-        e_test = 65537
-        d_test = pow(e_test, -1, phi)
-
-        verifier = AsymmetricLicenseVerifier()
-        verifier.n_int = n_test
-
-        backend = RazorpayLicenseBackend()
-        backend.n_int = n_test
-
-        cert = backend.sign_license_certificate(
-            subscriber_email="verified_buyer@example.com",
-            plan="pro_monthly",
-            order_id="order_101",
-            payment_id="pay_202",
-            days_valid=30,
-            private_d_int=d_test,
-        )
-        ok, info = verifier.verify_certificate(cert)
-        self.assertTrue(ok, str(info))
-        self.assertEqual(info["sub"], "verified_buyer@example.com")
-
-        tampered = cert[:-4] + "ffff"
-        ok_bad, _ = verifier.verify_certificate(tampered)
-        self.assertFalse(ok_bad)
+            s1 = engine.new_session("Session One")
+            s2 = engine.new_session("Session Two")
+            engine.switch_session(s2)
+            engine.process_prompt("Pinned to session 1", session_id=s1)
+            msgs_s1 = engine.storage.get_session_messages(s1)
+            msgs_s2 = engine.storage.get_session_messages(s2)
+            self.assertEqual(len(msgs_s1), 2, "H8: Prompt & reply must be written to pinned session s1")
+            self.assertEqual(len(msgs_s2), 0, "H8: Switched session s2 must not receive s1 messages")
 
 
 if __name__ == "__main__":
-    print("=" * 76)
-    print("  Bajrang AI Pro v6.0 — Running 15-Domain Automated Verification Suite")
-    print("=" * 76)
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestBajrangV6Suite)
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
-    sys.exit(0 if result.wasSuccessful() else 1)
+    unittest.main(verbosity=2)

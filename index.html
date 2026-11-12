@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Bajrang AI: desktop AI assistant for Windows and Fedora Linux</title>
+<title>Sudharshan AI: desktop AI assistant for Windows and Fedora Linux</title>
 <meta name="description" content="Local-first desktop AI assistant for Windows 11 and Fedora Linux with offline Llama 3.2 inference, fail-closed safety guards, and hardware vault security.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Bajrang AI: desktop AI assistant for Windows and Fedora Linux">
+<meta property="og:title" content="Sudharshan AI: desktop AI assistant for Windows and Fedora Linux">
 <meta property="og:description" content="Local-first desktop AI assistant for Windows 11 and Fedora Linux with offline Llama 3.2 inference, fail-closed safety guards, and hardware vault security.">
 <meta property="og:image" content="share.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -35,10 +35,11 @@
 
 <style>
 :root {
-  --p-bg: #000000; --p-surface: #0d0d0d; --p-ink: #ffffff; --p-muted: #999999;
-  --p-accent: #93f1f7; --p-accent-ink: #000000; --p-action: #93f1f7; --p-action-ink: #000000;
-  --p-inv-bg: #9ae187; --p-inv-surface: #8bcc7a; --p-inv-ink: #000000; --p-inv-muted: #24391e;
-  --p-inv-accent: #000000; --p-inv-accent-ink: #9ae187; --p-inv-action: #000000; --p-inv-action-ink: #9ae187;
+  --p-bg: #050505; --p-surface: #0f0c0a; --p-ink: #fafafa; --p-muted: #a69b93;
+  --p-accent: #ff6b1a; --p-accent-ink: #050505; --p-action: #ff6b1a; --p-action-ink: #050505;
+  --p-inv-bg: #ff6b1a; --p-inv-surface: #e85d0c; --p-inv-ink: #050505; --p-inv-muted: #2b1100;
+  --p-inv-accent: #050505; --p-inv-accent-ink: #ff6b1a; --p-inv-action: #050505; --p-inv-action-ink: #ff6b1a;
+  --hue: 22;
   --font-display: "Instrument Sans", system-ui, sans-serif;
   --font-text: "Instrument Sans", system-ui, sans-serif;
   --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
@@ -85,7 +86,9 @@
 
 .statement { padding-block: var(--s-10); }
 .statement .t-label { color: var(--muted); margin-bottom: var(--s-6); }
-.author-pill { display: inline-flex; align-items: center; gap: var(--s-2); padding: 4px 12px; border-radius: 9999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); font-size: var(--t-small); color: var(--p-muted); margin-top: var(--s-4); }
+.author-pill { display: inline-flex; align-items: center; gap: var(--s-2); padding: 4px 14px; border-radius: 9999px; background: rgba(255, 107, 26, 0.10); border: 1px solid rgba(255, 107, 26, 0.32); font-size: var(--t-small); color: #ffb085; margin-top: var(--s-4); }
+.hero--split { background-image: radial-gradient(circle at 78% 28%, rgba(255, 107, 26, 0.16), transparent 48%); }
+.card.is-featured { border-color: rgba(255, 107, 26, 0.55); box-shadow: 0 0 36px -10px rgba(255, 107, 26, 0.25); }
 </style>
 
 <script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
@@ -104,7 +107,7 @@
 <header class="nav">
   <div class="wrap nav__bar">
     <a class="skip-link" href="#top">Skip to content</a>
-    <a class="nav__logo" href="#top"><span class="mark mark--initial" aria-hidden="true">B</span>Bajrang AI</a>
+    <a class="nav__logo" href="#top"><span class="mark mark--initial" aria-hidden="true">S</span>Sudharshan AI <small style="font-size:11px;color:var(--p-accent);font-family:var(--font-mono);margin-left:6px;">ALPHA</small></a>
     <nav class="nav__links" aria-label="Main">
       <div class="nav__item">
         <a class="nav__link" href="#features">Features <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
@@ -123,7 +126,7 @@
               <a href="#pricing">Pro RSA Licensing<span>Asymmetric offline verification</span></a>
             </div>
             <div class="menu-card span-4 start-9">
-              <div class="panel" style="padding:16px;font-size:12px;font-family:var(--font-mono);color:var(--p-accent)">Bajrang Core v8.0<br><span style="color:var(--p-muted)">SHA-256 Verified Safe</span></div>
+              <div class="panel" style="padding:16px;font-size:12px;font-family:var(--font-mono);color:var(--p-accent)">Sudharshan Core v0.9-alpha<br><span style="color:var(--p-muted)">SHA-256 Verified Safe</span></div>
               <span class="t-card">Local Llama 3.2</span>
               <span class="t-small muted">Zero cloud telemetry required</span>
             </div>
@@ -134,7 +137,7 @@
       <div class="nav__item"><a class="nav__link" href="#platforms">Platforms</a></div>
       <div class="nav__item"><a class="nav__link" href="#pricing">Pricing</a></div>
       <div class="nav__item"><a class="nav__link" href="#faq">Questions</a></div>
-      <div class="nav__item"><a class="nav__link" href="https://github.com/rkrworks/Fedora-AI-Agent-Bajrang-AI">GitHub</a></div>
+      <div class="nav__item"><a class="nav__link" href="https://github.com/rkrworks/Sudharshan-AI">GitHub</a></div>
     </nav>
     <div class="nav__actions">
       <a class="btn btn--primary" href="#download">Download desktop app</a>
@@ -147,14 +150,14 @@
   <section class="hero hero--split bg-dots" data-enter aria-labelledby="hero-h" style="--h: 1">
     <div class="wrap"><div class="hero-text grid hero__grid">
       <div class="hero__text span-5">
-        <p class="hero__kicker"><span class="dot" aria-hidden="true"></span>Version 8.0 with offline Llama 3.2</p>
+        <p class="hero__kicker"><span class="dot" aria-hidden="true"></span>Alpha v0.9 • Offline Llama 3.2 & Native Desktop Control</p>
         <h1 id="hero-h">Desktop AI assistant for Windows and Fedora Linux</h1>
         <p class="hero__lead">Run local models on Ollama or bring your own cloud API keys. Features hardware credential encryption, fail-closed command guards, and native desktop automation.</p>
         <div class="btn-row"><a class="btn btn--primary" href="#download">Download desktop app</a><a class="btn btn--secondary" href="#features">Explore features</a></div>
         <div class="author-pill">Engineered by Kaushik Ram Ravuru · CBIT Hyderabad</div>
       </div>
       <div class="hero__media span-6 start-7">
-        <img src="assets/layout/img/photo-1081.jpg" alt="Developer workstation running Bajrang AI desktop assistant" fetchpriority="high">
+        <img src="assets/layout/img/photo-1081.jpg" alt="Developer workstation running Sudharshan AI desktop assistant" fetchpriority="high">
         <div class="ly-float">
           <div class="ly-float__row"><span class="ly-live">Hardware safety</span><span>Ctrl+Escape</span></div>
           <div class="ly-float__title">Fail-closed kill switch armed</div>
@@ -171,7 +174,7 @@
           <p class="t-lead">Connect your local Ollama runtime or hardware-vaulted API keys to automate terminal workflows and file organization.</p>
         </div>
       </div>
-      <div class="ui app fill" role="img" aria-label="Bajrang AI Pro desktop assistant workspace" data-ui-pause-host>
+      <div class="ui app fill" role="img" aria-label="Sudharshan AI (Alpha) desktop assistant workspace" data-ui-pause-host>
         <div class="app__pane app__pane--list">
           <div class="ui ui-panel ui-win" data-ui="window" data-open="Queued" data-work="Running" data-done="Verified">
             <div class="ui-win__bar">
@@ -197,14 +200,14 @@
           <div class="ui ui-panel ui-term" data-ui="terminal-run">
             <div class="ui-term__head">
               <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span class="ui-term__title">bajrang-ai-pro</span>
+              <span class="ui-term__title">sudharshan-ai</span>
               <span class="ui-meta">python3</span>
               <span class="ui-spacer"></span>
               <span class="ui-chip ui-chip--plain ui-term__branch"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="3.5" r="1.5"/><circle cx="5" cy="12.5" r="1.5"/><circle cx="11" cy="5.5" r="1.5"/><path d="M5 5v6M11 7c0 2.6-6 1.8-6 4"/></svg>main</span>
             </div>
             <div class="ui-term__screen" data-term-screen>
               <div class="ui-term__track" data-term-track>
-                <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/bajrang-ai-pro</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>python3 -m bajrang_core --self-test</span></div>
+                <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/sudharshan-ai</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>python3 -m bajrang_core --self-test</span></div>
                 <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>4 of 4 checks</span></div>
                 <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">security/vault.py</span><span class="ui-term__n">OS Keyring Pass</span><span class="ui-term__t">12ms</span></div>
                 <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">safety/allowlist.py</span><span class="ui-term__n">Fail-Closed Pass</span><span class="ui-term__t">24ms</span></div>
@@ -240,8 +243,8 @@
                       <span class="ui-voice__time" data-voice-time>00:48</span>
                     </div>
                     <div class="ui-voice__orb" data-voice-orb></div>
-                    <div class="ui-voice__who"><span class="ui-voice__name">Bajrang Voice</span><span class="ui-voice__with">Keyword Spotter</span></div>
-                    <div class="ui-voice__cap" data-voice-cap>Hey Bajrang, summarize active terminal workspace.</div>
+                    <div class="ui-voice__who"><span class="ui-voice__name">Sudharshan Voice</span><span class="ui-voice__with">Keyword Spotter</span></div>
+                    <div class="ui-voice__cap" data-voice-cap>Hey Sudharshan, summarize active terminal workspace.</div>
                     <div class="ui-voice__bar">
                       <span class="ui-voice__btn" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="6" y="2" width="4" height="8" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/></svg></span>
                       <span class="ui-voice__wave" aria-hidden="true"><i style="--h:4"></i><i style="--h:9"></i><i style="--h:16"></i><i style="--h:11"></i><i style="--h:20"></i><i style="--h:14"></i><i style="--h:8"></i><i style="--h:17"></i><i style="--h:12"></i><i style="--h:6"></i><i style="--h:10"></i><i style="--h:18"></i><i style="--h:13"></i><i style="--h:7"></i><i style="--h:15"></i><i style="--h:9"></i><i style="--h:5"></i><i style="--h:11"></i><i style="--h:7"></i><i style="--h:4"></i></span>
@@ -302,7 +305,7 @@
                 <div class="ui ui-panel ui-chat" data-ui="chat">
                   <div class="ui-head">
                     <span class="ui-agent" aria-hidden="true"></span>
-                    <div class="ui-title">Bajrang Assistant</div>
+                    <div class="ui-title">Sudharshan Assistant</div>
                     <span class="ui-chat__online">Ready</span>
                     <span class="ui-spacer"></span>
                   </div>
@@ -363,7 +366,7 @@
   <section class="section statement" id="statement" data-moment="word-highlight" aria-labelledby="statement-h" style="--h: 1">
     <div class="wrap">
       <p class="t-label">Privacy architecture</p>
-      <h2 id="statement-h" class="mo-wh__text">Desktop automation should live on <strong>your hardware</strong>. Bajrang AI stores chat history in SQLite WAL mode, seals API credentials inside OS security vaults, and never uploads your screen captures or microphone audio to remote servers.</h2>
+      <h2 id="statement-h" class="mo-wh__text">Desktop automation should live on <strong>your hardware</strong>. Sudharshan AI stores chat history in SQLite WAL mode, seals API credentials inside OS security vaults, and never uploads your screen captures or microphone audio to remote servers.</h2>
     </div>
   </section>
 
@@ -491,18 +494,18 @@
     <div class="closing__cta close--word">
       <div class="section-head--split">
         <div>
-          <h2 id="close-h">Download Bajrang AI for your workstation</h2>
+          <h2 id="close-h">Download Sudharshan AI for your workstation</h2>
           <p class="t-lead">Choose your platform installer or clone the open source repository.</p>
         </div>
         <a class="btn btn--primary" href="BajrangAI_Pro_Setup.exe" download>Download desktop app<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
       </div>
-      <p class="close__word" aria-hidden="true">Bajrang AI</p>
+      <p class="close__word" aria-hidden="true">Sudharshan AI</p>
     </div>
 
     <div class="closing__links">
       <div class="grid">
         <div class="span-4 stack-4">
-          <a class="nav__logo" href="#top"><span class="mark mark--initial" aria-hidden="true">B</span>Bajrang AI Pro</a>
+          <a class="nav__logo" href="#top"><span class="mark mark--initial" aria-hidden="true">S</span>Sudharshan AI <small style="font-size:11px;color:var(--p-accent);font-family:var(--font-mono);margin-left:6px;">ALPHA</small></a>
           <p class="footer__lede">Local AI desktop assistant for Windows 11 and Fedora Linux by Kaushik Ram Ravuru.</p>
         </div>
         <div class="span-2 footer__col">
@@ -525,7 +528,7 @@
         <div class="span-2 footer__col">
           <h3>Project</h3>
           <ul>
-            <li><a href="https://github.com/rkrworks/Fedora-AI-Agent-Bajrang-AI">GitHub Repository</a></li>
+            <li><a href="https://github.com/rkrworks/Sudharshan-AI">GitHub Repository</a></li>
             <li><a href="README_INSTRUCTIONS.txt">Setup Guide</a></li>
             <li><a href="ARCHITECTURE.md">System Design</a></li>
             <li><a href="#faq">Questions</a></li>
@@ -534,7 +537,7 @@
         <div class="span-2 footer__col">
           <h3>Contact</h3>
           <ul>
-            <li><a href="mailto:kaushik@example.com">Email Developer</a></li>
+            <li><a href="mailto:kaushikramravuru@gmail.com">Email Developer</a></li>
             <li><a href="privacy.html">Privacy Policy</a></li>
             <li><a href="terms.html">Terms of Service</a></li>
             <li><a href="credits.html">Credits</a></li>
@@ -542,7 +545,7 @@
         </div>
       </div>
       <div class="footer__legal">
-        <span>&copy; 2026 Bajrang AI Pro · Built by Kaushik Ram Ravuru (CBIT, Hyderabad)</span>
+        <span>&copy; 2026 Sudharshan AI (Alpha) · Built by Kaushik Ram Ravuru (CBIT, Hyderabad)</span>
         <span>Product names and logos are trademarks of their owners</span>
         <a class="credits" href="credits.html">Icons via SVG Logos and Lucide</a>
       </div>
