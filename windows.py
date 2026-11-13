@@ -566,6 +566,23 @@ class WindowsTkinterHUD:
 
         self.root.bind("<Control-Shift-K>", lambda _e: self.on_kill())
         self.root.bind("<Control-Shift-k>", lambda _e: self.on_kill())
+        self._add_hover_effects()
+
+    def _add_hover_effects(self) -> None:
+        pal = THEMES.get(self.current_theme, THEMES["dark"])
+        for btn in (self.send_btn, self.new_sess_btn):
+            btn.bind("<Enter>", lambda _e, b=btn: b.configure(bg=pal.get("accent_hover", "#ff8533")))
+            btn.bind("<Leave>", lambda _e, b=btn: b.configure(bg=pal.get("accent", "#ff6b1a")))
+
+        for btn in (self.topmost_btn, self.compact_btn, self.clip_btn, self.theme_btn, self.key_btn,
+                    self.pin_sess_btn, self.rename_sess_btn, self.export_sess_btn):
+            btn.bind("<Enter>", lambda _e, b=btn: b.configure(bg=pal.get("border", "#272733")))
+            btn.bind("<Leave>", lambda _e, b=btn: b.configure(bg=pal.get("subpanel", "#181822")))
+
+        self.kill_btn.bind("<Enter>", lambda _e: self.kill_btn.configure(bg="#ef4444"))
+        self.kill_btn.bind("<Leave>", lambda _e: self.kill_btn.configure(bg="#dc2626"))
+        self.voice_btn.bind("<Enter>", lambda _e: self.voice_btn.configure(bg="#f97316"))
+        self.voice_btn.bind("<Leave>", lambda _e: self.voice_btn.configure(bg="#ea580c"))
 
     def _setup_chat_tags(self) -> None:
         tk = self.tk

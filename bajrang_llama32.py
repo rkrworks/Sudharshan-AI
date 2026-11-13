@@ -542,13 +542,16 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                     css_provider = Gtk.CssProvider()
                     css_provider.load_from_data(
                         b"""
-                        window { background-color: #050505; color: #fafafa; }
-                        .bajrang-header { background-color: #0f0c0a; border-bottom: 1px solid #2b1d14; padding: 6px 12px; }
-                        .bajrang-status { background-color: #2b1204; color: #ff8c42; border: 1px solid #ff6b1a; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; }
-                        .bajrang-sidebar { background-color: #0c0a08; border-right: 1px solid #2b1d14; padding: 10px; }
-                        .bajrang-chat { background-color: #080706; color: #f5f5f4; padding: 14px; font-size: 14px; }
+                        window { background-color: #09090b; color: #fafafa; }
+                        .bajrang-header { background-color: #111116; border-bottom: 1px solid #272733; padding: 6px 12px; }
+                        .bajrang-status { background-color: #064e3b; color: #6ee7b7; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; }
+                        .bajrang-engine { background-color: #064e3b; color: #6ee7b7; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; margin-left: 8px; }
+                        .bajrang-sidebar { background-color: #111116; border-right: 1px solid #272733; padding: 10px; }
+                        .bajrang-chat { background-color: #09090b; color: #f1f5f9; padding: 14px; font-size: 14px; }
                         .bajrang-stop { background-color: #dc2626; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
-                        .bajrang-approve { background-color: #ff6b1a; color: #050505; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
+                        .bajrang-approve { background-color: #10b981; color: #052e16; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
+                        .bajrang-send { background-color: #ff6b1a; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 14px; }
+                        .bajrang-newsess { background-color: #ff6b1a; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
                         """
                     )
                     from gi.repository import Gdk
@@ -563,15 +566,36 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                     header.add_css_class("bajrang-header")
                     status_lbl = Gtk.Label(label="IDLE • Ready")
                     status_lbl.add_css_class("bajrang-status")
+                    engine_btn = Gtk.Button(label="🟢 Ollama (llama3.2)")
+                    engine_btn.add_css_class("bajrang-engine")
                     confirm_btn = Gtk.Button(label="Approve Action")
                     confirm_btn.add_css_class("bajrang-approve")
                     confirm_btn.set_sensitive(False)
                     kill_btn = Gtk.Button(label="STOP")
                     kill_btn.add_css_class("bajrang-stop")
                     header.pack_start(status_lbl)
+                    header.pack_start(engine_btn)
                     header.pack_end(kill_btn)
                     header.pack_end(confirm_btn)
                     win.set_titlebar(header)
+
+                    def on_engine_click(_b: Any) -> None:
+                        engine_btn.set_label("🟡 Starting Ollama...")
+                        def worker() -> None:
+                            host = str(engine.config.settings.get("ollama_host", "http://127.0.0.1:11434")).rstrip("/")
+                            engine.client._try_autostart_ollama(host)
+                            online = False
+                            try:
+                                import urllib.request
+                                req = urllib.request.Request(f"{host}/api/version", method="GET")
+                                with urllib.request.urlopen(req, timeout=1.2) as resp:
+                                    online = (resp.status == 200)
+                            except Exception:
+                                online = False
+                            lbl = f"🟢 Ollama ({engine.client.active_model})" if online else "🔴 Ollama Offline (Click to Start)"
+                            GLib.idle_add(lambda: engine_btn.set_label(lbl))
+                        threading.Thread(target=worker, daemon=True).start()
+                    engine_btn.connect("clicked", on_engine_click)
 
                     root_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
                     win.set_child(root_hbox)
@@ -580,6 +604,7 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                     sidebar.set_size_request(220, -1)
                     sidebar.add_css_class("bajrang-sidebar")
                     new_sess_btn = Gtk.Button(label="+ New Session")
+                    new_sess_btn.add_css_class("bajrang-newsess")
                     sess_list = Gtk.ListBox()
                     sidebar.append(new_sess_btn)
                     sidebar.append(sess_list)
@@ -601,10 +626,11 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                     chat_vbox.append(scrolled)
 
                     input_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-                    speak_btn = Gtk.Button(label="Speak")
+                    speak_btn = Gtk.Button(label="🎤 Speak")
                     entry = Gtk.Entry(placeholder_text="Ask Sudharshan AI (Alpha) or type a Fedora desktop command...")
                     entry.set_hexpand(True)
-                    send_btn = Gtk.Button(label="Send")
+                    send_btn = Gtk.Button(label="Send ➤")
+                    send_btn.add_css_class("bajrang-send")
                     input_hbox.append(speak_btn)
                     input_hbox.append(entry)
                     input_hbox.append(send_btn)
@@ -627,8 +653,30 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
 
                     def refresh_view() -> None:
                         msgs = engine.storage.get_session_messages(engine.current_session_id)
-                        lines = [f"{'You' if m.get('role') == 'user' else 'Sudharshan AI'}:\n{m.get('content', '')}" for m in msgs]
-                        buf.set_text("\n\n".join(lines))
+                        if not msgs:
+                            buf.set_text(
+                                "⚡ SUDHARSHAN CORE v0.9 • LOCAL NEURAL ENGINE (Fedora GNOME / Wayland)\n"
+                                "Welcome to Sudharshan AI\n"
+                                "100% Private, Hardware-Isolated Desktop Intelligence & Automation\n"
+                                "────────────────────────────────────────────────────────────────────────────\n\n"
+                                "⚡ Quick Actions:\n\n"
+                                "  [1] ⚡ Check system diagnostics, Wayland session, and engine status\n"
+                                "  [2] 📁 Organize Downloads folder and inspect duplicate files\n"
+                                "  [3] 📋 Inspect and summarize clipboard content\n"
+                                "  [4] 🤖 Verify local Ollama neural models and RAM allocation\n\n"
+                                "────────────────────────────────────────────────────────────────────────────\n"
+                                "Global UNIX Kill-Switch: Press Ctrl+Shift+K or click STOP anytime to abort actions immediately."
+                            )
+                        else:
+                            blocks = []
+                            for m in msgs:
+                                role_lbl = "👤 YOU" if m.get("role") == "user" else f"⚡ SUDHARSHAN AI ({engine.client.active_model})"
+                                blocks.append(f"{role_lbl}:\n{m.get('content', '')}")
+                                for r in m.get("results", []):
+                                    out = r.get("output", "") if isinstance(r, dict) else getattr(r, "output", "")
+                                    tool = r.get("tool", "action") if isinstance(r, dict) else getattr(r, "tool", "action")
+                                    blocks.append(f"  🔧 [{tool}]: {out}")
+                            buf.set_text("\n\n".join(blocks))
                         refresh_sessions()
 
                     def on_submit(_w: Any) -> None:
