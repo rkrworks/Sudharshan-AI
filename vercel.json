@@ -1,6 +1,5 @@
 {
-  "version": 2,
-  "name": "sudharshan-ai",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "outputDirectory": "web",
   "headers": [
