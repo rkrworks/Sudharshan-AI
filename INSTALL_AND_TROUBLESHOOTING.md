@@ -20,21 +20,23 @@ Sudharshan AI runs efficiently across a wide variety of hardware configurations:
 
 ---
 
-## 2. Windows 11 Installation & Usage
+## 2. Windows 11 Installation & Trust Verification
 
-### Method A — Smart Pre-Flight Batch Setup
-1. Clone or download the repository from GitHub:
-   ```cmd
-   git clone https://github.com/rkrworks/Sudharshan-AI.git
-   cd Sudharshan-AI
-   ```
-2. Run the automated installer:
-   ```cmd
-   setup_windows.bat
-   ```
-   The installer automatically checks for Python 3.10+, installs missing packages, verifies Ollama, copies files to `%LOCALAPPDATA%\SudharshanAI`, and launches the Windows Assistant HUD.
+### Why Does Windows SmartScreen Flag New Apps?
+Microsoft Defender SmartScreen blocks newly downloaded executables by default if they lack accumulated download reputation or if downloaded via browser (Mark-of-the-Web `Zone.Identifier`). Sudharshan AI includes an official **2048-bit RSA X.509 Code-Signing Certificate** (`Sudharshan_AI_CodeSigning.cer`) and a valid Microsoft Authenticode digital signature embedded into all executables.
 
-### Method B — Standalone Python Execution
+### Method A — One-Click Trusted Installation (Recommended)
+1. Download the Windows Release archive (`Sudharshan_AI_Windows_v0.9-alpha.zip`) and extract it.
+2. **Step 1 (Register Certificate)**: Right-click `install_certificate.bat` and select **Run as Administrator**.
+   - This registers `Sudharshan AI Desktop Authority` into your Windows **Trusted Root** and **Trusted Publishers** store via `certutil`.
+3. **Step 2 (Unblock Files)**: Double-click `unblock_files.bat` to remove browser download locks.
+4. **Step 3 (Launch Setup)**: Run `setup_windows.bat` or `Sudharshan_AI_Setup.exe`.
+   - Windows Defender and SmartScreen will recognize the trusted publisher and execute cleanly without warnings!
+
+### Method B — Direct Smart Batch Setup
+Run `setup_windows.bat`. It automatically unblocks downloaded files, verifies Python 3.10+, installs required libraries via WinGet/pip, configures Ollama, and launches the Windows Assistant HUD.
+
+### Method C — Standalone Python Execution
 ```cmd
 pip install -r requirements_windows.txt
 python windows.py

@@ -23,6 +23,16 @@ echo   Diagnostic Log: %LOG_FILE%
 echo ======================================================================
 echo [%DATE% %TIME%] Starting Sudharshan AI Windows Setup > "%LOG_FILE%"
 
+:: [Step 0] Unblock downloaded files (Remove Zone.Identifier Mark-of-the-Web)
+powershell.exe -NoProfile -Command "Get-ChildItem -Path '%~dp0*' -Recurse | Unblock-File -ErrorAction SilentlyContinue" 2>nul
+
+:: [Step 0.5] Register Code Signing Certificate to Trusted Publishers if present
+if exist "%~dp0certificates\Sudharshan_AI_CodeSigning.cer" (
+    certutil.exe -addstore -f "TrustedPublisher" "%~dp0certificates\Sudharshan_AI_CodeSigning.cer" >nul 2>&1
+) else if exist "%~dp0Sudharshan_AI_CodeSigning.cer" (
+    certutil.exe -addstore -f "TrustedPublisher" "%~dp0Sudharshan_AI_CodeSigning.cer" >nul 2>&1
+)
+
 where python >nul 2>nul
 if %ERRORLEVEL% neq 0 (
     echo [1/5] Python 3 not found. Installing Python 3.12 via WinGet...

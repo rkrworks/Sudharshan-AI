@@ -580,6 +580,10 @@
       <div class="span-6 start-7">
         <div class="faq">
           <div class="faq__item">
+            <h3>Why does Windows SmartScreen flag new downloads and how do I trust it?</h3>
+            <p>Microsoft Defender SmartScreen warns on all newly released executables that lack accumulated global telemetry. Sudharshan AI includes a 2048-bit RSA Authenticode signature. Simply run <code>install_certificate.bat</code> as Administrator or launch <code>setup_windows.bat</code> directly to register Sudharshan AI as a Trusted Publisher on your PC.</p>
+          </div>
+          <div class="faq__item">
             <h3>How does 24/7 Keep-Alive and the Gaming Watchdog work?</h3>
             <p>Sudharshan AI pins local models in memory using Ollama's <code>keep_alive: -1</code> configuration for zero cold-start delay. A low-overhead background watchdog continuously inspects process trees for graphics-heavy games (Steam, CS2, Valorant) and creative suites, gracefully unloading the model (<code>keep_alive: 0</code>) during high load and re-pinning it when resources clear.</p>
           </div>
