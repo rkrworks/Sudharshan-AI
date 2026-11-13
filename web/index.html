@@ -134,6 +134,7 @@
         </div>
       </div>
       <div class="nav__item"><a class="nav__link" href="#workspace">Workspace</a></div>
+      <div class="nav__item"><a class="nav__link" href="#models">Models</a></div>
       <div class="nav__item"><a class="nav__link" href="#platforms">Platforms</a></div>
       <div class="nav__item"><a class="nav__link" href="#pricing">Pricing</a></div>
       <div class="nav__item"><a class="nav__link" href="#faq">Questions</a></div>
@@ -154,7 +155,7 @@
         <h1 id="hero-h">Desktop AI assistant for Windows and Fedora Linux</h1>
         <p class="hero__lead">Run local models on Ollama or bring your own cloud API keys. Features hardware credential encryption, fail-closed command guards, and native desktop automation.</p>
         <div class="btn-row"><a class="btn btn--primary" href="#download">Download desktop app</a><a class="btn btn--secondary" href="#features">Explore features</a></div>
-        <div class="author-pill">Engineered by Kaushik Ram Ravuru · CBIT Hyderabad</div>
+        <div class="author-pill">Engineered by Kaushik Ram Ravuru (B.E. IT, Section IT-1, CBIT Hyderabad)</div>
       </div>
       <div class="hero__media span-6 start-7">
         <img src="assets/layout/img/photo-1081.jpg" alt="Developer workstation running Sudharshan AI desktop assistant" fetchpriority="high">
@@ -231,8 +232,8 @@
         </div>
         <div class="grid">
           <article class="card card--row card--open span-6">
-            <h3>Listens offline with spectral keyword spotting</h3>
-            <p>Runs an 8-band Goertzel DSP filter locally to detect enrolled voice commands before waking your model.</p>
+            <h3>Listens offline with multilingual keyword spotting</h3>
+            <p>8-band Goertzel DSP filter and multilingual STT/TTS across 10+ Indian languages (Telugu, Hindi, Tamil, Kannada) and foreign languages with auto-retell.</p>
             <div class="panel">
               <div class="stage stage--fade-b">
                 <div class="at-rise fit" style="--fit-max:400px;--ax:max(24px, 50% - 200px);--ay:48px;--ay-sm:16px" data-ui-loop>
@@ -335,8 +336,8 @@
         </article>
 
         <article class="card card--row card--open span-6">
-          <h3>Deduplicates files using SHA-256 hashes</h3>
-          <p>Scans user directories to identify duplicate files, requiring explicit confirmation before moving or deleting anything.</p>
+          <h3>Non-destructive file power &amp; SHA-256 deduplication</h3>
+          <p>Find files by size, analyze disk usage, batch rename with pattern matching, and quarantine duplicates to <code>.bajrang_trash/</code> with one-click undo.</p>
           <div class="panel">
             <div class="stage stage--fade-b">
               <div class="at-rise fit" style="--fit-max:400px;--ax:max(24px, 50% - 200px);--ay:48px;--ay-sm:16px">
@@ -386,6 +387,121 @@
       </div>
       <div class="frame frame--fill span-6 start-7" style="height: 100%; min-height: 480px; position: relative;">
         <div data-fx="orb-sphere" data-fx-seed="42" role="img" aria-label="Rotating mathematical sphere representing local LLM tensor weights" style="position: absolute; inset: 0; width: 100%; height: 100%;"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section bg-band" id="models" aria-labelledby="models-h" style="--h: 2">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="t-label">Hardware-Aware Model Hub</p>
+        <h2 id="models-h">Local Daily Drivers &amp; Legacy Model Archive</h2>
+        <p>Sudharshan AI profiles your host RAM, CPU threads, and GPU VRAM at startup to recommend the ideal daily driver. 24/7 Model Keep-Alive pins your LLM in memory for zero cold-start latency, auto-offloading when games or heavy creative software launch.</p>
+      </div>
+
+      <div class="grid" style="margin-bottom: var(--s-6);">
+        <div class="card span-6">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <h3>24/7 Smart Keep-Alive</h3>
+            <span class="ui-chip ui-chip--ink" style="color:var(--p-accent);border-color:rgba(255,107,26,0.3);">Watchdog Active</span>
+          </div>
+          <p>Sudharshan pins local weights in VRAM with <code>keep_alive: -1</code> for instant single-digit millisecond latency. When high-load games (Steam, CS2, Valorant) or 3D renderers start, the background watchdog automatically offloads weights to free memory, restoring them seamlessly once the session finishes.</p>
+          <div class="panel" style="padding:16px;margin-top:16px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:13px;">
+            <div style="color:var(--p-muted);margin-bottom:6px;"># Hardware Tier Classification:</div>
+            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Workstation (32GB+ RAM):</span> qwen2.5:32b · llama3.1:70b</div>
+            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">High (16GB–32GB RAM):</span> llama3.1:8b · deepseek-r1:8b · mistral:7b</div>
+            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Balanced (8GB–16GB RAM):</span> llama3.2:3b (Recommended Daily Driver)</div>
+            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Eco (&lt;8GB RAM):</span> llama3.2:1b · qwen2.5:0.5b</div>
+          </div>
+        </div>
+
+        <div class="card span-6">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <h3>Multilingual Voice &amp; Retell</h3>
+            <span class="ui-chip ui-chip--ink" style="color:var(--p-accent);border-color:rgba(255,107,26,0.3);">15+ Languages</span>
+          </div>
+          <p>Speak in any major Indian language (Telugu, Hindi, Tamil, Kannada, Malayalam, Bengali, Gujarati, Marathi, Punjabi, Urdu, Indian English) or foreign language (Spanish, French, German, Japanese, Chinese, Arabic). The engine auto-detects language and retells/replies in the exact same language with zero cloud latency.</p>
+          <div class="panel" style="padding:16px;margin-top:16px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:13px;">
+            <div style="color:var(--p-muted);margin-bottom:6px;"># Multilingual Auto-Retell Examples:</div>
+            <div style="color:var(--p-muted);">&gt; "నమస్కారం, ఈ రోజు పనులు ఏమిటి?" &rarr; <span style="color:var(--p-accent)">Replies in Telugu</span></div>
+            <div style="color:var(--p-muted);">&gt; "नमस्ते, आज के कार्य क्या हैं?" &rarr; <span style="color:var(--p-accent)">Replies in Hindi</span></div>
+            <div style="color:var(--p-muted);">&gt; "வணக்கம், கணினி நிலையைச் சரிபார்க்கவும்" &rarr; <span style="color:var(--p-accent)">Replies in Tamil</span></div>
+            <div style="color:var(--p-muted);">&gt; "Bonjour, organise mes téléchargements" &rarr; <span style="color:var(--p-accent)">Replies in French</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top:var(--s-8);margin-bottom:var(--s-4);">
+        <h3>Ollama Model Directory &amp; Pull Commands</h3>
+        <p>Switch between the latest models or legacy checkpoints with instant local pull commands:</p>
+      </div>
+
+      <div class="grid">
+        <div class="card span-4">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="font-size:16px;">Llama 3.2 3B</h3>
+            <span class="ui-chip">Daily Driver</span>
+          </div>
+          <p style="font-size:14px;margin-top:6px;">Meta's ultra-snappy 3B parameter model optimized for instant desktop tool calling and low memory footprint.</p>
+          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
+            ollama run llama3.2:3b
+          </div>
+        </div>
+
+        <div class="card span-4">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="font-size:16px;">Llama 3.1 8B</h3>
+            <span class="ui-chip">Deep Context</span>
+          </div>
+          <p style="font-size:14px;margin-top:6px;">128k context window powerhouse for complex multi-turn coding and extensive document synthesis.</p>
+          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
+            ollama run llama3.1:8b
+          </div>
+        </div>
+
+        <div class="card span-4">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="font-size:16px;">Llama 2 7B</h3>
+            <span class="ui-chip">Legacy</span>
+          </div>
+          <p style="font-size:14px;margin-top:6px;">The battle-tested predecessor model with rock-solid stability for older GPU and CPU architectures.</p>
+          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
+            ollama run llama2:7b
+          </div>
+        </div>
+
+        <div class="card span-4">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="font-size:16px;">Mistral 7B v0.3</h3>
+            <span class="ui-chip">Tool Calling</span>
+          </div>
+          <p style="font-size:14px;margin-top:6px;">Engineered specifically for native function calling, JSON action emission, and strict desktop command parsing.</p>
+          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
+            ollama run mistral:7b
+          </div>
+        </div>
+
+        <div class="card span-4">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="font-size:16px;">Gemma 2 9B / 2B</h3>
+            <span class="ui-chip">DeepMind</span>
+          </div>
+          <p style="font-size:14px;margin-top:6px;">Google DeepMind's compact architecture delivering exceptional reasoning density per parameter.</p>
+          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
+            ollama run gemma2:2b
+          </div>
+        </div>
+
+        <div class="card span-4">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="font-size:16px;">CodeLlama 7B</h3>
+            <span class="ui-chip">Coding</span>
+          </div>
+          <p style="font-size:14px;margin-top:6px;">Specialized in Python automation scripts, terminal shell commands, and debugging desktop tasks.</p>
+          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
+            ollama run codellama:7b
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -464,6 +580,14 @@
       <div class="span-6 start-7">
         <div class="faq">
           <div class="faq__item">
+            <h3>How does 24/7 Keep-Alive and the Gaming Watchdog work?</h3>
+            <p>Sudharshan AI pins local models in memory using Ollama's <code>keep_alive: -1</code> configuration for zero cold-start delay. A low-overhead background watchdog continuously inspects process trees for graphics-heavy games (Steam, CS2, Valorant) and creative suites, gracefully unloading the model (<code>keep_alive: 0</code>) during high load and re-pinning it when resources clear.</p>
+          </div>
+          <div class="faq__item">
+            <h3>Which languages are supported by the Multilingual Voice Engine?</h3>
+            <p>Sudharshan supports speech recognition and natural retell across 10+ Indian languages (Telugu, Hindi, Tamil, Kannada, Malayalam, Bengali, Marathi, Gujarati, Punjabi, Urdu, Indian English) and major global languages (Spanish, French, German, Japanese, Chinese, Arabic). The engine detects your spoken language and automatically responds in the exact same language.</p>
+          </div>
+          <div class="faq__item">
             <h3>Does the assistant require an internet connection?</h3>
             <p>No. The core engine runs completely offline with Ollama (Llama 3.2) and local SQLite storage. An internet connection is only needed if you configure external cloud API keys.</p>
           </div>
@@ -520,6 +644,7 @@
           <h3>Platform</h3>
           <ul>
             <li><a href="#workspace">Architecture</a></li>
+            <li><a href="#models">Model Archive</a></li>
             <li><a href="#features">Safety Guard</a></li>
             <li><a href="#platforms">Dual-OS Adapters</a></li>
             <li><a href="#pricing">Licensing</a></li>
@@ -545,9 +670,9 @@
         </div>
       </div>
       <div class="footer__legal">
-        <span>&copy; 2026 Sudharshan AI (Alpha) · Built by Kaushik Ram Ravuru (CBIT, Hyderabad)</span>
+        <span>&copy; 2026 Sudharshan AI (Alpha v0.9) · Engineered by Kaushik Ram Ravuru (B.E. IT, Section IT-1, CBIT Hyderabad)</span>
         <span>Product names and logos are trademarks of their owners</span>
-        <a class="credits" href="credits.html">Icons via SVG Logos and Lucide</a>
+        <a class="credits" href="credits.html">Credits &amp; Open Source</a>
       </div>
     </div>
   </div>

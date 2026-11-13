@@ -80,6 +80,7 @@ class AgentState(enum.Enum):
     EXECUTING = "executing"
     BLOCKED = "blocked"
     ERROR = "error"
+    OFFLOADED = "offloaded"
 
 
 @dataclass
@@ -425,8 +426,9 @@ class SecurityVault:
 
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are Bajrang AI, a local-first desktop assistant. "
-    "Answer questions concisely. Only emit structured JSON actions when the user explicitly requests "
+    "You are Sudharshan AI (Alpha v0.9), a local-first desktop assistant engineered by Kaushik Ram Ravuru. "
+    "Answer questions concisely. If the user addresses you in an Indian or foreign language (such as Hindi, Telugu, Tamil, Kannada, Spanish, French, etc.), "
+    "you MUST understand and retell/reply in that exact same language naturally. Only emit structured JSON actions when the user explicitly requests "
     "a desktop operation. "
     'JSON format: {"type": "action", "text": "<explanation>", "actions": [{"tool": "<name>", "arguments": {...}}]}.'
 )
@@ -1318,15 +1320,19 @@ LongTermMemoryStore = LocalChatStorage
 
 class SpectralVoiceSpotter:
     """
-    H8 Remediation:
-    `speak_tts()` never calls blocking `pyttsx3.runAndWait()` while holding `self._tts_lock`.
-    Instead, it spawns an interruptible non-blocking subprocess stored in `self._active_tts_proc`
-    and releases `self._tts_lock` immediately so `interrupt_tts()` can terminate speech in <5ms.
+    Multilingual Voice Engine & Keyword Spotter:
+    - Recognizes speech in multiple Indian languages (Telugu, Hindi, Tamil, Kannada, Malayalam,
+      Bengali, Gujarati, Marathi, Punjabi, Urdu) and foreign languages (Spanish, French, German,
+      Japanese, Chinese, Russian, Arabic, Portuguese, Italian, English).
+    - Detects language automatically so the assistant retells and answers in that exact same language.
+    - Offline 8-band Goertzel + DTW keyword spotter for instant zero-dependency command triggers.
+    - Non-blocking barge-in TTS with interruptible child processes.
     """
 
     SAMPLE_RATE = 16000
     BAND_FREQS = (180.0, 320.0, 520.0, 820.0, 1250.0, 1900.0, 2800.0, 3900.0)
     DEFAULT_COMMANDS = (
+        "hey sudharshan",
         "hey bajrang",
         "open terminal",
         "open notepad",
@@ -1338,6 +1344,33 @@ class SpectralVoiceSpotter:
         "clear chat",
         "kill switch",
     )
+
+    INDIAN_LANGUAGES: Dict[str, str] = {
+        "hi": "Hindi",
+        "te": "Telugu",
+        "ta": "Tamil",
+        "kn": "Kannada",
+        "ml": "Malayalam",
+        "bn": "Bengali",
+        "mr": "Marathi",
+        "gu": "Gujarati",
+        "pa": "Punjabi",
+        "ur": "Urdu",
+        "en-IN": "Indian English",
+    }
+
+    FOREIGN_LANGUAGES: Dict[str, str] = {
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "ja": "Japanese",
+        "zh": "Chinese",
+        "ru": "Russian",
+        "ar": "Arabic",
+        "pt": "Portuguese",
+        "it": "Italian",
+        "en": "English",
+    }
 
     def __init__(
         self,
@@ -1357,10 +1390,96 @@ class SpectralVoiceSpotter:
         self.wake_word = (wake_word or "hey bajrang").strip().lower()
         self.tts_rate_wpm = max(90, min(320, int(tts_rate_wpm)))
         self.tts_language = tts_language
+        self.last_detected_language_code = "en"
+        self.last_detected_language_name = "English"
         self._barge_in_triggered = threading.Event()
         self._active_tts_proc: Optional[subprocess.Popen] = None
         self._tts_lock = threading.Lock()
         self.templates: Dict[str, List[List[float]]] = self._load_or_seed_templates()
+
+    def detect_language_from_text(self, text: str) -> Tuple[str, str]:
+        if not text:
+            return "en", "English"
+        for ch in text:
+            cp = ord(ch)
+            if 0x0C00 <= cp <= 0x0C7F:
+                self.last_detected_language_code = "te"
+                self.last_detected_language_name = "Telugu"
+                return "te", "Telugu"
+            if 0x0900 <= cp <= 0x097F:
+                self.last_detected_language_code = "hi"
+                self.last_detected_language_name = "Hindi"
+                return "hi", "Hindi"
+            if 0x0B80 <= cp <= 0x0BFF:
+                self.last_detected_language_code = "ta"
+                self.last_detected_language_name = "Tamil"
+                return "ta", "Tamil"
+            if 0x0C80 <= cp <= 0x0CFF:
+                self.last_detected_language_code = "kn"
+                self.last_detected_language_name = "Kannada"
+                return "kn", "Kannada"
+            if 0x0D00 <= cp <= 0x0D7F:
+                self.last_detected_language_code = "ml"
+                self.last_detected_language_name = "Malayalam"
+                return "ml", "Malayalam"
+            if 0x0980 <= cp <= 0x09FF:
+                self.last_detected_language_code = "bn"
+                self.last_detected_language_name = "Bengali"
+                return "bn", "Bengali"
+            if 0x0A80 <= cp <= 0x0AFF:
+                self.last_detected_language_code = "gu"
+                self.last_detected_language_name = "Gujarati"
+                return "gu", "Gujarati"
+            if 0x0A00 <= cp <= 0x0A7F:
+                self.last_detected_language_code = "pa"
+                self.last_detected_language_name = "Punjabi"
+                return "pa", "Punjabi"
+            if 0x0600 <= cp <= 0x06FF:
+                self.last_detected_language_code = "ur"
+                self.last_detected_language_name = "Urdu"
+                return "ur", "Urdu"
+            if 0x0400 <= cp <= 0x04FF:
+                self.last_detected_language_code = "ru"
+                self.last_detected_language_name = "Russian"
+                return "ru", "Russian"
+            if 0x3040 <= cp <= 0x30FF:
+                self.last_detected_language_code = "ja"
+                self.last_detected_language_name = "Japanese"
+                return "ja", "Japanese"
+            if 0x4E00 <= cp <= 0x9FFF:
+                self.last_detected_language_code = "zh"
+                self.last_detected_language_name = "Chinese"
+                return "zh", "Chinese"
+
+        words = {w.lower() for w in re.findall(r"\b[a-zA-Z]+\b", text)}
+        if words.intersection({"hola", "gracias", "por", "favor", "como", "estas", "amigo", "buenos", "dias"}):
+            self.last_detected_language_code = "es"
+            self.last_detected_language_name = "Spanish"
+            return "es", "Spanish"
+        if words.intersection({"bonjour", "merci", "comment", "allez", "vous", "oui", "salut", "s'il"}):
+            self.last_detected_language_code = "fr"
+            self.last_detected_language_name = "French"
+            return "fr", "French"
+        if words.intersection({"hallo", "guten", "tag", "danke", "bitte", "wie", "geht"}):
+            self.last_detected_language_code = "de"
+            self.last_detected_language_name = "German"
+            return "de", "German"
+        if words.intersection({"namaste", "kaise", "kya", "haal", "hai", "kripya", "dhanyavaad"}):
+            self.last_detected_language_code = "hi"
+            self.last_detected_language_name = "Hindi (Romanized)"
+            return "hi", "Hindi"
+        if words.intersection({"namaskaram", "ela", "unnaru", "em", "chestunnav", "dhanyavadalu", "avunu", "kaadu"}):
+            self.last_detected_language_code = "te"
+            self.last_detected_language_name = "Telugu (Romanized)"
+            return "te", "Telugu"
+        if words.intersection({"vanakkam", "eppadi", "irukkinga", "nandri"}):
+            self.last_detected_language_code = "ta"
+            self.last_detected_language_name = "Tamil (Romanized)"
+            return "ta", "Tamil"
+
+        self.last_detected_language_code = "en"
+        self.last_detected_language_name = "English"
+        return "en", "English"
 
     def _load_or_seed_templates(self) -> Dict[str, List[List[float]]]:
         if self.templates_path.is_file():
@@ -1534,11 +1653,20 @@ class SpectralVoiceSpotter:
         if importlib.util.find_spec("faster_whisper") is not None:
             try:
                 from faster_whisper import WhisperModel
-                model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
-                segments, _ = model.transcribe(str(wav_path), beam_size=1)
+                model = WhisperModel("tiny", device="cpu", compute_type="int8")
+                segments, info = model.transcribe(str(wav_path), beam_size=1)
                 text = " ".join(seg.text.strip() for seg in segments).strip()
                 if text:
-                    return True, text, f"faster-whisper tiny.en ({db} dB)"
+                    lang_attr = getattr(info, "language", None)
+                    if lang_attr and lang_attr in self.INDIAN_LANGUAGES:
+                        self.last_detected_language_code = lang_attr
+                        self.last_detected_language_name = self.INDIAN_LANGUAGES[lang_attr]
+                    elif lang_attr and lang_attr in self.FOREIGN_LANGUAGES:
+                        self.last_detected_language_code = lang_attr
+                        self.last_detected_language_name = self.FOREIGN_LANGUAGES[lang_attr]
+                    else:
+                        self.detect_language_from_text(text)
+                    return True, text, f"faster-whisper ({self.last_detected_language_name}, {db} dB)"
             except Exception:
                 pass
 
@@ -1552,23 +1680,30 @@ class SpectralVoiceSpotter:
                 best_cmd = cmd
         confidence = int(max(0.0, min(99.0, (1.0 - best_dist / 1.25) * 100.0)))
         if confidence >= 55 and best_cmd:
+            self.detect_language_from_text(best_cmd)
             return True, best_cmd, f"Bajrang DSP Spectral-DTW Keyword Spotter ({confidence}% match, {db} dB)"
         return False, "", f"No keyword matched (best={best_cmd}, confidence={confidence}%, {db} dB)."
 
-    def speak_tts(self, text: str) -> bool:
+    def speak_tts(self, text: str, lang: Optional[str] = None) -> bool:
         """
-        H8 Remediation: Spawns TTS as an asynchronous child process and releases `_tts_lock`
+        Multilingual non-blocking TTS:
+        Spawns TTS as an asynchronous child process and releases `_tts_lock`
         immediately so `interrupt_tts()` never blocks waiting for `runAndWait()`.
         """
         if not self.tts_enabled or not text:
             return False
         self.interrupt_tts()
         self._barge_in_triggered.clear()
+        target_lang = lang or self.last_detected_language_code or "en"
         with self._tts_lock:
             if platform.system() == "Linux" and shutil.which("spd-say"):
                 try:
+                    cmd = ["spd-say"]
+                    if target_lang and target_lang != "en":
+                        cmd.extend(["-l", target_lang])
+                    cmd.append(text[:300])
                     self._active_tts_proc = subprocess.Popen(
-                        ["spd-say", text[:300]],
+                        cmd,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
@@ -1640,6 +1775,10 @@ class ToolSchemaValidator:
         "navigate_hotkey": {"required": {"keys": list}, "optional": {}, "destructive": True},
         "inspect_directory": {"required": {"directory_path": str}, "optional": {}, "destructive": False},
         "organize_directory": {"required": {"directory_path": str}, "optional": {"remove_duplicates": bool}, "destructive": True},
+        "find_files": {"required": {"directory_path": str}, "optional": {"pattern": str, "min_size_bytes": int, "max_size_bytes": int}, "destructive": False},
+        "analyze_disk_usage": {"required": {"directory_path": str}, "optional": {}, "destructive": False},
+        "batch_rename": {"required": {"directory_path": str}, "optional": {"prefix": str, "suffix": str, "replace_pattern": str, "replacement": str}, "destructive": True},
+        "quarantine_file": {"required": {"file_path": str}, "optional": {}, "destructive": True},
         "memory_store": {"required": {"key": str, "content": str}, "optional": {"category": str, "importance": int}, "destructive": False},
     }
 
@@ -1702,8 +1841,13 @@ class ToolSchemaValidator:
         if extra:
             return False, f"Unexpected arguments: {sorted(extra)}", False
 
-        if tool in ("inspect_directory", "organize_directory"):
+        if tool in ("inspect_directory", "organize_directory", "find_files", "analyze_disk_usage", "batch_rename"):
             ok_p, reason = cls.validate_safe_user_path(str(args["directory_path"]))
+            if not ok_p:
+                return False, reason, False
+
+        if tool == "quarantine_file":
+            ok_p, reason = cls.validate_safe_user_path(str(args["file_path"]))
             if not ok_p:
                 return False, reason, False
 
@@ -1753,6 +1897,274 @@ class ToolSchemaValidator:
         if not (expanded == home or home in expanded.parents or expanded == tmp or tmp in expanded.parents):
             return False, f"Path '{expanded}' must be inside user home or temp directory."
         return True, str(expanded)
+
+
+class HardwareProfiler:
+    """
+    Evaluates host system hardware capabilities (RAM, CPU cores/threads, GPU/VRAM)
+    to classify the host tier and recommend the optimal local Ollama model for daily use,
+    with direct automated model downloading capabilities.
+    """
+
+    TIER_SPECS = {
+        "Ultra": {
+            "name": "Ultra / Workstation Tier",
+            "recommended_model": "llama3.3:70b",
+            "daily_driver_model": "qwen2.5:14b",
+            "context_length": 8192,
+            "min_ram_gb": 30.0,
+            "min_vram_gb": 15.0,
+            "description": "High-capacity workstation with 32GB+ RAM or dedicated 16GB+ VRAM GPU. Capable of running deep 70B & 32B models.",
+        },
+        "High": {
+            "name": "High Performance Tier",
+            "recommended_model": "llama3.1:8b",
+            "daily_driver_model": "llama3.1:8b",
+            "context_length": 8192,
+            "min_ram_gb": 15.0,
+            "min_vram_gb": 7.0,
+            "description": "16GB+ RAM system with dedicated or high-bandwidth GPU. Optimal for 8B and 14B parameter models with deep context.",
+        },
+        "Balanced": {
+            "name": "Balanced Laptop Tier",
+            "recommended_model": "llama3.2:3b",
+            "daily_driver_model": "llama3.2:3b",
+            "context_length": 4096,
+            "min_ram_gb": 7.5,
+            "min_vram_gb": 0.0,
+            "description": "8GB-16GB RAM ultrabook or standard PC. Optimized for instant, snappy 3B agent tool calling.",
+        },
+        "Eco": {
+            "name": "Eco / Lightweight Tier",
+            "recommended_model": "llama3.2:1b",
+            "daily_driver_model": "llama3.2:1b",
+            "context_length": 2048,
+            "min_ram_gb": 0.0,
+            "min_vram_gb": 0.0,
+            "description": "Compact footprint 1B model with near-zero memory footprint and instantaneous CPU responses.",
+        },
+    }
+
+    @classmethod
+    def get_system_specs(cls) -> Dict[str, Any]:
+        total_ram_gb = 8.0
+        try:
+            if platform.system() == "Linux" and os.path.exists("/proc/meminfo"):
+                with open("/proc/meminfo", "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("MemTotal:"):
+                            kb = int(line.split()[1])
+                            total_ram_gb = round(kb / (1024 * 1024), 2)
+                            break
+            elif platform.system() == "Windows":
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+                stat = MEMORYSTATUSEX()
+                stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                if hasattr(ctypes, "windll") and ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                    total_ram_gb = round(stat.ullTotalPhys / (1024**3), 2)
+        except Exception:
+            pass
+
+        cpu_threads = max(2, min(64, os.cpu_count() or 4))
+        gpu_name = "Integrated / CPU"
+        vram_gb = 0.0
+
+        if shutil.which("nvidia-smi"):
+            try:
+                proc = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=2.5, check=False
+                )
+                if proc.returncode == 0 and proc.stdout.strip():
+                    line = proc.stdout.strip().splitlines()[0]
+                    parts = line.split(",")
+                    gpu_name = parts[0].strip()
+                    if len(parts) > 1:
+                        vram_gb = round(float(parts[1].strip()) / 1024.0, 2)
+            except Exception:
+                pass
+
+        if total_ram_gb >= cls.TIER_SPECS["Ultra"]["min_ram_gb"] or vram_gb >= cls.TIER_SPECS["Ultra"]["min_vram_gb"]:
+            tier_key = "Ultra"
+        elif total_ram_gb >= cls.TIER_SPECS["High"]["min_ram_gb"] or vram_gb >= cls.TIER_SPECS["High"]["min_vram_gb"]:
+            tier_key = "High"
+        elif total_ram_gb >= cls.TIER_SPECS["Balanced"]["min_ram_gb"]:
+            tier_key = "Balanced"
+        else:
+            tier_key = "Eco"
+
+        spec = cls.TIER_SPECS[tier_key]
+        return {
+            "tier": tier_key,
+            "tier_name": spec["name"],
+            "ram_gb": total_ram_gb,
+            "cpu_threads": cpu_threads,
+            "gpu_name": gpu_name,
+            "vram_gb": vram_gb,
+            "recommended_model": spec["recommended_model"],
+            "daily_driver_model": spec["daily_driver_model"],
+            "recommended_context": spec["context_length"],
+            "recommended_threads": min(cpu_threads, 8),
+            "description": spec["description"],
+        }
+
+    @classmethod
+    def download_model(cls, model_name: str, host: str = "http://127.0.0.1:11434") -> Tuple[bool, str]:
+        endpoint = f"{host.rstrip('/')}/api/pull"
+        clean_name = (model_name or "llama3.2").strip()
+        try:
+            req = urllib.request.Request(
+                endpoint,
+                data=json.dumps({"name": clean_name, "stream": False}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=600) as resp:
+                if resp.status == 200:
+                    return True, f"Successfully downloaded model '{clean_name}' via Ollama API."
+        except Exception:
+            pass
+
+        if shutil.which("ollama"):
+            try:
+                proc = subprocess.run(["ollama", "pull", clean_name], capture_output=True, text=True, timeout=600, check=False)
+                if proc.returncode == 0:
+                    return True, f"Successfully downloaded model '{clean_name}' via Ollama CLI."
+                return False, f"Ollama pull returned exit code {proc.returncode}: {proc.stderr or proc.stdout}"
+            except Exception as exc:
+                return False, f"Failed to download model '{clean_name}': {exc}"
+
+        return False, f"Ollama daemon not reachable at {host} and 'ollama' binary not found in PATH."
+
+
+class OllamaWatchdogManager:
+    """
+    Manages 24/7 local model keep-alive in memory with intelligent automatic
+    offloading when high host resource utilization or gaming processes are detected.
+    When resource pressure drops or gaming exits, warms the model back into memory.
+    """
+    HEAVY_PROCESS_NAMES = {
+        "steam", "steamwebhelper", "epicgameslauncher", "riotclient", "riotclientservices",
+        "valorant", "cs2", "dota2", "overwatch", "fortnite", "genshinimpact",
+        "cyberpunk2077", "eldenring", "gta5", "rdr2", "minecraft", "javaw",
+        "blender", "premiere", "afterfx", "resolve", "unrealeditor", "unity",
+        "obs64", "handbrake", "ffmpeg",
+    }
+
+    def __init__(
+        self,
+        ollama_host: str = "http://127.0.0.1:11434",
+        active_model: str = "llama3.2",
+        check_interval_sec: float = 4.0,
+        state_callback: Optional[Callable[[bool, str], None]] = None,
+    ) -> None:
+        self.ollama_host = ollama_host.rstrip("/")
+        self.active_model = active_model
+        self.check_interval_sec = check_interval_sec
+        self.state_callback = state_callback
+        self.is_offloaded = False
+        self.offload_reason = ""
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+    def detect_heavy_activity(self) -> Tuple[bool, str]:
+        try:
+            if platform.system() == "Windows":
+                proc = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True, timeout=2.0, check=False)
+                if proc.returncode == 0:
+                    for line in proc.stdout.splitlines():
+                        line_low = line.lower()
+                        for target in self.HEAVY_PROCESS_NAMES:
+                            if target in line_low:
+                                return True, f"Gaming/Heavy process active: '{target}'"
+            elif platform.system() == "Linux":
+                proc = subprocess.run(["ps", "-A", "-o", "comm="], capture_output=True, text=True, timeout=2.0, check=False)
+                if proc.returncode == 0:
+                    running_procs = {p.strip().lower() for p in proc.stdout.splitlines() if p.strip()}
+                    matched = running_procs.intersection(self.HEAVY_PROCESS_NAMES)
+                    if matched:
+                        p_name = sorted(matched)[0]
+                        return True, f"Gaming/Heavy process active: '{p_name}'"
+        except Exception:
+            pass
+
+        try:
+            if hasattr(os, "getloadavg"):
+                load_1m = os.getloadavg()[0]
+                cpus = os.cpu_count() or 4
+                if load_1m > cpus * 1.5:
+                    return True, f"High system load ({load_1m:.1f} on {cpus} CPUs)"
+        except Exception:
+            pass
+
+        return False, ""
+
+    def offload_model(self, reason: str = "") -> bool:
+        self.is_offloaded = True
+        self.offload_reason = reason or "High usage detected"
+        if self.state_callback:
+            self.state_callback(True, self.offload_reason)
+        try:
+            req = urllib.request.Request(
+                f"{self.ollama_host}/api/generate",
+                data=json.dumps({"model": self.active_model, "keep_alive": 0}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def reload_model(self) -> bool:
+        self.is_offloaded = False
+        self.offload_reason = ""
+        if self.state_callback:
+            self.state_callback(False, "24/7 Keep-Alive Active")
+        try:
+            req = urllib.request.Request(
+                f"{self.ollama_host}/api/generate",
+                data=json.dumps({"model": self.active_model, "prompt": "", "keep_alive": -1}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def _monitor_loop(self) -> None:
+        while not self._stop_event.is_set():
+            heavy, reason = self.detect_heavy_activity()
+            if heavy and not self.is_offloaded:
+                self.offload_model(reason)
+            elif not heavy and self.is_offloaded:
+                self.reload_model()
+            self._stop_event.wait(self.check_interval_sec)
 
 
 @dataclass
@@ -2551,6 +2963,163 @@ class AutonomousTaskPlanner:
                 restored += 1
         return True, f"Restored {restored} file(s) for plan '{plan_id}'."
 
+    def find_files(
+        self,
+        directory_path: str,
+        pattern: str = "*",
+        min_size_bytes: int = 0,
+        max_size_bytes: Optional[int] = None,
+    ) -> Tuple[bool, str, List[Dict[str, Any]]]:
+        ok_p, resolved = ToolSchemaValidator.validate_safe_user_path(directory_path)
+        if not ok_p:
+            self.memory_store.log_security_event("PATH_BLOCKED", "find_files", False, resolved)
+            return False, resolved, []
+        target = Path(resolved)
+        if not target.is_dir():
+            return False, f"Directory '{target}' does not exist.", []
+
+        matches: List[Dict[str, Any]] = []
+        try:
+            clean_pat = pattern.strip() or "*"
+            for p in sorted(target.rglob(clean_pat)):
+                if not p.is_file() or p.name.startswith("."):
+                    continue
+                sz = p.stat().st_size
+                if sz < min_size_bytes:
+                    continue
+                if max_size_bytes is not None and sz > max_size_bytes:
+                    continue
+                matches.append({
+                    "name": p.name,
+                    "path": str(p),
+                    "size_bytes": sz,
+                    "category": self.classify_extension(p.suffix),
+                    "modified": datetime.datetime.fromtimestamp(p.stat().st_mtime).isoformat(),
+                })
+                if len(matches) >= 200:
+                    break
+            return True, f"Found {len(matches)} matching file(s) in {target}.", matches
+        except Exception as exc:
+            return False, f"Error searching files in {target}: {exc}", []
+
+    def analyze_disk_usage(self, directory_path: str) -> Tuple[bool, str, Dict[str, Any]]:
+        ok_p, resolved = ToolSchemaValidator.validate_safe_user_path(directory_path)
+        if not ok_p:
+            self.memory_store.log_security_event("PATH_BLOCKED", "analyze_disk_usage", False, resolved)
+            return False, resolved, {}
+        target = Path(resolved)
+        if not target.is_dir():
+            return False, f"Directory '{target}' does not exist.", {}
+
+        total_bytes = 0
+        total_files = 0
+        cat_sizes: Dict[str, int] = {}
+        cat_counts: Dict[str, int] = {}
+        all_files: List[Tuple[int, Path]] = []
+
+        try:
+            for p in target.rglob("*"):
+                if p.is_file() and not p.name.startswith("."):
+                    sz = p.stat().st_size
+                    total_bytes += sz
+                    total_files += 1
+                    cat = self.classify_extension(p.suffix)
+                    cat_sizes[cat] = cat_sizes.get(cat, 0) + sz
+                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
+                    all_files.append((sz, p))
+
+            all_files.sort(key=lambda x: x[0], reverse=True)
+            top_large = [
+                {"name": f.name, "path": str(f), "size_bytes": sz, "category": self.classify_extension(f.suffix)}
+                for sz, f in all_files[:10]
+            ]
+            analysis = {
+                "directory": str(target),
+                "total_files": total_files,
+                "total_bytes": total_bytes,
+                "total_megabytes": round(total_bytes / (1024 * 1024), 2),
+                "category_bytes": cat_sizes,
+                "category_counts": cat_counts,
+                "top_largest_files": top_large,
+            }
+            return True, f"Scanned {total_files} file(s) ({round(total_bytes / (1024 * 1024), 2)} MB) in {target}.", analysis
+        except Exception as exc:
+            return False, f"Disk usage analysis failed: {exc}", {}
+
+    def create_batch_rename_plan(
+        self,
+        directory_path: str,
+        prefix: str = "",
+        suffix: str = "",
+        replace_pattern: str = "",
+        replacement: str = "",
+    ) -> Tuple[bool, TaskExecutionPlan]:
+        plan_id = f"plan_rename_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+        ok_p, resolved = ToolSchemaValidator.validate_safe_user_path(directory_path)
+        if not ok_p:
+            return False, TaskExecutionPlan(plan_id=plan_id, objective=f"Batch rename {directory_path}", requires_permission=False, status="failed", summary=resolved)
+        target = Path(resolved)
+        if not target.is_dir():
+            return False, TaskExecutionPlan(plan_id=plan_id, objective=f"Batch rename {directory_path}", requires_permission=False, status="failed", summary=f"Directory '{target}' not found.")
+
+        files = [p for p in sorted(target.iterdir()) if p.is_file() and not p.name.startswith(".")]
+        proposed_renames: List[Dict[str, str]] = []
+        for f in files:
+            name_stem = f.stem
+            ext = f.suffix
+            new_stem = name_stem
+            if replace_pattern:
+                new_stem = new_stem.replace(replace_pattern, replacement)
+            if prefix:
+                new_stem = f"{prefix}{new_stem}"
+            if suffix:
+                new_stem = f"{new_stem}{suffix}"
+            new_name = f"{new_stem}{ext}"
+            if new_name != f.name:
+                proposed_renames.append({
+                    "source": str(f),
+                    "old_name": f.name,
+                    "new_name": new_name,
+                    "destination": str(target / new_name),
+                })
+
+        steps = [
+            TaskStep(1, f"Inspect '{target}' for rename", "inspect_directory", {"directory_path": str(target)}, False, "completed", f"Found {len(proposed_renames)} file(s) to rename"),
+            TaskStep(2, f"Execute collision-safe rename for {len(proposed_renames)} file(s)", "batch_rename", {"directory_path": str(target)}, True, "awaiting_permission"),
+        ]
+        plan = TaskExecutionPlan(
+            plan_id=plan_id,
+            objective=f"Batch rename in {target}",
+            requires_permission=True,
+            status="awaiting_permission",
+            steps=steps,
+            inspection_report={"directory": str(target), "proposed_moves": proposed_renames, "duplicates_found": []},
+            summary=f"Plan to rename {len(proposed_renames)} file(s) in {target}.",
+            quarantine_dir=str(target / ".bajrang_trash" / plan_id),
+        )
+        self.active_plans[plan_id] = plan
+        self.cancel_events[plan_id] = threading.Event()
+        self.memory_store.save_task_run(plan_id, plan.objective, plan.status, asdict(plan), plan.summary)
+        return True, plan
+
+    def quarantine_file(self, file_path: str) -> Tuple[bool, str, Dict[str, Any]]:
+        ok_p, resolved = ToolSchemaValidator.validate_safe_user_path(file_path)
+        if not ok_p:
+            self.memory_store.log_security_event("PATH_BLOCKED", "quarantine_file", False, resolved)
+            return False, resolved, {}
+        target = Path(resolved)
+        if not target.is_file():
+            return False, f"File '{target}' does not exist.", {}
+
+        plan_id = f"quarantine_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+        trash_dir = target.parent / ".bajrang_trash" / plan_id
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        dest = self._allocate_non_colliding_path(trash_dir / target.name)
+        shutil.move(str(target), str(dest))
+        self._undo_manifests[plan_id] = [(str(dest), str(target))]
+        meta = {"plan_id": plan_id, "quarantined_path": str(dest), "original_path": str(target)}
+        return True, f"Quarantined '{target.name}' to '{dest}' (Undo ID: {plan_id}).", meta
+
 
 class BasePlatformAdapter:
     """Abstract interface implemented by `WindowsPlatformAdapter` and `FedoraWaylandAdapter`."""
@@ -2636,6 +3205,25 @@ class BajrangEngine:
         self.client.load_session_messages(self.storage.get_session_messages(self.current_session_id))
         self.computer_use = CrossPlatformComputerUse()
         self.task_planner = AutonomousTaskPlanner(self.storage, self.computer_use)
+        self.hardware_profile = HardwareProfiler.get_system_specs()
+        self.watchdog = OllamaWatchdogManager(
+            ollama_host=str(self.config.settings.get("ollama_host", "http://127.0.0.1:11434")),
+            active_model=self.client.active_model,
+            state_callback=self._on_watchdog_state,
+        )
+
+    def _on_watchdog_state(self, is_offloaded: bool, reason: str) -> None:
+        if is_offloaded:
+            self.set_state(AgentState.OFFLOADED, f"Auto-Offloaded ({reason})")
+        else:
+            if self.state == AgentState.OFFLOADED:
+                self.set_state(AgentState.IDLE, "24/7 Keep-Alive Active")
+
+    def start_watchdog(self) -> None:
+        self.watchdog.start()
+
+    def stop_watchdog(self) -> None:
+        self.watchdog.stop()
 
     def set_state(self, new_state: AgentState, status_text: str = "") -> None:
         self.state = new_state
@@ -2745,6 +3333,32 @@ class BajrangEngine:
                 return ActionResult(tool="organize_directory", success=False, output=plan.summary)
             ok_exec, done_plan = self.task_planner.execute_approved_plan(plan.plan_id, user_confirmed=True)
             return ActionResult(tool="organize_directory", success=ok_exec, output=done_plan.summary, metadata={"plan_id": plan.plan_id})
+        if tool == "find_files":
+            ok, msg, files = self.task_planner.find_files(
+                str(params["directory_path"]),
+                pattern=str(params.get("pattern", "*")),
+                min_size_bytes=int(params.get("min_size_bytes", 0)),
+                max_size_bytes=int(params["max_size_bytes"]) if params.get("max_size_bytes") is not None else None,
+            )
+            return ActionResult(tool="find_files", success=ok, output=msg, metadata={"files": files})
+        if tool == "analyze_disk_usage":
+            ok, msg, analysis = self.task_planner.analyze_disk_usage(str(params["directory_path"]))
+            return ActionResult(tool="analyze_disk_usage", success=ok, output=msg, metadata=analysis)
+        if tool == "batch_rename":
+            ok_p, plan = self.task_planner.create_batch_rename_plan(
+                str(params["directory_path"]),
+                prefix=str(params.get("prefix", "")),
+                suffix=str(params.get("suffix", "")),
+                replace_pattern=str(params.get("replace_pattern", "")),
+                replacement=str(params.get("replacement", "")),
+            )
+            if not ok_p:
+                return ActionResult(tool="batch_rename", success=False, output=plan.summary)
+            ok_exec, done_plan = self.task_planner.execute_approved_plan(plan.plan_id, user_confirmed=True)
+            return ActionResult(tool="batch_rename", success=ok_exec, output=done_plan.summary, metadata={"plan_id": plan.plan_id})
+        if tool == "quarantine_file":
+            ok, msg, meta = self.task_planner.quarantine_file(str(params["file_path"]))
+            return ActionResult(tool="quarantine_file", success=ok, output=msg, metadata=meta)
         if tool == "memory_store":
             ok, msg, item = self.storage.store_memory(
                 key=str(params["key"]),
@@ -2866,7 +3480,18 @@ class BajrangEngine:
             if not ok_stt or not transcript:
                 self.set_state(AgentState.IDLE, "Idle")
                 return False, "", None, stt_info
-            turn = self.process_prompt(transcript, speak_reply=True)
+
+            prompt_to_process = transcript
+            lang_code = getattr(self.voice, "last_detected_language_code", "en")
+            lang_name = getattr(self.voice, "last_detected_language_name", "English")
+            if lang_code and lang_code != "en":
+                prompt_to_process = (
+                    f"{transcript}\n\n"
+                    f"[VOICE MULTILINGUAL REQUIREMENT: User spoke in {lang_name} ({lang_code}). "
+                    f"You MUST understand and retell/answer in the EXACT SAME language ({lang_name}). "
+                    f"Do not respond in English unless the user explicitly requested English.]"
+                )
+            turn = self.process_prompt(prompt_to_process, speak_reply=True)
             return True, transcript, turn, stt_info
         finally:
             try:
@@ -2876,7 +3501,7 @@ class BajrangEngine:
 
 
 def run_core_self_tests() -> int:
-    print("Running hardened bajrang_core self-tests (C1-C6, H2-H8)...")
+    print("Running hardened bajrang_core self-tests (C1-C6, H2-H8, HW & Multilingual)...")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         cfg = ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
@@ -2916,6 +3541,30 @@ def run_core_self_tests() -> int:
         assert (dl / "Documents" / "report_1.pdf").read_bytes() == b"NEW_DOWNLOADED_REPORT", "C5: Colliding file must be renamed!"
         ok_undo, _ = planner.undo_plan(plan.plan_id)
         assert ok_undo is True and (dl / "dup1.txt").is_file() and (dl / "dup2.txt").is_file()
+
+        # Verify Non-destructive File Power: find_files, analyze_disk_usage, quarantine_file
+        (dl / "test_search.txt").write_text("Hello Search")
+        ok_ff, _, found_list = planner.find_files(str(dl), pattern="*.txt")
+        assert ok_ff is True and len(found_list) >= 1
+        ok_du, _, du_rep = planner.analyze_disk_usage(str(dl))
+        assert ok_du is True and du_rep["total_files"] >= 1
+        ok_q, _, q_meta = planner.quarantine_file(str(dl / "test_search.txt"))
+        assert ok_q is True and not (dl / "test_search.txt").exists()
+        assert Path(q_meta["quarantined_path"]).exists()
+        ok_qundo, _ = planner.undo_plan(q_meta["plan_id"])
+        assert ok_qundo is True and (dl / "test_search.txt").exists()
+
+        # Verify Hardware Profiler
+        specs = HardwareProfiler.get_system_specs()
+        assert "ram_gb" in specs and "tier" in specs and "recommended_model" in specs
+        assert specs["ram_gb"] > 0
+
+        # Verify Multilingual Voice Detection
+        spotter = SpectralVoiceSpotter(data_dir=root / "voice")
+        te_code, te_name = spotter.detect_language_from_text("నమస్కారం ఎలా ఉన్నారు?")
+        assert te_code == "te" and te_name == "Telugu"
+        hi_code, hi_name = spotter.detect_language_from_text("नमस्ते, आप कैसे हैं?")
+        assert hi_code == "hi" and hi_name == "Hindi"
 
     print("All hardened bajrang_core self-tests passed!")
     return 0

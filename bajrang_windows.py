@@ -369,6 +369,7 @@ class WindowsTkinterHUD:
                     AgentState.EXECUTING: ("#1e3a8a", "#93c5fd"),
                     AgentState.AWAITING_CONFIRMATION: ("#7c2d12", "#fdba74"),
                     AgentState.BLOCKED: ("#7f1d1d", "#fca5a5"),
+                    AgentState.OFFLOADED: ("#334155", "#94a3b8"),
                 }
                 bg_c, fg_c = badge_colors.get(st, ("#1e293b", "#e2e8f0"))
                 self.status_lbl.configure(text=f"  {st.value.upper()} • {txt}  ", bg=bg_c, fg=fg_c)

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Privacy Policy · Bajrang AI Pro</title>
-<meta name="description" content="Privacy policy for Bajrang AI Pro desktop assistant: local data storage, zero telemetry, and OS vault credential security.">
+<title>Privacy Policy · Sudharshan AI (Alpha v0.9)</title>
+<meta name="description" content="Privacy policy for Sudharshan AI desktop assistant: local SQLite storage, zero telemetry, OS vault credential encryption, and fail-closed privacy architecture.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,42 +12,47 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
 :root {
-  --p-bg: #000000; --p-surface: #0d0d0d; --p-ink: #ffffff; --p-muted: #999999;
-  --p-accent: #93f1f7; --p-accent-ink: #000000; --p-action: #93f1f7; --p-action-ink: #000000;
+  --p-bg: #050505; --p-surface: #0f0c0a; --p-ink: #fafafa; --p-muted: #a69b93;
+  --p-accent: #ff6b1a; --p-accent-ink: #050505; --p-action: #ff6b1a; --p-action-ink: #050505;
   --font-display: "Instrument Sans", system-ui, sans-serif;
   --font-text: "Instrument Sans", system-ui, sans-serif;
   --font-mono: "DM Mono", monospace;
 }
 body { background: var(--p-bg); color: var(--p-ink); font-family: var(--font-text); line-height: 1.6; }
 .legal-wrap { max-width: 760px; margin: 0 auto; padding: 80px 24px; }
-h1 { font-family: var(--font-display); font-size: 2.5rem; margin-bottom: 1.5rem; }
-h2 { font-family: var(--font-display); font-size: 1.5rem; margin-top: 2rem; margin-bottom: 0.75rem; color: var(--p-accent); }
+h1 { font-family: var(--font-display); font-size: 2.5rem; margin-bottom: 1.5rem; letter-spacing: -0.02em; }
+h2 { font-family: var(--font-display); font-size: 1.35rem; margin-top: 2rem; margin-bottom: 0.75rem; color: var(--p-accent); }
 p, li { color: var(--p-muted); font-size: 1.05rem; margin-bottom: 1rem; }
 a { color: var(--p-accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-.back-link { display: inline-block; margin-bottom: 2rem; font-weight: 500; }
+.back-link { display: inline-block; margin-bottom: 2rem; font-weight: 500; font-family: var(--font-mono); font-size: 0.9rem; }
+.badge-dev { display: inline-block; padding: 4px 12px; border-radius: 9999px; background: rgba(255, 107, 26, 0.12); border: 1px solid rgba(255, 107, 26, 0.35); color: #ffb085; font-size: 0.85rem; margin-bottom: 1.5rem; }
 </style>
 </head>
 <body>
 <div class="legal-wrap">
-  <a class="back-link" href="index.html">&larr; Back to Bajrang AI</a>
+  <a class="back-link" href="index.html">&larr; Back to Sudharshan AI</a>
+  <div class="badge-dev">Engineered by Kaushik Ram Ravuru (B.E. IT, Section IT-1, CBIT Hyderabad)</div>
   <h1>Privacy Policy</h1>
-  <p>Last updated: November 2026</p>
+  <p>Last updated: November 2026 · Sudharshan AI (Alpha v0.9)</p>
   
   <h2>1. Local-First Architecture</h2>
-  <p>Bajrang AI Pro is engineered from first principles to prioritize device isolation. Chat sessions, user preferences, and memories are persisted exclusively in a local SQLite3 database on your host operating system using Write-Ahead Logging (WAL) mode.</p>
+  <p>Sudharshan AI (Alpha v0.9) is engineered from first principles to prioritize device isolation. Chat sessions, user preferences, long-term memory, and task execution logs are persisted exclusively in a local SQLite3 database on your host operating system using Write-Ahead Logging (WAL) mode.</p>
   
-  <h2>2. Zero Remote Telemetry</h2>
-  <p>The desktop software transmits no tracking metrics, usage analytics, or session recordings to central servers. When you run local models via Ollama (Llama 3.2), all inference execution remains entirely on your machine.</p>
+  <h2>2. Zero Remote Telemetry &amp; Offline Default</h2>
+  <p>The desktop software transmits no tracking metrics, usage analytics, behavioral telemetry, or session recordings to central servers. When you run local models via Ollama (Llama 3.2, Llama 3.1, Mistral, Gemma 2, etc.), all inference execution remains completely local on your CPU/GPU hardware.</p>
 
-  <h2>3. Credential Storage</h2>
-  <p>Optional third-party cloud API keys are stored in native operating system credential vaults (Windows Credential Manager on Windows 11; Secret Service API / GNOME Keyring on Fedora Linux). Plaintext secrets are never committed to disk logs.</p>
+  <h2>3. Hardware Credential Vaulting</h2>
+  <p>Optional third-party cloud API keys (Google Gemini, OpenAI, Groq, OpenRouter) are sealed inside native operating system credential vaults (Windows Credential Manager on Windows 11; Secret Service API / GNOME Keyring on Fedora Linux). Plaintext secrets are never stored in log files or leaked in URL query parameters.</p>
 
-  <h2>4. Screen & Audio Capture</h2>
-  <p>Screen grabs and microphone audio streams are processed in-memory for requested assistant tasks and discarded immediately. No continuous background recording is ever performed.</p>
+  <h2>4. Screen &amp; Audio Processing</h2>
+  <p>Screen grabs and microphone audio streams are processed in-memory for explicitly requested user turns and discarded immediately upon completion. The multilingual voice engine (supporting Telugu, Hindi, Tamil, Kannada, Spanish, French, etc.) uses local DSP Goertzel keyword spotting and in-memory speech synthesis without continuous background surveillance.</p>
 
-  <h2>5. Contact</h2>
-  <p>For inquiries regarding privacy practices, contact Kaushik Ram Ravuru at <a href="mailto:kaushik@example.com">kaushik@example.com</a>.</p>
+  <h2>5. Non-Destructive File Operations</h2>
+  <p>All automated file operations (organization, deduplication, renaming, quarantine) follow strict collision-avoidance naming (e.g., <code>filename_1.ext</code>) and stage affected files into <code>.bajrang_trash/</code> directories with full multi-point undo capability before any action is executed.</p>
+
+  <h2>6. Developer Contact &amp; Institution</h2>
+  <p>For inquiries regarding privacy practices or technical audits, contact Kaushik Ram Ravuru at <a href="mailto:kaushikramravuru@gmail.com">kaushikramravuru@gmail.com</a>. Engineered at Chaitanya Bharathi Institute of Technology (CBIT), Hyderabad.</p>
 </div>
 </body>
 </html>

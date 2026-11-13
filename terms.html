@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Terms of Service · Bajrang AI Pro</title>
-<meta name="description" content="Terms of service for Bajrang AI Pro desktop software and commercial licensing.">
+<title>Terms of Service · Sudharshan AI (Alpha v0.9)</title>
+<meta name="description" content="Terms of service for Sudharshan AI desktop software, licensing agreements, and responsible desktop automation use.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,39 +12,44 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
 :root {
-  --p-bg: #000000; --p-surface: #0d0d0d; --p-ink: #ffffff; --p-muted: #999999;
-  --p-accent: #93f1f7; --p-accent-ink: #000000; --p-action: #93f1f7; --p-action-ink: #000000;
+  --p-bg: #050505; --p-surface: #0f0c0a; --p-ink: #fafafa; --p-muted: #a69b93;
+  --p-accent: #ff6b1a; --p-accent-ink: #050505; --p-action: #ff6b1a; --p-action-ink: #050505;
   --font-display: "Instrument Sans", system-ui, sans-serif;
   --font-text: "Instrument Sans", system-ui, sans-serif;
   --font-mono: "DM Mono", monospace;
 }
 body { background: var(--p-bg); color: var(--p-ink); font-family: var(--font-text); line-height: 1.6; }
 .legal-wrap { max-width: 760px; margin: 0 auto; padding: 80px 24px; }
-h1 { font-family: var(--font-display); font-size: 2.5rem; margin-bottom: 1.5rem; }
-h2 { font-family: var(--font-display); font-size: 1.5rem; margin-top: 2rem; margin-bottom: 0.75rem; color: var(--p-accent); }
+h1 { font-family: var(--font-display); font-size: 2.5rem; margin-bottom: 1.5rem; letter-spacing: -0.02em; }
+h2 { font-family: var(--font-display); font-size: 1.35rem; margin-top: 2rem; margin-bottom: 0.75rem; color: var(--p-accent); }
 p, li { color: var(--p-muted); font-size: 1.05rem; margin-bottom: 1rem; }
 a { color: var(--p-accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-.back-link { display: inline-block; margin-bottom: 2rem; font-weight: 500; }
+.back-link { display: inline-block; margin-bottom: 2rem; font-weight: 500; font-family: var(--font-mono); font-size: 0.9rem; }
+.badge-dev { display: inline-block; padding: 4px 12px; border-radius: 9999px; background: rgba(255, 107, 26, 0.12); border: 1px solid rgba(255, 107, 26, 0.35); color: #ffb085; font-size: 0.85rem; margin-bottom: 1.5rem; }
 </style>
 </head>
 <body>
 <div class="legal-wrap">
-  <a class="back-link" href="index.html">&larr; Back to Bajrang AI</a>
+  <a class="back-link" href="index.html">&larr; Back to Sudharshan AI</a>
+  <div class="badge-dev">Engineered by Kaushik Ram Ravuru (B.E. IT, Section IT-1, CBIT Hyderabad)</div>
   <h1>Terms of Service</h1>
-  <p>Last updated: November 2026</p>
+  <p>Last updated: November 2026 · Sudharshan AI (Alpha v0.9)</p>
   
-  <h2>1. Software License</h2>
-  <p>Bajrang AI Pro Community Edition is released for personal and development evaluation. Commercial deployments require a valid ₹99/month Pro license key with RSA public-key certificate verification.</p>
+  <h2>1. Software Editions &amp; Licensing</h2>
+  <p>Sudharshan AI is offered in two tiers: <strong>Community Core</strong> (Free, open-source for personal exploration, students, and evaluation) and <strong>Pro License</strong> (₹99/month, enabling 2048-bit RSA server-verified license keys, Razorpay automated billing, Windows smart pre-flight installer, and GNOME Shell quick-toggle integration).</p>
   
-  <h2>2. Safe Execution Responsibility</h2>
-  <p>Bajrang AI Pro provides a fail-closed safety guard and emergency kill switch (Ctrl+Escape). Users are responsible for configuring appropriate task planner directories and review confirmations before permitting automated filesystem modifications.</p>
+  <h2>2. Safe Execution &amp; Confirmation Gates</h2>
+  <p>Sudharshan AI enforces fail-closed SafetyGuard checks, zero-argument command allowlists, and a global emergency kill-switch (<code>Ctrl+Shift+K</code> on Windows; <code>/tmp/bajrang_kill_&lt;uid&gt;.sock</code> on Fedora). Mutating actions, hotkeys, and automated file moves require explicit human approval via the desktop HUD or CLI confirmation gate.</p>
 
-  <h2>3. Third-Party Model Endpoints</h2>
-  <p>Users who provide external cloud API keys (such as Google Gemini, OpenAI, or Groq) are subject to the terms and data policies of those respective providers.</p>
+  <h2>3. External Cloud Providers</h2>
+  <p>Users who provide BYO cloud API keys (Google Gemini, OpenAI, Groq) are subject to the respective terms and acceptable usage guidelines of those model hosting providers. Sudharshan AI guarantees key isolation and strictly routes provider credentials without telemetry.</p>
 
   <h2>4. Limitation of Liability</h2>
-  <p>The software is provided "as is", without warranty of any kind, express or implied, including but not limited to fitness for a particular purpose or non-infringement.</p>
+  <p>The software is provided "as is", without warranty of any kind, express or implied. Under no circumstances shall the developer or Chaitanya Bharathi Institute of Technology (CBIT) be liable for any direct, indirect, incidental, or consequential damages resulting from system automation or file operations.</p>
+
+  <h2>5. Inquiries &amp; Governance</h2>
+  <p>Direct inquiries to Kaushik Ram Ravuru (<a href="mailto:kaushikramravuru@gmail.com">kaushikramravuru@gmail.com</a>), Department of Information Technology, CBIT Hyderabad.</p>
 </div>
 </body>
 </html>
