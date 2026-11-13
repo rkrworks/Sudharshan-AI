@@ -153,7 +153,7 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
                 import pyautogui
                 pyautogui.moveTo(cx, cy, duration=0.05)
                 return ActionResult(tool="mouse_move", success=True, output=f"Moved cursor to ({cx}, {cy}) via PyAutoGUI.")
-            except Exception:
+            except (Exception, SystemExit, BaseException):
                 pass
         return ActionResult(tool="mouse_move", success=False, output="Mouse move requires Windows Win32 session or PyAutoGUI.")
 
@@ -206,7 +206,7 @@ class WindowsPlatformAdapter(BasePlatformAdapter):
                 import pyautogui
                 pyautogui.write(text, interval=0.01)
                 return ActionResult(tool="type_text", success=True, output=f"Typed {len(text)} chars via PyAutoGUI.")
-            except Exception:
+            except (Exception, SystemExit, BaseException):
                 pass
         return ActionResult(tool="type_text", success=False, output="Keyboard typing requires Windows Win32 session.")
 
@@ -307,28 +307,69 @@ def start_global_windows_kill_listener(on_kill: Callable[[], None]) -> threading
 
 THEMES: Dict[str, Dict[str, str]] = {
     "dark": {
-        "bg": "#050505",
-        "panel": "#0f0c0a",
-        "subpanel": "#1a1410",
-        "border": "#332218",
+        "bg": "#09090b",
+        "panel": "#111116",
+        "subpanel": "#181822",
+        "border": "#272733",
         "fg": "#fafafa",
-        "muted": "#a69b93",
+        "muted": "#94a3b8",
         "accent": "#ff6b1a",
-        "user_fg": "#ff9457",
-        "bot_fg": "#e2e8f0",
+        "accent_hover": "#ff8533",
+        "user_fg": "#ff8533",
+        "bot_fg": "#f1f5f9",
+        "green": "#10b981",
+        "red": "#ef4444",
+        "amber": "#f59e0b",
+        "code_bg": "#0b0c10",
+        "code_fg": "#38bdf8",
     },
     "light": {
-        "bg": "#f1f5f9",
+        "bg": "#f8fafc",
         "panel": "#ffffff",
-        "subpanel": "#e2e8f0",
-        "border": "#cbd5e1",
+        "subpanel": "#f1f5f9",
+        "border": "#e2e8f0",
         "fg": "#0f172a",
-        "muted": "#475569",
-        "accent": "#4f46e5",
-        "user_fg": "#1d4ed8",
+        "muted": "#64748b",
+        "accent": "#ea580c",
+        "accent_hover": "#f97316",
+        "user_fg": "#ea580c",
         "bot_fg": "#0f172a",
+        "green": "#059669",
+        "red": "#dc2626",
+        "amber": "#d97706",
+        "code_bg": "#f1f5f9",
+        "code_fg": "#0284c7",
     },
 }
+
+
+def enable_windows_dark_titlebar(root: Any) -> None:
+    """Enables Windows 11 / 10 DWM immersive dark mode titlebar to prevent harsh white frames."""
+    if platform.system() != "Windows":
+        return
+    try:
+        root.update_idletasks()
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetParent(root.winfo_id())
+        if not hwnd:
+            hwnd = root.winfo_id()
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        val = ctypes.c_int(1)
+        res = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(val), ctypes.sizeof(val)
+        )
+        if res != 0:
+            DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, ctypes.byref(val), ctypes.sizeof(val)
+            )
+        DWMWA_CAPTION_COLOR = 35
+        color_val = ctypes.c_int(0x000B0909)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(color_val), ctypes.sizeof(color_val)
+        )
+    except Exception:
+        pass
 
 
 class WindowsTkinterHUD:
@@ -341,11 +382,15 @@ class WindowsTkinterHUD:
       - Compact Mode toggle (collapses sidebar & chat history for a micro HUD)
       - Clipboard Assistant (one-click clipboard inspection & assistance)
       - Session Management (Search, Pin, Rename, Export Markdown)
+      - Interactive Welcome Hero & Rich Message Bubbles
+      - Live Neural Engine Status & 1-Click Ollama Daemon Launcher
     """
 
     def __init__(self, engine: BajrangEngine) -> None:
         import tkinter as tk
+        import urllib.request
         self.tk = tk
+        self.urllib_req = urllib.request
         self.engine = engine
         self.ui_queue: "queue.Queue[Tuple[str, Any]]" = queue.Queue()
         self.engine.state_callback = lambda st, txt: self.ui_queue.put(("state", (st, txt)))
@@ -357,14 +402,37 @@ class WindowsTkinterHUD:
 
         self.root = tk.Tk()
         self.root.title("Sudharshan AI (Alpha v0.9) — Windows 11 Desktop Assistant")
-        self.root.geometry("960x620")
-        self.root.minsize(440, 150)
+        self.root.geometry("980x640")
+        self.root.minsize(460, 160)
         self._build_ui()
         self.apply_theme(self.current_theme)
+        enable_windows_dark_titlebar(self.root)
         self.refresh_sessions()
         self.load_messages(self.engine.storage.get_session_messages(self.engine.current_session_id))
+        self._check_engine_status()
         self._kill_stop_ev = start_global_windows_kill_listener(lambda: self.ui_queue.put(("kill", None)))
         self.root.after(50, self._poll_ui_queue)
+
+    def _check_engine_status(self) -> None:
+        def worker() -> None:
+            online = False
+            host = str(self.engine.config.settings.get("ollama_host", "http://127.0.0.1:11434")).rstrip("/")
+            try:
+                req = self.urllib_req.Request(f"{host}/api/version", method="GET")
+                with self.urllib_req.urlopen(req, timeout=1.2) as resp:
+                    online = (resp.status == 200)
+            except Exception:
+                online = False
+            self.ui_queue.put(("engine_status", online))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def on_engine_click(self) -> None:
+        self.engine_btn.configure(text="🟡 Starting Engine...", bg="#78350f", fg="#fcd34d")
+        def worker() -> None:
+            host = str(self.engine.config.settings.get("ollama_host", "http://127.0.0.1:11434")).rstrip("/")
+            self.engine.client._try_autostart_ollama(host)
+            self._check_engine_status()
+        threading.Thread(target=worker, daemon=True).start()
 
     def _poll_ui_queue(self) -> None:
         while True:
@@ -388,6 +456,18 @@ class WindowsTkinterHUD:
                     self.confirm_btn.configure(state=self.tk.NORMAL, bg="#10b981", fg="#052e16")
                 else:
                     self.confirm_btn.configure(state=self.tk.DISABLED, bg="#334155", fg="#94a3b8")
+            elif kind == "engine_status":
+                online = bool(payload)
+                if online:
+                    self.engine_btn.configure(
+                        text=f"🟢 Ollama ({self.engine.client.active_model})",
+                        bg="#064e3b", fg="#6ee7b7", cursor="arrow"
+                    )
+                else:
+                    self.engine_btn.configure(
+                        text="🔴 Ollama Offline (Click to Start)",
+                        bg="#450a0a", fg="#fca5a5", cursor="hand2"
+                    )
             elif kind == "turn_done":
                 target_sid = payload
                 self.refresh_sessions()
@@ -399,11 +479,17 @@ class WindowsTkinterHUD:
 
     def _build_ui(self) -> None:
         tk = self.tk
-        self.top_bar = tk.Frame(self.root, padx=10, pady=6)
+        self.top_bar = tk.Frame(self.root, padx=10, pady=7)
         self.top_bar.pack(fill=tk.X)
 
-        self.status_lbl = tk.Label(self.top_bar, text="  IDLE • Ready  ", font=("Segoe UI", 9, "bold"))
-        self.status_lbl.pack(side=tk.LEFT)
+        self.status_lbl = tk.Label(self.top_bar, text="  IDLE • Ready  ", font=("Segoe UI", 9, "bold"), padx=6, pady=2)
+        self.status_lbl.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.engine_btn = tk.Button(
+            self.top_bar, text="🟢 Checking Engine...", command=self.on_engine_click,
+            relief=tk.FLAT, font=("Segoe UI", 9, "bold"), padx=8, pady=1
+        )
+        self.engine_btn.pack(side=tk.LEFT)
 
         self.kill_btn = tk.Button(self.top_bar, text="STOP (Ctrl+Shift+K)", command=self.on_kill, bg="#dc2626", fg="#ffffff", relief=tk.FLAT, padx=8, font=("Segoe UI", 9, "bold"))
         self.kill_btn.pack(side=tk.RIGHT, padx=3)
@@ -432,18 +518,18 @@ class WindowsTkinterHUD:
         self.main_pane = tk.Frame(self.root)
         self.main_pane.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
-        self.sidebar = tk.Frame(self.main_pane, width=220)
-        self.sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
+        self.sidebar = tk.Frame(self.main_pane, width=230)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
 
-        self.new_sess_btn = tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), pady=4)
-        self.new_sess_btn.pack(fill=tk.X, pady=(0, 4))
+        self.new_sess_btn = tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), pady=5)
+        self.new_sess_btn.pack(fill=tk.X, pady=(0, 6))
 
         self.search_entry = tk.Entry(self.sidebar, font=("Segoe UI", 9))
         self.search_entry.insert(0, "")
         self.search_entry.pack(fill=tk.X, pady=(0, 4))
         self.search_entry.bind("<KeyRelease>", self.on_search_sessions)
 
-        self.session_listbox = tk.Listbox(self.sidebar, height=18, relief=tk.FLAT, font=("Segoe UI", 9))
+        self.session_listbox = tk.Listbox(self.sidebar, height=18, relief=tk.FLAT, font=("Segoe UI", 9), selectmode=tk.SINGLE)
         self.session_listbox.pack(fill=tk.BOTH, expand=True)
         self.session_listbox.bind("<<ListboxSelect>>", self.on_select_session)
 
@@ -462,24 +548,44 @@ class WindowsTkinterHUD:
         self.chat_frame = tk.Frame(self.main_pane)
         self.chat_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self.chat_text = tk.Text(self.chat_frame, wrap=tk.WORD, state=tk.DISABLED, font=("Segoe UI", 10), relief=tk.FLAT, padx=12, pady=10)
+        self.chat_text = tk.Text(self.chat_frame, wrap=tk.WORD, state=tk.DISABLED, font=("Segoe UI", 10), relief=tk.FLAT, padx=14, pady=12)
         self.chat_text.pack(fill=tk.BOTH, expand=True)
 
         self.bottom_bar = tk.Frame(self.chat_frame, pady=6)
         self.bottom_bar.pack(fill=tk.X)
 
-        self.voice_btn = tk.Button(self.bottom_bar, text="🎤 Speak", command=self.on_voice, bg="#ea580c", fg="#ffffff", relief=tk.FLAT, padx=10, font=("Segoe UI", 9, "bold"))
+        self.voice_btn = tk.Button(self.bottom_bar, text="🎤 Speak", command=self.on_voice, bg="#ea580c", fg="#ffffff", relief=tk.FLAT, padx=12, pady=3, font=("Segoe UI", 9, "bold"))
         self.voice_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         self.prompt_entry = tk.Entry(self.bottom_bar, font=("Segoe UI", 10))
-        self.prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        self.prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6), ipady=3)
         self.prompt_entry.bind("<Return>", lambda _e: self.on_send())
 
-        self.send_btn = tk.Button(self.bottom_bar, text="Send", command=self.on_send, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, padx=14, font=("Segoe UI", 9, "bold"))
+        self.send_btn = tk.Button(self.bottom_bar, text="Send ➤", command=self.on_send, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, padx=14, pady=3, font=("Segoe UI", 9, "bold"))
         self.send_btn.pack(side=tk.RIGHT)
 
         self.root.bind("<Control-Shift-K>", lambda _e: self.on_kill())
         self.root.bind("<Control-Shift-k>", lambda _e: self.on_kill())
+
+    def _setup_chat_tags(self) -> None:
+        tk = self.tk
+        pal = THEMES.get(self.current_theme, THEMES["dark"])
+        self.chat_text.tag_configure("hero_badge", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#ff6b1a"), justify=tk.CENTER)
+        self.chat_text.tag_configure("hero_title", font=("Segoe UI", 16, "bold"), foreground=pal.get("fg", "#fafafa"), justify=tk.CENTER, spacing1=10, spacing3=4)
+        self.chat_text.tag_configure("hero_sub", font=("Segoe UI", 10), foreground=pal.get("muted", "#94a3b8"), justify=tk.CENTER, spacing3=12)
+        self.chat_text.tag_configure("hero_div", font=("Consolas", 8), foreground=pal.get("border", "#272733"), justify=tk.CENTER, spacing3=14)
+        self.chat_text.tag_configure("quick_card", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#ff6b1a"), background=pal.get("subpanel", "#181822"), lmargin1=40, lmargin2=40, rmargin=40, spacing1=4, spacing3=4)
+
+        self.chat_text.tag_configure("user_header", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#ff6b1a"), spacing1=12, spacing3=3, lmargin1=12, lmargin2=12)
+        self.chat_text.tag_configure("user_body", font=("Segoe UI", 10), foreground=pal.get("fg", "#fafafa"), lmargin1=16, lmargin2=16, rmargin=24, spacing1=2, spacing3=10)
+
+        self.chat_text.tag_configure("ai_header", font=("Segoe UI", 9, "bold"), foreground="#38bdf8", spacing1=12, spacing3=3, lmargin1=12, lmargin2=12)
+        self.chat_text.tag_configure("ai_body", font=("Segoe UI", 10), foreground=pal.get("fg", "#fafafa"), lmargin1=16, lmargin2=16, rmargin=24, spacing1=2, spacing3=10)
+
+        self.chat_text.tag_configure("code_block", font=("Consolas", 9), foreground="#38bdf8", background=pal.get("code_bg", "#0b0c10"), lmargin1=24, lmargin2=24, rmargin=32, spacing1=4, spacing3=4)
+        self.chat_text.tag_configure("tool_tag", font=("Segoe UI", 8, "bold"), foreground="#34d399", lmargin1=24, lmargin2=24, spacing1=4, spacing3=1)
+        self.chat_text.tag_configure("tool_result", font=("Consolas", 8), foreground="#a7f3d0", background="#091811", lmargin1=28, lmargin2=28, rmargin=36, spacing1=2, spacing3=4)
+        self.chat_text.tag_configure("system_card", font=("Segoe UI", 9), foreground="#fbbf24", background="#1c1608", lmargin1=20, lmargin2=20, rmargin=24, spacing1=6, spacing3=6)
 
     def apply_theme(self, theme_name: str) -> None:
         self.current_theme = theme_name
@@ -520,8 +626,8 @@ class WindowsTkinterHUD:
             self.root.geometry("480x140")
             self.compact_btn.configure(text="🗖 Expand")
         else:
-            self.root.geometry("960x620")
-            self.sidebar.pack(side=self.tk.LEFT, fill=self.tk.Y, padx=(0, 6), before=self.chat_frame)
+            self.root.geometry("980x640")
+            self.sidebar.pack(side=self.tk.LEFT, fill=self.tk.Y, padx=(0, 8), before=self.chat_frame)
             self.chat_text.pack(fill=self.tk.BOTH, expand=True, before=self.bottom_bar)
             self.compact_btn.configure(text="🗕 Compact")
 
@@ -548,6 +654,7 @@ class WindowsTkinterHUD:
         cur = str(self.engine.config.settings.get("theme", "dark"))
         nxt = self.engine.set_theme("light" if cur == "dark" else "dark")
         self.apply_theme(nxt)
+        self.load_messages(self.engine.storage.get_session_messages(self.engine.current_session_id))
 
     def on_save_key(self) -> None:
         raw = self.key_entry.get().strip()
@@ -632,16 +739,78 @@ class WindowsTkinterHUD:
             msgs = self.engine.switch_session(sid)
             self.load_messages(msgs)
 
+    def _trigger_quick_action(self, prompt: str) -> None:
+        self.prompt_entry.delete(0, self.tk.END)
+        self.prompt_entry.insert(0, prompt)
+        self.on_send()
+
     def load_messages(self, messages: List[Dict[str, Any]]) -> None:
         self.chat_text.configure(state=self.tk.NORMAL)
         self.chat_text.delete("1.0", self.tk.END)
+        self._setup_chat_tags()
+
+        if not messages:
+            self.chat_text.insert(self.tk.END, "⚡ SUDHARSHAN CORE v0.9 • LOCAL NEURAL ENGINE\n", "hero_badge")
+            self.chat_text.insert(self.tk.END, "Welcome to Sudharshan AI\n", "hero_title")
+            self.chat_text.insert(self.tk.END, "100% Private, Hardware-Isolated Desktop Intelligence & Automation\n", "hero_sub")
+            self.chat_text.insert(self.tk.END, "────────────────────────────────────────────────────────────────────────────\n", "hero_div")
+            self.chat_text.insert(self.tk.END, "⚡ Quick Actions (Click any action below to run):\n\n", "user_header")
+
+            actions = [
+                ("1", "⚡ Check system diagnostics, hardware health, and engine status", "Run full system diagnostic check"),
+                ("2", "📁 Organize Downloads folder and inspect duplicate files", "Organize my Downloads folder safely"),
+                ("3", "📋 Inspect and summarize clipboard content", "Summarize the text currently in my clipboard"),
+                ("4", "🤖 Verify local Ollama neural models and RAM allocation", "Check local Ollama neural model status"),
+            ]
+
+            for num, label, prompt_val in actions:
+                tag_name = f"action_{num}"
+                self.chat_text.insert(self.tk.END, f"  [{num}] {label}  \n\n", ("quick_card", tag_name))
+                self.chat_text.tag_bind(tag_name, "<Button-1>", lambda _e, p=prompt_val: self._trigger_quick_action(p))
+                self.chat_text.tag_bind(tag_name, "<Enter>", lambda _e: self.chat_text.configure(cursor="hand2"))
+                self.chat_text.tag_bind(tag_name, "<Leave>", lambda _e: self.chat_text.configure(cursor="arrow"))
+
+            self.chat_text.insert(self.tk.END, "────────────────────────────────────────────────────────────────────────────\n", "hero_div")
+            self.chat_text.insert(self.tk.END, "Hardware Kill-Switch: Press Ctrl+Shift+K anytime to abort actions immediately.\n", "hero_sub")
+            self.chat_text.configure(state=self.tk.DISABLED)
+            self.chat_text.see("1.0")
+            return
+
         for m in messages:
-            prefix = "You" if m.get("role") == "user" else "Sudharshan AI"
-            self.chat_text.insert(self.tk.END, f"{prefix}: {m.get('content', '')}\n")
+            role = m.get("role")
+            content = str(m.get("content", ""))
+            ts = m.get("timestamp") or datetime.datetime.now().strftime("%I:%M %p")
+
+            if role == "user":
+                self.chat_text.insert(self.tk.END, f"👤 YOU • {ts}\n", "user_header")
+                self.chat_text.insert(self.tk.END, f"{content}\n\n", "user_body")
+            else:
+                model_lbl = m.get("model") or self.engine.client.active_model
+                self.chat_text.insert(self.tk.END, f"⚡ SUDHARSHAN AI ({model_lbl}) • {ts}\n", "ai_header")
+
+                if "```" in content:
+                    parts = content.split("```")
+                    for i, part in enumerate(parts):
+                        if i % 2 == 0:
+                            if part.strip():
+                                self.chat_text.insert(self.tk.END, f"{part.strip()}\n", "ai_body")
+                        else:
+                            lines = part.split("\n", 1)
+                            code_text = lines[1] if len(lines) > 1 else lines[0]
+                            self.chat_text.insert(self.tk.END, f"{code_text.rstrip()}\n", "code_block")
+                elif content.startswith("⚠️") or "offline" in content.lower():
+                    self.chat_text.insert(self.tk.END, f"{content}\n", "system_card")
+                else:
+                    self.chat_text.insert(self.tk.END, f"{content}\n", "ai_body")
+
             for r in m.get("results", []):
                 out = r.get("output", "") if isinstance(r, dict) else getattr(r, "output", "")
-                self.chat_text.insert(self.tk.END, f"  -> {out}\n")
+                tool = r.get("tool", "action") if isinstance(r, dict) else getattr(r, "tool", "action")
+                self.chat_text.insert(self.tk.END, f"  🔧 Action Completed [{tool}]\n", "tool_tag")
+                self.chat_text.insert(self.tk.END, f"  {out}\n\n", "tool_result")
+
             self.chat_text.insert(self.tk.END, "\n")
+
         self.chat_text.configure(state=self.tk.DISABLED)
         self.chat_text.see(self.tk.END)
 

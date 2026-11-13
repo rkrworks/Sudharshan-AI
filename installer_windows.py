@@ -351,7 +351,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Bajrang AI Pro — Smart Windows 11 Installer")
     parser.add_argument("--self-test", action="store_true", help="Run installer self-tests")
     parser.add_argument("--scan-only", action="store_true", help="Print JSON scan report and exit")
-    parser.add_argument("--headless-install", action="store_true", help="Install missing pip dependencies headlessly")
+    parser.add_argument("--headless-install", "--cli", action="store_true", help="Install missing pip dependencies headlessly")
     parser.add_argument("--consent-winget", action="store_true", help="Explicitly consent to winget Ollama install")
     parser.add_argument("--consent-model-pull", action="store_true", help="Explicitly consent to ~2 GB Llama 3.2 pull")
     parser.add_argument("--uninstall", action="store_true", help="Uninstall Bajrang AI Pro and purge stored secrets")

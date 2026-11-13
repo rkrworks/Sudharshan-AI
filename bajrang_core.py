@@ -2751,10 +2751,65 @@ class UnifiedModelClient:
         except Exception as exc:
             return AssistantTurn(response_type="conversation", text=f"Cloud API request failed: {exc}")
 
+    @staticmethod
+    def _find_ollama_binary() -> Optional[str]:
+        p = shutil.which("ollama")
+        if p and os.path.exists(p):
+            return p
+        if platform.system() == "Windows":
+            candidates = [
+                os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama app.exe"),
+                os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe"),
+                os.path.expandvars(r"%ProgramFiles%\Ollama\ollama.exe"),
+            ]
+            for c in candidates:
+                if os.path.exists(c):
+                    return c
+        else:
+            candidates = ["/usr/local/bin/ollama", "/usr/bin/ollama"]
+            for c in candidates:
+                if os.path.exists(c):
+                    return c
+        return None
+
+    def _try_autostart_ollama(self, host: str) -> bool:
+        bin_path = self._find_ollama_binary()
+        if not bin_path:
+            return False
+        try:
+            cmd = [bin_path]
+            if bin_path.lower().endswith("ollama.exe") or bin_path.lower().endswith("ollama"):
+                cmd.append("serve")
+            creationflags = 0
+            if platform.system() == "Windows":
+                creationflags = 0x00000008 | 0x00000200
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                creationflags=creationflags,
+                close_fds=True,
+            )
+            t_end = time.time() + 4.5
+            while time.time() < t_end:
+                try:
+                    req = urllib.request.Request(f"{host}/api/version", method="GET")
+                    with urllib.request.urlopen(req, timeout=1.0) as resp:
+                        if resp.status == 200:
+                            return True
+                except Exception:
+                    pass
+                time.sleep(0.5)
+        except Exception:
+            return False
+        return False
+
     def _chat_ollama(self, messages: List[Dict[str, Any]], user_prompt: str) -> AssistantTurn:
         host = str(self.config.settings.get("ollama_host", "http://127.0.0.1:11434")).rstrip("/")
         payload = {"model": self.active_model, "messages": messages, "stream": False}
-        try:
+
+        def _send_request() -> AssistantTurn:
             req = urllib.request.Request(
                 f"{host}/api/chat",
                 data=json.dumps(payload).encode("utf-8"),
@@ -2770,10 +2825,36 @@ class UnifiedModelClient:
                 self.history.append({"role": "user", "content": user_prompt})
                 self.history.append({"role": "assistant", "content": reply})
                 return turn
+
+        try:
+            return _send_request()
         except Exception as exc:
+            if "127.0.0.1" in host or "localhost" in host:
+                if self._try_autostart_ollama(host):
+                    try:
+                        return _send_request()
+                    except Exception:
+                        pass
+
+            for prov in ("gemini_argon", "gemini", "groq", "openrouter", "openai"):
+                key = self.config.get_api_key(prov)
+                if key and is_key_compatible_with_provider(key, prov):
+                    self.config.settings["byo_provider"] = prov
+                    fallback_turn = self._chat_byo(messages, user_prompt)
+                    fallback_turn.provider_used = f"byo_api:{prov}"
+                    fallback_turn.text = f"*(Local Ollama offline — seamlessly switched to {prov})*\n\n" + fallback_turn.text
+                    return fallback_turn
+
             return AssistantTurn(
                 response_type="conversation",
-                text=f"Local Ollama server unreachable at {host} ({exc}).",
+                text=(
+                    f"⚠️ **Local Ollama AI Engine Offline**\n\n"
+                    f"Sudharshan AI could not connect to Ollama at `{host}`.\n\n"
+                    f"**How to start local AI in 1 step:**\n"
+                    f"1. Open Command Prompt or PowerShell and run: `ollama serve`\n"
+                    f"2. Ensure the model is downloaded: `ollama run {self.active_model}`\n\n"
+                    f"💡 *Alternatively, enter a free Gemini or Groq API key in the top bar to run immediately.*"
+                ),
             )
 
 
