@@ -34,6 +34,7 @@
 * **BUG-006 & BUG-007**: Updated deployment workflows and Windows batch scripts with Sudharshan AI branding.
 * **BUG-008**: Added missing `AgentState.OFFLOADED` status badge color to desktop HUD.
 * **BUG-009 & BUG-010**: Unified taste-skill color tokens and author credits across `privacy.html`, `terms.html`, and `credits.html`.
+* **BUG-011**: Fixed Vercel schema validation failure by removing deprecated `"public": false` from `vercel.json`.
 
 ---
 

@@ -20,6 +20,7 @@
 | **BUG-008** | **MEDIUM** | `windows.py` | Missing `AgentState.OFFLOADED` status badge color in desktop HUD | **RESOLVED** | Added `AgentState.OFFLOADED: ("#334155", "#94a3b8")` to `badge_colors` map |
 | **BUG-009** | **LOW** | `terms.html`, `credits.html` | Stale contact email (`kaushik@example.com`) and missing CBIT Hyderabad affiliation | **RESOLVED** | Updated to `kaushikramravuru@gmail.com` and credited CBIT Hyderabad across all legal pages |
 | **BUG-010** | **LOW** | `privacy.html`, `terms.html` | Cyan color tokens (`#93f1f7`) inconsistent with Taste-Skill Solar Orange identity | **RESOLVED** | Unified `:root` color tokens to Obsidian Black (`#050505`) and Solar Orange (`#ff6b1a`) |
+| **BUG-011** | **CRITICAL** | `vercel.json` | Vercel build failed: `schema validation failed: should NOT have additional property 'public'` | **RESOLVED** | Removed deprecated `"public": false` from `vercel.json` root configuration |
 
 ---
 

@@ -1,7 +1,6 @@
 {
   "version": 2,
   "name": "sudharshan-ai",
-  "public": false,
   "cleanUrls": true,
   "outputDirectory": "web",
   "headers": [
