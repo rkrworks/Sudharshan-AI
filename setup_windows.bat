@@ -1,15 +1,16 @@
 @echo off
 setlocal EnableDelayedExpansion
-title Bajrang AI Pro (v6.0) — Smart Windows 11 Setup & Uninstaller
+title Sudharshan AI (Alpha v0.9) — Smart Windows 11 Setup & Uninstaller
 
-set "INSTALL_DIR=%LOCALAPPDATA%\BajrangAI"
+set "INSTALL_DIR=%LOCALAPPDATA%\SudharshanAI"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 set "LOG_FILE=%INSTALL_DIR%\install_diagnostics.log"
 
 if "%~1"=="--uninstall" (
-    echo [UNINSTALL] Removing Bajrang AI Pro v6.0 application files and Desktop shortcut...
+    echo [UNINSTALL] Removing Sudharshan AI application files and Desktop shortcut...
+    if exist "%USERPROFILE%\Desktop\Sudharshan AI.lnk" del /f /q "%USERPROFILE%\Desktop\Sudharshan AI.lnk"
     if exist "%USERPROFILE%\Desktop\Bajrang AI Pro.lnk" del /f /q "%USERPROFILE%\Desktop\Bajrang AI Pro.lnk"
-    for %%F in (bajrang_core.py bajrang_windows.py installer_windows.py requirements_windows.txt setup_windows.bat Launch_Bajrang_AI.bat Modelfile.bajrang) do (
+    for %%F in (bajrang_core.py bajrang_windows.py windows.py installer_windows.py requirements_windows.txt setup_windows.bat Launch_Bajrang_AI.bat Modelfile.bajrang) do (
         if exist "%INSTALL_DIR%\%%F" del /f /q "%INSTALL_DIR%\%%F"
     )
     echo [UNINSTALL] Complete. User database (%INSTALL_DIR%\history.db) was preserved.
@@ -17,10 +18,10 @@ if "%~1"=="--uninstall" (
 )
 
 echo ======================================================================
-echo   Bajrang AI Pro (v6.0) — Windows 11 Smart Selective Installer
+echo   Sudharshan AI (Alpha v0.9) — Windows 11 Smart Selective Installer
 echo   Diagnostic Log: %LOG_FILE%
 echo ======================================================================
-echo [%DATE% %TIME%] Starting Bajrang AI Pro v6.0 Windows Setup > "%LOG_FILE%"
+echo [%DATE% %TIME%] Starting Sudharshan AI Windows Setup > "%LOG_FILE%"
 
 where python >nul 2>nul
 if %ERRORLEVEL% neq 0 (
@@ -44,10 +45,10 @@ if %ERRORLEVEL% neq 0 (
     echo [FOUND OK] Ollama for Windows detected.
 )
 
-echo [4/5] Copying v6.0 application files to %INSTALL_DIR%...
-for %%F in (bajrang_core.py bajrang_windows.py installer_windows.py requirements_windows.txt setup_windows.bat) do (
+echo [4/5] Copying application files to %INSTALL_DIR%...
+for %%F in (bajrang_core.py bajrang_windows.py windows.py installer_windows.py requirements_windows.txt setup_windows.bat) do (
     if exist "%%F" copy /y "%%F" "%INSTALL_DIR%\%%F" >nul
 )
 
-echo [5/5] Launching Bajrang AI Pro v6.0...
-start "" python "%INSTALL_DIR%\bajrang_windows.py"
+echo [5/5] Launching Sudharshan AI (Alpha v0.9)...
+start "" python "%INSTALL_DIR%\windows.py"

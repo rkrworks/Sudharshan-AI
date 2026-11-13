@@ -627,7 +627,7 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
 
                     def refresh_view() -> None:
                         msgs = engine.storage.get_session_messages(engine.current_session_id)
-                        lines = [f"{'You' if m.get('role') == 'user' else 'Bajrang AI'}:\n{m.get('content', '')}" for m in msgs]
+                        lines = [f"{'You' if m.get('role') == 'user' else 'Sudharshan AI'}:\n{m.get('content', '')}" for m in msgs]
                         buf.set_text("\n\n".join(lines))
                         refresh_sessions()
 
@@ -728,12 +728,12 @@ def run_self_tests() -> int:
         assert ok_k is True and engine.kill_switch.is_cancelled is True
         print(f"  -> Passed: Global kill socket verified ({msg_k}).")
 
-    print("\nAll 7/7 Bajrang AI (Fedora Hardened Layer) self-tests passed!")
+    print("\nAll 7/7 Sudharshan AI (Fedora Hardened Layer) self-tests passed!")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bajrang AI — Fedora Workstation (GNOME / Wayland) Assistant")
+    parser = argparse.ArgumentParser(description="Sudharshan AI (Alpha v0.9) — Fedora Workstation (GNOME / Wayland) Assistant")
     parser.add_argument("--self-test", action="store_true", help="Run headless self-tests")
     parser.add_argument("--kill-running", action="store_true", help="Send emergency kill signal to running instance")
     parser.add_argument("--install-gnome-extension", action="store_true", help="Install GNOME Shell 45-49 extension")

@@ -1,4 +1,4 @@
-name: Deploy Bajrang AI Pro Static Web Portal
+name: Deploy Sudharshan AI Static Web Portal
 
 on:
   push:

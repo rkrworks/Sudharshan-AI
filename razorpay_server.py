@@ -1,6 +1,7 @@
-import datetime
 #!/usr/bin/env python3
 import base64
+import contextlib
+import datetime
 import hashlib
 import hmac
 import http.server
@@ -15,7 +16,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Generator, Optional, Tuple
 
 from bajrang_core import (
     RSA_2048_MODULUS,
@@ -93,11 +94,16 @@ class RazorpayFulfillmentEngine:
         self._lock = threading.Lock()
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextlib.contextmanager
+    def _connect(self) -> Generator[sqlite3.Connection, None, None]:
         conn = sqlite3.connect(str(self.db_path), timeout=15.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._lock, self._connect() as conn:
@@ -453,6 +459,7 @@ def run_self_test() -> int:
                 raise AssertionError("Unauthorized admin approval should return HTTP 403")
             except urllib.error.HTTPError as e:
                 assert e.code == 403
+                e.close()
 
             req_auth = urllib.request.Request(
                 f"{base_url}/api/admin/approve",

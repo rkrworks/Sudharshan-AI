@@ -1,31 +1,48 @@
-# Bajrang AI Pro — Detailed Engineering Changelog (`CHANGELOG.md`)
+# SUDHARSHAN AI — ENGINEERING CHANGELOG (`CHANGELOG.md`)
 
-## v6.0.0 — Argon Production Release (2026-11-11)
+## v0.9.0-alpha — Sudharshan Alpha Release (2026-11-13)
 
-### Architectural & Core Engine Upgrades (`bajrang_core.py`)
+### Rebranding & Repository Recovery
+* **Brand Evolution**: Rebranded project to **Sudharshan AI (Alpha v0.9)** by Kaushik Ram Ravuru (CBIT Hyderabad).
+* **Remote Synchronization**: Recovered repository after rename to `https://github.com/rkrworks/Sudharshan-AI.git`.
+* **Vercel & Pages Recovery**: Synced isolated `web/` directory with `vercel.json` (`outputDirectory: "web"`) and GitHub Actions workflow (`deploy.yml`). Replaced non-existent local file download links with canonical GitHub Release links.
 
-* **Unified Zero-Duplication Core (`bajrang_core.py`)**: Extracted \~1,500 lines of duplicated logic from `bajrang_windows.py` and `bajrang_llama32.py` into a shared, strictly typed core module.
+### Core Architectural Features (`bajrang_core.py`)
+* **Feature 1: Intelligent Conversation Manager**: Added SQLite migration v4 (`category`, `is_pinned`), full-text search (`search_conversations`), session pinning (`pin_session`), session renaming (`rename_session`), and structured export/import in Markdown and JSON.
+* **Feature 2: Advanced Voice Studio**: Implemented 8-band Goertzel Spectral-DTW filter bank, spectral noise floor subtraction via ambient profiling, configurable wake words (`set_wake_word`), and variable TTS speech rate.
+* **Feature 3: Visual Automation Builder**: Built `AutomationBuilder`, `Workflow`, and `WorkflowStep` with condition evaluation (`file_exists`, `platform_is`), confirmation gating, and SQLite run audit logs in `workflow_runs`.
+* **Feature 4: Advanced Memory Management**: Added Jaccard similarity memory deduplication (`find_duplicate_memories`), JSON export, importance scoring (1–5), and contextual prompt retrieval.
+* **Feature 5: Local AI Model Manager**: Implemented `LocalAIModelManager` with curated open-weights catalog, Ollama daemon probing (`/api/tags`), and hardware tier compatibility checking (Eco, Balanced, High, Workstation).
+* **Feature 6: System Intelligence Dashboard**: Implemented authentic hardware telemetry (`SystemIntelligenceDashboard`) capturing CPU, RAM, GPU, storage, battery, network, rolling history buffer, and high-load alerts without data fabrication.
+* **Feature 7: Intelligent Provider Dashboard**: Added multi-cloud router with live round-trip latency probing, token accounting, and cost-optimized routing recommendations.
+* **Feature 9: Developer Copilot**: Built `DeveloperCopilot` with safe directory traversal inspection, unified diff generation via `difflib`, and traceback error analysis.
+* **Feature 10: Diagnostics & Recovery Centre**: Implemented `DiagnosticsRecoveryCentre` with 6-point pre-flight health checks, PRAGMA database integrity checks, safe backup/restore, and exportable reports.
 
-* **Modular AI Router (`ModularAIRouter`)**: Added task complexity classification (`SIMPLE`, `MODERATE`, `COMPLEX_REASONING`, `MULTIMODAL_VISION`), automatic model selection across Google Gemini Argon (`gemini-2.5-pro` / `gemini-2.5-flash`), [Ollama Llama 3.2](https://ollama.com/library/llama3.2), Groq (`llama-3.3-70b-versatile`), OpenRouter, and OpenAI, provider health/latency checks (`check_provider_health`), exponential backoff retries, and configurable provider fallback chains.
+### Desktop HUDs (`windows.py` & `fedora.py`)
+* **Feature 8: Universal Floating Assistant**:
+  - Added Always-on-Top toggle (`-topmost`) on Windows Tkinter HUD.
+  - Added Compact Mode toggle (collapses window into 480x140 floating micro-HUD).
+  - Added Clipboard Assistant (`on_clipboard_assist`) for instant code explanation, summary, and bug fixing.
+  - Added Session Search bar, Pin toggle, Rename prompt, and Markdown Export button.
+* **Branding & Theme Alignment**: Aligned color tokens with Obsidian Black (`#050505` / `#0f0c0a`) and Solar Orange (`#ff6b1a`).
 
-* **Long-Term SQLite Memory & Migrations (`DatabaseMigrationManager`, `LongTermMemoryStore`)**: Added versioned schema migrations (`v1` → `v3`) with `WAL` mode, categorized long-term memories (`preference`, `project`, `fact`, `task_history`), full CRUD and search, context window injection, and automatic PII redaction guardrails (`redact_sensitive_text`).
+### Forensic Bug Fixes & Hygiene
+* **BUG-001**: Resolved broken local download links causing 404s on Vercel; mapped to GitHub Releases.
+* **BUG-002**: Replaced legacy `setup_fedora.bash` with a clean wrapper redirecting to hardened `setup_fedora.sh`.
+* **BUG-003 & BUG-004**: Eliminated SQLite connection resource leaks in `DatabaseMigrationManager` and `FulfillmentDatabase` using `@contextlib.contextmanager` with explicit `conn.close()`.
+* **BUG-005**: Closed dangling HTTPError response stream in `razorpay_server.py`.
+* **BUG-006 & BUG-007**: Updated deployment workflows and Windows batch scripts with Sudharshan AI branding.
+* **BUG-008**: Added missing `AgentState.OFFLOADED` status badge color to desktop HUD.
+* **BUG-009 & BUG-010**: Unified taste-skill color tokens and author credits across `privacy.html`, `terms.html`, and `credits.html`.
 
-* **Autonomous Multi-Step Task Planner (`AutonomousTaskPlanner`)**: Implemented multi-step folder inspection, file categorization (`Documents`, `Images`, `Installers`, `Archives`, `Code`, `AudioVideo`), size-bucketed SHA-256 duplicate file detection, explicit `awaiting_permission` confirmation gates before destructive operations, mid-task cancellation, and post-action verification.
+---
 
-### Security & Privacy Remediation (`SECURITY_AUDIT.md`, `razorpay_server.py`)
+## v6.0.0 — Argon Release (2026-11-11)
 
-* **Eliminated Hardcoded Client Secrets**: Removed `SECRET_SALT` from client code and replaced symmetric client-side key generation with `AsymmetricLicenseVerifier` (RSA public-key verification) and `razorpay_server.py` (server-side [Razorpay Orders & Webhook HMAC-SHA256](https://razorpay.com/upi-payment-gateway-india/) verification).
-
-* **OS Credential Vault (`SecurityVault`)**: Replaced plaintext API key storage in `config.json` with `keyring`, Windows DPAPI (`ProtectedData`), Linux `secret-tool` (`libsecret`), and `0600` encrypted local vault fallback.
-
-* **Restrictive Tool Allowlist (`ToolSchemaValidator`)**: Replaced `shell=True` command execution and substring blocklists with strict JSON Schema validation, `shell=False` execution, user-directory boundary enforcement, and forbidden hotkey blocking.
-
-### Voice, Computer-Use, Installers & Web Portal
-
-* **Advanced Voice Engine (`AdvancedVoiceEngine`)**: Added continuous listening mode, configurable wake word (`"hey bajrang"`), barge-in TTS interruption, spectral noise floor subtraction + RMS/ZCR VAD, preserved 8-band Goertzel Spectral-DTW command matching, microphone enumeration, and configurable TTS rate/language.
-
-* **Verified Computer-Use (`CrossPlatformComputerUse`)**: Added Win32 `EnumWindows` / `SetForegroundWindow` / `GetCursorPos` verification on Windows 11 and [ydotool](https://github.com/ReimuNotMoe/ydotool) / `wmctrl` / `gdbus` / `grim` integration on Fedora GNOME Wayland.
-
-* **Smart Installers (`installer_windows.py`, `BajrangAI_Pro_Setup.exe`, `setup_windows.bat`, `setup_fedora.sh`)**: Added `--uninstall` clean removal, diagnostic logs (`install_diagnostics.log`), and non-root execution defaults.
-
-* **Modular Web Portal (`index.html`, `portal_styles.css`, `portal_app.js`)**: Removed hardcoded personal emails/UPI handles and fabricated subscriber/MRR claims, extracted modular CSS/JS assets, and added interactive demos for the v6.0 Autonomous Task Planner and Long-Term Memory Inspector.
+### Architectural & Core Engine Upgrades
+* Unified Zero-Duplication Core (`bajrang_core.py`) extracting shared logic.
+* Modular AI Router (`ModularAIRouter`) with task classification and fallback chains.
+* Long-Term SQLite Memory & Migrations (`DatabaseMigrationManager`, `LongTermMemoryStore`).
+* Autonomous Multi-Step Task Planner (`AutonomousTaskPlanner`) with `.bajrang_trash/` staging.
+* Asymmetric RSA-2048 Cryptographic License Verification (`AsymmetricLicenseVerifier`).
+* SecurityVault hardware credential storage with Windows DPAPI and Linux libsecret.

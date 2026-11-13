@@ -333,9 +333,14 @@ THEMES: Dict[str, Dict[str, str]] = {
 
 class WindowsTkinterHUD:
     """
-    H8 Remediation:
+    H8 Remediation & Feature 8 Universal Floating Assistant:
     All background thread updates are enqueued to `self.ui_queue` (a `queue.Queue`) and
     processed exclusively on the main Tk thread via `_poll_ui_queue()`.
+    Features:
+      - Always-on-Top toggle (`-topmost`)
+      - Compact Mode toggle (collapses sidebar & chat history for a micro HUD)
+      - Clipboard Assistant (one-click clipboard inspection & assistance)
+      - Session Management (Search, Pin, Rename, Export Markdown)
     """
 
     def __init__(self, engine: BajrangEngine) -> None:
@@ -344,12 +349,18 @@ class WindowsTkinterHUD:
         self.engine = engine
         self.ui_queue: "queue.Queue[Tuple[str, Any]]" = queue.Queue()
         self.engine.state_callback = lambda st, txt: self.ui_queue.put(("state", (st, txt)))
+        self.current_theme = str(self.engine.config.settings.get("theme", "dark"))
+        self.is_topmost = False
+        self.is_compact = False
+        self._sessions_cache: List[Dict[str, Any]] = []
+        self._filtered_sessions: List[Dict[str, Any]] = []
 
         self.root = tk.Tk()
         self.root.title("Sudharshan AI (Alpha v0.9) — Windows 11 Desktop Assistant")
-        self.root.geometry("940x600")
+        self.root.geometry("960x620")
+        self.root.minsize(440, 150)
         self._build_ui()
-        self.apply_theme(str(self.engine.config.settings.get("theme", "dark")))
+        self.apply_theme(self.current_theme)
         self.refresh_sessions()
         self.load_messages(self.engine.storage.get_session_messages(self.engine.current_session_id))
         self._kill_stop_ev = start_global_windows_kill_listener(lambda: self.ui_queue.put(("kill", None)))
@@ -388,71 +399,150 @@ class WindowsTkinterHUD:
 
     def _build_ui(self) -> None:
         tk = self.tk
-        self.top_bar = tk.Frame(self.root, padx=12, pady=8)
+        self.top_bar = tk.Frame(self.root, padx=10, pady=6)
         self.top_bar.pack(fill=tk.X)
 
-        self.status_lbl = tk.Label(self.top_bar, text="Idle", font=("Segoe UI", 10, "bold"))
+        self.status_lbl = tk.Label(self.top_bar, text="  IDLE • Ready  ", font=("Segoe UI", 9, "bold"))
         self.status_lbl.pack(side=tk.LEFT)
 
-        self.kill_btn = tk.Button(self.top_bar, text="STOP (Ctrl+Shift+K)", command=self.on_kill, bg="#dc2626", fg="#ffffff", relief=tk.FLAT, padx=10)
-        self.kill_btn.pack(side=tk.RIGHT, padx=4)
+        self.kill_btn = tk.Button(self.top_bar, text="STOP (Ctrl+Shift+K)", command=self.on_kill, bg="#dc2626", fg="#ffffff", relief=tk.FLAT, padx=8, font=("Segoe UI", 9, "bold"))
+        self.kill_btn.pack(side=tk.RIGHT, padx=3)
 
-        self.confirm_btn = tk.Button(self.top_bar, text="Approve Action", command=self.on_confirm_actions, bg="#10b981", fg="#0f172a", state=tk.DISABLED, relief=tk.FLAT, padx=10)
-        self.confirm_btn.pack(side=tk.RIGHT, padx=4)
+        self.confirm_btn = tk.Button(self.top_bar, text="Approve Action", command=self.on_confirm_actions, bg="#10b981", fg="#0f172a", state=tk.DISABLED, relief=tk.FLAT, padx=8, font=("Segoe UI", 9, "bold"))
+        self.confirm_btn.pack(side=tk.RIGHT, padx=3)
 
-        self.theme_btn = tk.Button(self.top_bar, text="Toggle Theme", command=self.on_toggle_theme, relief=tk.FLAT, padx=10)
-        self.theme_btn.pack(side=tk.RIGHT, padx=4)
+        self.topmost_btn = tk.Button(self.top_bar, text="📌 Pin HUD", command=self.on_toggle_topmost, relief=tk.FLAT, padx=6, font=("Segoe UI", 9))
+        self.topmost_btn.pack(side=tk.RIGHT, padx=3)
 
-        self.key_entry = tk.Entry(self.top_bar, width=24, show="*")
-        self.key_entry.pack(side=tk.RIGHT, padx=4)
-        self.key_btn = tk.Button(self.top_bar, text="Save API Key", command=self.on_save_key, relief=tk.FLAT, padx=8)
-        self.key_btn.pack(side=tk.RIGHT, padx=4)
+        self.compact_btn = tk.Button(self.top_bar, text="🗕 Compact", command=self.on_toggle_compact, relief=tk.FLAT, padx=6, font=("Segoe UI", 9))
+        self.compact_btn.pack(side=tk.RIGHT, padx=3)
+
+        self.clip_btn = tk.Button(self.top_bar, text="📋 Clip Assist", command=self.on_clipboard_assist, relief=tk.FLAT, padx=6, font=("Segoe UI", 9))
+        self.clip_btn.pack(side=tk.RIGHT, padx=3)
+
+        self.theme_btn = tk.Button(self.top_bar, text="🌓 Theme", command=self.on_toggle_theme, relief=tk.FLAT, padx=6, font=("Segoe UI", 9))
+        self.theme_btn.pack(side=tk.RIGHT, padx=3)
+
+        self.key_btn = tk.Button(self.top_bar, text="Save Key", command=self.on_save_key, relief=tk.FLAT, padx=6, font=("Segoe UI", 9))
+        self.key_btn.pack(side=tk.RIGHT, padx=2)
+
+        self.key_entry = tk.Entry(self.top_bar, width=12, show="*")
+        self.key_entry.pack(side=tk.RIGHT, padx=2)
 
         self.main_pane = tk.Frame(self.root)
-        self.main_pane.pack(fill=tk.BOTH, expand=True, padx=10, pady=6)
+        self.main_pane.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
-        self.sidebar = tk.Frame(self.main_pane, width=210)
-        self.sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
+        self.sidebar = tk.Frame(self.main_pane, width=220)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 6))
 
-        tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT).pack(fill=tk.X, pady=(0, 6))
-        self.session_listbox = tk.Listbox(self.sidebar, height=22, relief=tk.FLAT)
+        self.new_sess_btn = tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), pady=4)
+        self.new_sess_btn.pack(fill=tk.X, pady=(0, 4))
+
+        self.search_entry = tk.Entry(self.sidebar, font=("Segoe UI", 9))
+        self.search_entry.insert(0, "")
+        self.search_entry.pack(fill=tk.X, pady=(0, 4))
+        self.search_entry.bind("<KeyRelease>", self.on_search_sessions)
+
+        self.session_listbox = tk.Listbox(self.sidebar, height=18, relief=tk.FLAT, font=("Segoe UI", 9))
         self.session_listbox.pack(fill=tk.BOTH, expand=True)
         self.session_listbox.bind("<<ListboxSelect>>", self.on_select_session)
+
+        self.session_actions_bar = tk.Frame(self.sidebar, pady=4)
+        self.session_actions_bar.pack(fill=tk.X)
+
+        self.pin_sess_btn = tk.Button(self.session_actions_bar, text="📌 Pin", command=self.on_pin_session, relief=tk.FLAT, font=("Segoe UI", 8), padx=4)
+        self.pin_sess_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+
+        self.rename_sess_btn = tk.Button(self.session_actions_bar, text="✏️ Rename", command=self.on_rename_session, relief=tk.FLAT, font=("Segoe UI", 8), padx=4)
+        self.rename_sess_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+
+        self.export_sess_btn = tk.Button(self.session_actions_bar, text="📤 Export", command=self.on_export_session, relief=tk.FLAT, font=("Segoe UI", 8), padx=4)
+        self.export_sess_btn.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
 
         self.chat_frame = tk.Frame(self.main_pane)
         self.chat_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self.chat_text = tk.Text(self.chat_frame, wrap=tk.WORD, state=tk.DISABLED, font=("Segoe UI", 10), relief=tk.FLAT, padx=10, pady=10)
+        self.chat_text = tk.Text(self.chat_frame, wrap=tk.WORD, state=tk.DISABLED, font=("Segoe UI", 10), relief=tk.FLAT, padx=12, pady=10)
         self.chat_text.pack(fill=tk.BOTH, expand=True)
 
         self.bottom_bar = tk.Frame(self.chat_frame, pady=6)
         self.bottom_bar.pack(fill=tk.X)
 
-        self.voice_btn = tk.Button(self.bottom_bar, text="Speak", command=self.on_voice, bg="#ea580c", fg="#ffffff", relief=tk.FLAT, padx=12)
+        self.voice_btn = tk.Button(self.bottom_bar, text="🎤 Speak", command=self.on_voice, bg="#ea580c", fg="#ffffff", relief=tk.FLAT, padx=10, font=("Segoe UI", 9, "bold"))
         self.voice_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         self.prompt_entry = tk.Entry(self.bottom_bar, font=("Segoe UI", 10))
         self.prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
         self.prompt_entry.bind("<Return>", lambda _e: self.on_send())
 
-        self.send_btn = tk.Button(self.bottom_bar, text="Send", command=self.on_send, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, padx=14)
+        self.send_btn = tk.Button(self.bottom_bar, text="Send", command=self.on_send, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, padx=14, font=("Segoe UI", 9, "bold"))
         self.send_btn.pack(side=tk.RIGHT)
 
         self.root.bind("<Control-Shift-K>", lambda _e: self.on_kill())
         self.root.bind("<Control-Shift-k>", lambda _e: self.on_kill())
 
     def apply_theme(self, theme_name: str) -> None:
+        self.current_theme = theme_name
         pal = THEMES.get(theme_name, THEMES["dark"])
         self.root.configure(bg=pal["bg"])
         self.top_bar.configure(bg=pal["panel"])
         self.main_pane.configure(bg=pal["bg"])
         self.sidebar.configure(bg=pal["panel"])
+        self.session_actions_bar.configure(bg=pal["panel"])
         self.chat_frame.configure(bg=pal["bg"])
         self.bottom_bar.configure(bg=pal["bg"])
         self.status_lbl.configure(bg=pal["panel"], fg=pal["fg"])
         self.chat_text.configure(bg=pal["panel"], fg=pal["fg"], insertbackground=pal["fg"])
-        self.session_listbox.configure(bg=pal["panel"], fg=pal["fg"])
+        self.session_listbox.configure(bg=pal["subpanel"], fg=pal["fg"])
+        self.search_entry.configure(bg=pal["subpanel"], fg=pal["fg"], insertbackground=pal["fg"])
         self.prompt_entry.configure(bg=pal["subpanel"], fg=pal["fg"], insertbackground=pal["fg"])
+        self.key_entry.configure(bg=pal["subpanel"], fg=pal["fg"], insertbackground=pal["fg"])
+
+        for btn in (self.topmost_btn, self.compact_btn, self.clip_btn, self.theme_btn, self.key_btn,
+                    self.pin_sess_btn, self.rename_sess_btn, self.export_sess_btn):
+            btn.configure(bg=pal["subpanel"], fg=pal["fg"])
+
+    def on_toggle_topmost(self) -> None:
+        self.is_topmost = not self.is_topmost
+        self.root.attributes("-topmost", self.is_topmost)
+        pal = THEMES.get(self.current_theme, THEMES["dark"])
+        self.topmost_btn.configure(
+            text="📌 Unpin" if self.is_topmost else "📌 Pin HUD",
+            bg=pal["accent"] if self.is_topmost else pal["subpanel"],
+            fg="#ffffff" if self.is_topmost else pal["fg"],
+        )
+
+    def on_toggle_compact(self) -> None:
+        self.is_compact = not self.is_compact
+        if self.is_compact:
+            self.sidebar.pack_forget()
+            self.chat_text.pack_forget()
+            self.root.geometry("480x140")
+            self.compact_btn.configure(text="🗖 Expand")
+        else:
+            self.root.geometry("960x620")
+            self.sidebar.pack(side=self.tk.LEFT, fill=self.tk.Y, padx=(0, 6), before=self.chat_frame)
+            self.chat_text.pack(fill=self.tk.BOTH, expand=True, before=self.bottom_bar)
+            self.compact_btn.configure(text="🗕 Compact")
+
+    def on_clipboard_assist(self) -> None:
+        try:
+            clip_text = self.root.clipboard_get().strip()
+        except Exception:
+            clip_text = ""
+        if not clip_text:
+            self.ui_queue.put(("state", (AgentState.IDLE, "Clipboard empty")))
+            return
+        prompt = f"Analyze and assist with this clipboard snippet:\n\n```\n{clip_text[:2000]}\n```"
+        self.prompt_entry.delete(0, self.tk.END)
+        self.prompt_entry.insert(0, clip_text[:80] + ("..." if len(clip_text) > 80 else ""))
+        pinned_sid = self.engine.current_session_id
+
+        def worker() -> None:
+            self.engine.process_prompt(prompt, session_id=pinned_sid)
+            self.ui_queue.put(("turn_done", pinned_sid))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def on_toggle_theme(self) -> None:
         cur = str(self.engine.config.settings.get("theme", "dark"))
@@ -475,11 +565,57 @@ class WindowsTkinterHUD:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def refresh_sessions(self) -> None:
-        self._sessions_cache = self.engine.storage.list_sessions(limit=40)
+    def on_search_sessions(self, _event: Any = None) -> None:
+        q = self.search_entry.get().strip().lower()
         self.session_listbox.delete(0, self.tk.END)
+        self._filtered_sessions = []
         for s in self._sessions_cache:
-            self.session_listbox.insert(self.tk.END, s["title"])
+            title = str(s.get("title", "Session"))
+            if not q or q in title.lower():
+                self._filtered_sessions.append(s)
+                mark = "📌 " if s.get("is_pinned") else ""
+                self.session_listbox.insert(self.tk.END, f"{mark}{title}")
+
+    def refresh_sessions(self) -> None:
+        self._sessions_cache = self.engine.storage.list_sessions(limit=50)
+        self._sessions_cache.sort(key=lambda s: (1 if s.get("is_pinned") else 0, str(s.get("updated_at", ""))), reverse=True)
+        self.on_search_sessions()
+
+    def on_pin_session(self) -> None:
+        sid = self.engine.current_session_id
+        curr = False
+        for s in self._sessions_cache:
+            if s.get("session_id") == sid:
+                curr = bool(s.get("is_pinned", False))
+                break
+        self.engine.storage.pin_session(sid, not curr)
+        self.refresh_sessions()
+
+    def on_rename_session(self) -> None:
+        sid = self.engine.current_session_id
+        cur_title = "Session"
+        for s in self._sessions_cache:
+            if s.get("session_id") == sid:
+                cur_title = s.get("title", "Session")
+                break
+        new_title = self.prompt_entry.get().strip()
+        if not new_title:
+            self.prompt_entry.delete(0, self.tk.END)
+            self.prompt_entry.insert(0, f"New title for: {cur_title}")
+            return
+        self.engine.storage.rename_session(sid, new_title)
+        self.prompt_entry.delete(0, self.tk.END)
+        self.refresh_sessions()
+
+    def on_export_session(self) -> None:
+        sid = self.engine.current_session_id
+        md_text = self.engine.storage.export_session_markdown(sid)
+        out_path = Path.cwd() / f"Sudharshan_Chat_{sid[:8]}.md"
+        try:
+            out_path.write_text(md_text, encoding="utf-8")
+            self.ui_queue.put(("state", (AgentState.IDLE, f"Exported: {out_path.name}")))
+        except Exception as exc:
+            self.ui_queue.put(("state", (AgentState.BLOCKED, f"Export error: {exc}")))
 
     def on_new_session(self) -> None:
         self.engine.new_session()
@@ -491,8 +627,8 @@ class WindowsTkinterHUD:
         if not sel:
             return
         idx = int(sel[0])
-        if 0 <= idx < len(self._sessions_cache):
-            sid = self._sessions_cache[idx]["session_id"]
+        if 0 <= idx < len(self._filtered_sessions):
+            sid = self._filtered_sessions[idx]["session_id"]
             msgs = self.engine.switch_session(sid)
             self.load_messages(msgs)
 
@@ -500,7 +636,7 @@ class WindowsTkinterHUD:
         self.chat_text.configure(state=self.tk.NORMAL)
         self.chat_text.delete("1.0", self.tk.END)
         for m in messages:
-            prefix = "You" if m.get("role") == "user" else "Bajrang AI"
+            prefix = "You" if m.get("role") == "user" else "Sudharshan AI"
             self.chat_text.insert(self.tk.END, f"{prefix}: {m.get('content', '')}\n")
             for r in m.get("results", []):
                 out = r.get("output", "") if isinstance(r, dict) else getattr(r, "output", "")

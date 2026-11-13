@@ -2,14 +2,14 @@
 set -euo pipefail
 
 echo "=================================================================="
-echo "  Bajrang AI Pro (Hardened v3.0) — Fedora Workstation Setup"
+echo "  Sudharshan AI (Alpha v0.9) — Fedora Workstation Setup"
 echo "=================================================================="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="${BAJRANG_INSTALL_DIR:-$HOME/bajrang-ai-pro}"
+PROJECT_DIR="${SUDHARSHAN_INSTALL_DIR:-${BAJRANG_INSTALL_DIR:-$HOME/sudharshan-ai}}"
 mkdir -p "$PROJECT_DIR"
 
-echo "[1/5] Copying Bajrang AI Pro core & Fedora modules into $PROJECT_DIR..."
+echo "[1/5] Copying Sudharshan AI core & Fedora modules into $PROJECT_DIR..."
 for f in bajrang_core.py fedora.py windows.py bajrang_llama32.py bajrang_windows.py requirements_common.txt requirements_fedora.txt README.md SECURITY.md; do
     if [ -f "$SCRIPT_DIR/$f" ]; then
         cp -f "$SCRIPT_DIR/$f" "$PROJECT_DIR/$f"
