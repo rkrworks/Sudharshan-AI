@@ -15,6 +15,7 @@ X.509 Code-Signing Certificate according to Microsoft Authenticode Specification
 import argparse
 import hashlib
 import io
+import os
 import struct
 import sys
 from pathlib import Path
@@ -161,11 +162,11 @@ def sign_pe_file(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Sudharshan AI — Microsoft Authenticode PE Signer")
+    parser = argparse.ArgumentParser(description="Sudharshan AI — Microsoft Authenticode PE Signer (Key-Free CLI / CI Secret Driven)")
     parser.add_argument("input", type=str, help="Input PE executable (.exe, .dll)")
     parser.add_argument("-o", "--output", type=str, default="", help="Output PE executable (defaults to overwriting input)")
-    parser.add_argument("--cert", type=str, default="certificates/Sudharshan_AI_CodeSigning.cer", help="Code signing certificate (.cer or .crt)")
-    parser.add_argument("--key", type=str, default="certificates/Sudharshan_AI_CodeSigning.key", help="Private key (.key)")
+    parser.add_argument("--cert", type=str, default="", help="Code signing certificate (.cer or .crt). Or set CODESIGN_CERT_PATH env var.")
+    parser.add_argument("--key", type=str, default="", help="Private key (.key). Or set CODESIGN_KEY_PATH env var. NEVER commit private keys to git.")
     parser.add_argument("--name", type=str, default="Sudharshan AI Desktop Assistant", help="Program name displayed in UAC / SmartScreen")
     args = parser.parse_args()
 
@@ -174,8 +175,22 @@ def main() -> int:
         print(f"Error: Input file '{inp}' does not exist.")
         return 1
     out = Path(args.output) if args.output else inp
-    cert = Path(args.cert)
-    key = Path(args.key)
+    cert_str = args.cert or os.environ.get("CODESIGN_CERT_PATH", "")
+    key_str = args.key or os.environ.get("CODESIGN_KEY_PATH", "")
+
+    if not cert_str or not key_str:
+        print("Error: Code-signing certificate and private key must be provided via --cert/--key arguments or CODESIGN_CERT_PATH/CODESIGN_KEY_PATH environment variables.")
+        return 1
+
+    cert = Path(cert_str)
+    key = Path(key_str)
+
+    if not cert.is_file():
+        print(f"Error: Certificate file '{cert}' not found.")
+        return 1
+    if not key.is_file():
+        print(f"Error: Private key file '{key}' not found.")
+        return 1
 
     ok = sign_pe_file(inp, out, cert, key, program_name=args.name)
     return 0 if ok else 1

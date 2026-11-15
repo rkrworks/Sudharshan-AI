@@ -240,10 +240,8 @@ class WindowsSmartEnvironmentScanner:
                 "bajrang_core.py",
                 "windows.py",
                 "fedora.py",
-                "bajrang_windows.py",
-                "bajrang_llama32.py",
-                "requirements_common.txt",
-                "requirements_windows.txt",
+                "requirements-common.txt",
+                "requirements-windows.txt",
                 "README.md",
                 "SECURITY.md",
             ):

@@ -13,3 +13,15 @@ skills-lock.json
 index.backup.html
 index.old.html
 release_dist/
+dist/
+certificates/
+*.key
+*.pfx
+*.pem
+*.cer
+*.crt
+*.exe
+*.zip
+*.tar.gz
+prompt_full.txt
+

@@ -20,10 +20,8 @@ CORE_FILES=(
     bajrang_core.py
     fedora.py
     windows.py
-    bajrang_llama32.py
-    bajrang_windows.py
-    requirements_common.txt
-    requirements_fedora.txt
+    requirements-common.txt
+    requirements-fedora.txt
     README.md
     SECURITY.md
 )
@@ -107,8 +105,8 @@ python3 -m venv --system-site-packages "$PROJECT_DIR/.venv"
 source "$PROJECT_DIR/.venv/bin/activate"
 pip install --upgrade pip >/dev/null 2>&1
 
-if [ -f "$PROJECT_DIR/requirements_fedora.txt" ]; then
-    pip install -r "$PROJECT_DIR/requirements_fedora.txt" >/dev/null 2>&1 || true
+if [ -f "$PROJECT_DIR/requirements-fedora.txt" ]; then
+    pip install -r "$PROJECT_DIR/requirements-fedora.txt" >/dev/null 2>&1 || true
 fi
 
 # [5/6] Desktop Launcher & Application Menu Entry

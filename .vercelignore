@@ -6,6 +6,15 @@
 *.bin
 *.key
 *.pem
+*.pfx
+*.cer
+*.crt
+certificates/
+*.exe
+*.zip
+*.tar.gz
+dist/
+release_dist/
 .env*
 __pycache__/
 .venv/

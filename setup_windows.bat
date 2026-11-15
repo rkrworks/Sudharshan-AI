@@ -13,7 +13,7 @@ if "%~1"=="--uninstall" (
     echo [UNINSTALL] Removing Sudharshan AI application files and shortcuts...
     if exist "%USERPROFILE%\Desktop\Sudharshan AI.lnk" del /f /q "%USERPROFILE%\Desktop\Sudharshan AI.lnk"
     if exist "%USERPROFILE%\Desktop\Bajrang AI Pro.lnk" del /f /q "%USERPROFILE%\Desktop\Bajrang AI Pro.lnk"
-    for %%F in (bajrang_core.py bajrang_windows.py windows.py fedora.py bajrang_llama32.py installer_windows.py requirements_windows.txt requirements_common.txt setup_windows.bat Launch_Sudharshan_AI.bat) do (
+    for %%F in (bajrang_core.py windows.py fedora.py installer_windows.py requirements-windows.txt requirements-common.txt setup_windows.bat Launch_Sudharshan_AI.bat) do (
         if exist "%INSTALL_DIR%\%%F" del /f /q "%INSTALL_DIR%\%%F"
     )
     echo [UNINSTALL] Sudharshan AI has been uninstalled. User databases were safely preserved in %INSTALL_DIR%.
@@ -165,7 +165,7 @@ if %ERRORLEVEL% neq 0 (
 
 :: [Step 7] Deploy Files & Create Desktop Shortcut
 echo [7/7] Deploying application files and desktop shortcuts...
-for %%F in (bajrang_core.py bajrang_windows.py windows.py fedora.py bajrang_llama32.py installer_windows.py requirements_windows.txt requirements_common.txt README.md SECURITY.md setup_windows.bat) do (
+for %%F in (bajrang_core.py windows.py fedora.py installer_windows.py requirements-windows.txt requirements-common.txt README.md SECURITY.md setup_windows.bat) do (
     if exist "%~dp0%%F" copy /y "%~dp0%%F" "%INSTALL_DIR%\%%F" >nul
 )
 

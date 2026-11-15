@@ -1,6 +1,31 @@
-# Security Architecture & Remediation Report — Bajrang AI Pro (Hardened v3.0)
+# Security Architecture & Key Rotation Advisory — Sudharshan AI (Alpha v0.9)
 
-This document details the security controls enforced in **Bajrang AI Pro** and maps each of the 14 Critical (`C1`–`C6`) and High-Priority (`H1`–`H8`) audit findings to its code-level remediation.
+This document details the security controls enforced in **Sudharshan AI (Alpha v0.9)** (formerly Bajrang AI Pro) and documents key rotation advisories alongside each of the 14 Critical (`C1`–`C6`) and High-Priority (`H1`–`H8`) security remediations.
+
+---
+
+## 0. Critical Security Advisory: Leaked Authenticode Private Key & Rotation Notice
+
+> [!CAUTION]
+> **COMPROMISED SIGNING KEY ADVISORY**: A development RSA-2048 Authenticode code-signing key pair and PKCS#12 bundle (`Sudharshan_AI_CodeSigning.key` and `Sudharshan_AI_CodeSigning.pfx`) were inadvertently committed to the repository in commit `f2da283` on **November 13, 2026, 22:04 IST**.
+>
+> **Exposure Window**: The commit remained accessible in git history for approximately 44 hours.
+>
+> **Action Taken & Invariant**:
+> 1. The key, certificate, and bundle files were completely purged from the working tree and git tracking.
+> 2. `sign_windows_executable.py` has been refactored into a key-free CLI tool that strictly reads keys only from environment variables (`CODESIGN_KEY_PATH`, `CODESIGN_CERT_PATH`) or command-line parameters.
+> 3. `.gitignore` and `.vercelignore` strictly block all `certificates/`, `*.key`, `*.pfx`, `*.pem`, `*.cer`, and `*.crt` files from ever entering git tracking.
+> 4. **Permanent Invalidation**: This development key is declared **permanently compromised and burned**. It must never be trusted or reused for production code signing or license validation.
+>
+> **User Manual Git History Scrubbing Action**:
+> Because the commit `f2da283` was pushed to remote `origin`, simply deleting files does not rewrite previous git commits. To permanently excise the secret from remote history, the repository administrator should run:
+> ```bash
+> git filter-repo --path certificates --invert-paths
+> git push --force origin main
+> ```
+> Alternatively, rotate to an officially purchased EV/OV code-signing certificate stored in GitHub Actions Secrets (`AZURE_KEY_VAULT` or CI secret).
+
+---
 
 ## 1. Critical Audit Remediations (`C1`–`C6`)
 

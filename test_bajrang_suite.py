@@ -38,12 +38,30 @@ class TestBajrangAuditRemediations(unittest.TestCase):
 
     def test_c2_no_client_side_credentials_or_key_minting(self):
         base = Path(__file__).resolve().parent
-        for rel in ("index.html", "web/index.html", "portal_app.js"):
-            content = (base / rel).read_text(encoding="utf-8")
-            self.assertNotIn("OWNER_EMAIL_HASH", content, f"C2: {rel} must not contain OWNER_EMAIL_HASH")
-            self.assertNotIn("OWNER_DEFAULT_PASSKEY", content, f"C2: {rel} must not contain OWNER_DEFAULT_PASSKEY")
-            self.assertNotIn("generateBajrangLicenseKey", content, f"C2: {rel} must not mint keys in client JS")
-            self.assertNotIn("BajrangOwner@9392", content, f"C2: {rel} must not contain plaintext passkey")
+        checked_count = 0
+        forbidden_tokens = (
+            "OWNER_EMAIL_HASH",
+            "OWNER_DEFAULT_PASSKEY",
+            "generateBajrangLicenseKey",
+            "BajrangOwner@9392",
+            "SECRET" + "_SALT",
+            "BAJRANG_ADMIN_TOKEN",
+        )
+        for ext in ("*.html", "*.js"):
+            for fpath in base.glob(f"**/{ext}"):
+                rel = str(fpath.relative_to(base))
+                if any(part.startswith(".") or part in ("__pycache__", "release_dist", "dist", "node_modules") for part in fpath.parts):
+                    continue
+                if rel in ("index.backup.html", "index.old.html"):
+                    continue
+                content = fpath.read_text(encoding="utf-8", errors="replace")
+                checked_count += 1
+                for token in forbidden_tokens:
+                    self.assertNotIn(token, content, f"C2: {rel} must not contain forbidden secret/minting token '{token}'")
+
+        self.assertGreaterEqual(checked_count, 5, "C2: Must verify at least 5 active HTML/JS files, never pass silently")
+        self.assertTrue((base / "index.html").is_file(), "C2: index.html must exist")
+        self.assertTrue((base / "web" / "index.html").is_file(), "C2: web/index.html must exist")
 
     def test_c3_command_allowlist_trampoline_blocked(self):
         guard = bajrang_core.SafetyGuard(strict_allowlist=True)
@@ -147,7 +165,8 @@ class TestBajrangAuditRemediations(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = fedora.export_modular_project(Path(tmp) / "exported")
             self.assertTrue((out_dir / "fedora.py").is_file(), "H1: fedora.py must be exported")
-            self.assertTrue((out_dir / "bajrang_llama32.py").is_file(), "H1: bajrang_llama32.py must be exported")
+            self.assertTrue((out_dir / "bajrang_core.py").is_file(), "H1: bajrang_core.py must be exported")
+            self.assertTrue((out_dir / "windows.py").is_file(), "H1: windows.py must be exported")
             self.assertTrue((out_dir / "run.sh").is_file(), "H1: run.sh must be exported")
             ext_js = (out_dir / "gnome-extension" / "extension.js").read_text(encoding="utf-8")
             self.assertIn(str(out_dir / "fedora.py"), ext_js, "H1: GNOME extension must invoke resolved fedora.py")
@@ -155,6 +174,7 @@ class TestBajrangAuditRemediations(unittest.TestCase):
         setup_sh = (Path(__file__).resolve().parent / "setup_fedora.sh").read_text(encoding="utf-8")
         self.assertIn("fedora.py", setup_sh)
         self.assertIn("bajrang_core.py", setup_sh)
+        self.assertIn("requirements-fedora.txt", setup_sh)
 
     def test_h2_emergency_stop_aborts_streams_and_kill_socket(self):
         with tempfile.TemporaryDirectory() as tmp:

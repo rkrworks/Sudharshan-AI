@@ -491,9 +491,7 @@ export default class BajrangExtension extends Extension {{
 def export_modular_project(target_dir: Path) -> Path:
     """
     H1 Remediation:
-    Guarantees that `bajrang_core.py`, `fedora.py`, and `bajrang_llama32.py` are all written into
-    `target_dir` even when invoked from a directory where only `bajrang_llama32.py` or `fedora.py`
-    was copied.
+    Guarantees that `bajrang_core.py`, `fedora.py`, and `windows.py` are all written into `target_dir`.
     """
     target_dir.mkdir(parents=True, exist_ok=True)
     src_dir = Path(__file__).resolve().parent
@@ -503,13 +501,10 @@ def export_modular_project(target_dir: Path) -> Path:
     if core_src.is_file() and core_src.resolve() != (target_dir / "bajrang_core.py").resolve():
         shutil.copy2(core_src, target_dir / "bajrang_core.py")
 
-    for alias_name in ("fedora.py", "bajrang_llama32.py"):
-        dest_p = target_dir / alias_name
-        cand_p = src_dir / alias_name
-        source_to_use = cand_p if cand_p.is_file() else self_file
-        if source_to_use.resolve() != dest_p.resolve():
-            shutil.copy2(source_to_use, dest_p)
-        dest_p.chmod(0o755)
+    dest_fedora = target_dir / "fedora.py"
+    if self_file.resolve() != dest_fedora.resolve():
+        shutil.copy2(self_file, dest_fedora)
+    dest_fedora.chmod(0o755)
 
     win_src = src_dir / "windows.py"
     if win_src.is_file() and win_src.resolve() != (target_dir / "windows.py").resolve():
@@ -762,7 +757,6 @@ def run_self_tests() -> int:
         print("[Test 6/7] Verifying H1 GNOME Shell Extension & Project Exporter...")
         proj_dir = export_modular_project(root / "exported")
         assert (proj_dir / "fedora.py").is_file(), "H1: fedora.py must exist in exported project"
-        assert (proj_dir / "bajrang_llama32.py").is_file()
         assert (proj_dir / "run.sh").is_file()
         ext_js = (proj_dir / "gnome-extension" / "extension.js").read_text(encoding="utf-8")
         assert str(proj_dir / "fedora.py") in ext_js, "H1: GNOME extension must point at resolved fedora.py path"
