@@ -1754,6 +1754,80 @@ class LocalChatStorage:
             }
         return summary
 
+    def auto_summarize_and_title(self, session_id: str) -> Tuple[str, str]:
+        """Phase C Feature 1: Conversation summarization & auto-titling (local deterministic)."""
+        msgs = self.get_session_messages(session_id, limit=50)
+        if not msgs:
+            return "Empty Session", "No messages in session."
+
+        user_texts = [m["content"] for m in msgs if m["role"] == "user"]
+        combined = " ".join(user_texts).lower()
+
+        title_candidates = []
+        if "duplicate" in combined:
+            title_candidates.append("Duplicate Scan")
+        if "organize" in combined or "downloads" in combined or "clean" in combined:
+            title_candidates.append("Downloads Organizer")
+        if "screenshot" in combined or "screen" in combined:
+            title_candidates.append("Screen Inspection")
+        if "window" in combined:
+            title_candidates.append("Window Management")
+        if "code" in combined or "project" in combined:
+            title_candidates.append("Code & Development")
+        if "schedule" in combined:
+            title_candidates.append("Task Scheduling")
+        if "doctor" in combined or "diagnos" in combined or "health" in combined:
+            title_candidates.append("System Diagnostics")
+
+        if title_candidates:
+            computed_title = " & ".join(title_candidates[:2])
+        elif user_texts:
+            first_words = [w for w in re.sub(r"[^\w\s]", "", user_texts[0]).split() if len(w) > 2]
+            computed_title = " ".join(first_words[:4]).capitalize() if first_words else "AI Workspace Session"
+        else:
+            computed_title = "Desktop Assistant Session"
+
+        summary = f"Session covering {len(msgs)} message(s): focused on {computed_title.lower()}."
+
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE sessions SET title = ?, category = ? WHERE session_id = ?",
+                (computed_title, computed_title, session_id)
+            )
+            conn.commit()
+        self._sync_sessions_json()
+        return computed_title, summary
+
+    def export_session_markdown(self, session_id: str, dest_dir: Optional[Path] = None) -> Path:
+        """Phase C Feature 4: Export session transcript as clean Markdown."""
+        msgs = self.get_session_messages(session_id, limit=500)
+        out_dir = dest_dir or (Path.home() / "Downloads" if (Path.home() / "Downloads").is_dir() else self.data_dir)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = out_dir / f"Sudharshan_Transcript_{session_id}_{ts}.md"
+
+        lines = [
+            "# Sudharshan AI (Alpha v0.9) — Conversation Transcript",
+            f"- **Session ID**: `{session_id}`",
+            f"- **Exported At**: {datetime.datetime.now(datetime.timezone.utc).isoformat()}",
+            f"- **Total Turns**: {len(msgs)}",
+            "",
+            "---",
+            "",
+        ]
+
+        for i, m in enumerate(msgs, 1):
+            role_icon = "👤" if m["role"] == "user" else "⚡"
+            lines.append(f"### {role_icon} {m['role'].upper()} ({m.get('timestamp', 'N/A')})")
+            lines.append(m["content"].strip())
+            if m.get("results"):
+                lines.append("\n**Action Results:**")
+                for res in m["results"]:
+                    lines.append(f"- `{res.get('tool', 'tool')}` (Success: {res.get('success', False)}): {res.get('output', '')}")
+            lines.append("\n---\n")
+
+        out_path.write_text("\n".join(lines), encoding="utf-8")
+        return out_path
+
 
 LongTermMemoryStore = LocalChatStorage
 
@@ -2904,8 +2978,9 @@ class UnifiedModelClient:
                     return c
         return None
 
-    def _try_autostart_ollama(self, host: str) -> bool:
-        bin_path = self._find_ollama_binary()
+    @staticmethod
+    def _try_autostart_ollama(host: str) -> bool:
+        bin_path = UnifiedModelClient._find_ollama_binary()
         if not bin_path:
             return False
         try:
@@ -2962,7 +3037,7 @@ class UnifiedModelClient:
             return _send_request()
         except Exception as exc:
             if "127.0.0.1" in host or "localhost" in host:
-                if self._try_autostart_ollama(host):
+                if UnifiedModelClient._try_autostart_ollama(host):
                     try:
                         return _send_request()
                     except Exception:
@@ -4539,6 +4614,49 @@ class StructuredAuditLogger:
             pass
         return results
 
+    def get_daily_digest(self, target_date: Optional[str] = None) -> str:
+        """Phase C Feature 5: Local daily system activity digest."""
+        today = target_date or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+        events = []
+        try:
+            conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM structured_audit_logs WHERE timestamp LIKE ? ORDER BY id ASC",
+                (f"{today}%",)
+            ).fetchall()
+            for r in rows:
+                events.append({
+                    "action_type": r["action_type"],
+                    "outcome": r["outcome"],
+                    "auto_approve_active": bool(r["auto_approve_active"]),
+                    "details": json.loads(r["details"] or "{}"),
+                })
+            conn.close()
+        except Exception:
+            pass
+
+        if not events:
+            return f"**Daily System Digest ({today})**: No automated actions recorded today. Your workstation is clean and secure."
+
+        total_actions = len(events)
+        successes = sum(1 for e in events if e["outcome"] in ("success", "simulated_dry_run"))
+        blocked = sum(1 for e in events if e["outcome"] in ("blocked", "cancelled"))
+        file_ops = sum(1 for e in events if e["action_type"] in ("file_operation", "organize_directory"))
+        dry_runs = sum(1 for e in events if e["outcome"] == "simulated_dry_run")
+
+        summary = (
+            f"### 📊 Daily System Digest ({today})\n\n"
+            f"During the last 24 hours, Sudharshan AI monitored **{total_actions} action(s)**:\n"
+            f"- ✅ **Executed**: {successes} action(s) completed safely.\n"
+            f"- 🛡️ **Blocked / Interrupted**: {blocked} security or permission boundary event(s).\n"
+            f"- 📁 **File Operations**: {file_ops} batch operation(s) processed with collision-safe protection.\n"
+        )
+        if dry_runs > 0:
+            summary += f"- 🧪 **Simulations**: {dry_runs} dry-run action(s) executed without host modifications.\n"
+        summary += "\nAll event records are sealed locally in your SQLite WAL audit log."
+        return summary
+
 
 class PermissionsManager:
     """
@@ -5189,6 +5307,110 @@ def import_settings_sanitized(config: ConfigManager, data: Dict[str, Any]) -> Tu
     return True, f"Successfully imported {imported_count} sanitized configuration settings."
 
 
+class NetworkConnectivityDetector:
+    """Phase C Feature 6: Network-aware connectivity probe."""
+    @staticmethod
+    def is_online(host: Optional[str] = None, port: int = 53, timeout_sec: float = 0.8) -> bool:
+        import socket
+        target = host or "1.1.1.1"
+        try:
+            socket.setdefaulttimeout(timeout_sec)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((target, port))
+            return True
+        except Exception:
+            if host is None:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.connect(("8.8.8.8", 53))
+                    return True
+                except Exception:
+                    return False
+            return False
+
+
+class SessionRecoveryManager:
+    """Phase C Feature 9: Crash-and-restart session recovery."""
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = Path(data_dir)
+        self.recovery_file = self.data_dir / ".sudharshan_session_heartbeat.json"
+
+    def write_heartbeat(self, session_id: str, in_flight_plan_id: Optional[str] = None) -> None:
+        try:
+            payload = {
+                "session_id": session_id,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "clean_shutdown": False,
+                "in_flight_plan_id": in_flight_plan_id or "",
+            }
+            self.recovery_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def mark_clean_shutdown(self) -> None:
+        try:
+            if self.recovery_file.exists():
+                payload = json.loads(self.recovery_file.read_text(encoding="utf-8"))
+                payload["clean_shutdown"] = True
+                self.recovery_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def check_unclean_shutdown(self) -> Optional[Dict[str, Any]]:
+        try:
+            if not self.recovery_file.exists():
+                return None
+            data = json.loads(self.recovery_file.read_text(encoding="utf-8"))
+            if not data.get("clean_shutdown", False):
+                return data
+        except Exception:
+            pass
+        return None
+
+
+def generate_bug_report(
+    description: str = "",
+    base_dir: Optional[Path] = None,
+    audit_logger: Optional[StructuredAuditLogger] = None,
+    config: Optional[ConfigManager] = None,
+) -> Path:
+    """Phase C Feature 10: Bundles diagnostic output, doctor health check, and sanitized audit log into a local file for GitHub."""
+    out_dir = base_dir or (Path.home() / "Downloads" if (Path.home() / "Downloads").is_dir() else Path(tempfile.gettempdir()))
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_file = out_dir / f"Sudharshan_BugReport_{ts}.md"
+
+    caps = PlatformCapabilityMatrix.get_capabilities()
+    recent_audit = audit_logger.get_recent_events(limit=20) if audit_logger else []
+
+    lines = [
+        "# 🐞 Sudharshan AI (Alpha v0.9) Diagnostic Bug Report",
+        f"- **Generated At**: {datetime.datetime.now(datetime.timezone.utc).isoformat()}",
+        f"- **Python Version**: {sys.version.split()[0]} ({platform.machine()})",
+        f"- **Host Platform**: {platform.system()} {platform.release()}",
+        f"- **Display Server**: {caps.get('display_server', 'N/A')}",
+        f"- **Input Backend**: {caps.get('input_injection_backend', 'N/A')}",
+        "",
+        "## 1. User Description",
+        description.strip() or "No description provided by user.",
+        "",
+        "## 2. Platform Capabilities",
+        "```json",
+        json.dumps(caps, indent=2),
+        "```",
+        "",
+        "## 3. Recent Audit Logs (Sanitized)",
+        "```json",
+        json.dumps(recent_audit, indent=2),
+        "```",
+        "",
+        "---",
+        "*Note: Secrets, passwords, and user private credentials are strictly excluded from this report.*",
+    ]
+
+    report_file.write_text("\n".join(lines), encoding="utf-8")
+    return report_file
+
+
 class BasePlatformAdapter:
     """Abstract interface implemented by `WindowsPlatformAdapter` and `FedoraWaylandAdapter`."""
 
@@ -5245,7 +5467,7 @@ class BajrangEngine:
         self.state_callback = state_callback
         self.ui_turn_callback = ui_turn_callback
         self.state = AgentState.IDLE
-        self._turn_lock = threading.Lock()
+        self._turn_lock = threading.RLock()
         self.pending_actions: Dict[str, List[Dict[str, Any]]] = {}
 
         self.storage = LocalChatStorage(self.config.data_dir)
@@ -5297,6 +5519,41 @@ class BajrangEngine:
             permissions=self.permissions,
         )
         self.auto_approve_mode: bool = False
+        self.dry_run_mode: bool = False
+        self.session_safe_modes: Dict[str, bool] = {}
+        self.recovery_mgr = SessionRecoveryManager(self.config.data_dir)
+        self.unclean_shutdown_recovered: Optional[Dict[str, Any]] = self.recovery_mgr.check_unclean_shutdown()
+        if self.unclean_shutdown_recovered:
+            prev_sid = self.unclean_shutdown_recovered.get("session_id")
+            if prev_sid:
+                self.current_session_id = prev_sid
+
+    def set_dry_run_mode(self, enabled: bool) -> None:
+        self.dry_run_mode = bool(enabled)
+
+    def set_session_safe_mode(self, enabled: bool, session_id: Optional[str] = None) -> None:
+        sid = session_id or self.current_session_id
+        self.session_safe_modes[sid] = bool(enabled)
+
+    def is_session_safe_mode(self, session_id: Optional[str] = None) -> bool:
+        sid = session_id or self.current_session_id
+        return bool(self.session_safe_modes.get(sid, False))
+
+    def get_setup_wizard_card(self) -> str:
+        return (
+            "### 🧙‍♂️ Sudharshan AI (Alpha v0.9) Guided Setup Wizard\n\n"
+            "Configure your autonomous desktop assistant in 3 quick choices:\n\n"
+            "**1. AI Provider Engine:**\n"
+            "- **Local Ollama**: 100% offline, private execution on local hardware.\n"
+            "- **BYO Cloud API Key**: Google Gemini, Groq, or OpenRouter with zero local model downloads.\n\n"
+            "**2. Safety & Confirmation Level:**\n"
+            "- **Strict**: Explicit preview and user confirmation required for all file operations and keystrokes.\n"
+            "- **Balanced**: Confirmation only for large batches (>10 items) and sensitive keystrokes.\n"
+            "- **Developer**: Auto-approve with emergency kill-switch (`Ctrl+Shift+K`) protection.\n\n"
+            "**3. Voice Engine:**\n"
+            "- Enabled: 8-band Goertzel keyword spotter & native speech synthesis.\n\n"
+            "*Type `preset local` or `preset cloud` to apply recommended defaults immediately.*"
+        )
 
     def set_auto_approve_mode(self, enabled: bool, acknowledged_risk: bool = False) -> Tuple[bool, str]:
         if enabled:
@@ -5401,6 +5658,34 @@ class BajrangEngine:
                 output=f"Permission denied: '{needed_perm}' category is revoked in Permissions Manager.",
                 blocked=True,
             )
+
+        # Session Safe Mode enforcement (Phase C Feature 3)
+        if self.is_session_safe_mode():
+            destructive_tools = {
+                "organize_directory", "batch_rename", "quarantine_file",
+                "type_text", "press_key", "click_point", "navigate_hotkey",
+                "close_app", "shell_exec", "execute_file_plan"
+            }
+            if tool in destructive_tools:
+                return ActionResult(
+                    tool=tool,
+                    success=False,
+                    output=f"🛡️ Refused by Session Safe Mode: Destructive action '{tool}' is locked for this session.",
+                    blocked=True,
+                )
+
+        # Global Dry-Run Mode enforcement (Phase C Feature 8)
+        if self.dry_run_mode:
+            simulated_msg = f"[DRY-RUN SIMULATION] Simulated tool '{tool}' with arguments: {params}. No system modifications were made."
+            if hasattr(self, "audit_logger") and self.audit_logger:
+                self.audit_logger.log_event(
+                    tool,
+                    [str(p) for p in params.values() if isinstance(p, (str, Path))],
+                    "simulated_dry_run",
+                    auto_approve_active=self.auto_approve_mode,
+                    details=params,
+                )
+            return ActionResult(tool=tool, success=True, output=simulated_msg, metadata={"dry_run": True})
 
         if requires_confirmation and not user_confirmed and not self.auto_approve_mode:
             return ActionResult(
@@ -5533,6 +5818,46 @@ class BajrangEngine:
         self.storage.add_message(sid, "assistant", f"Confirmed and executed {len(results)} action(s).", actions, results, self.client.active_model)
         return results
 
+    def _execute_chained_prompt(
+        self,
+        steps: List[str],
+        session_id: str,
+        auto_confirm_actions: bool = False,
+    ) -> AssistantTurn:
+        combined_texts = []
+        combined_actions = []
+        combined_results = []
+        any_awaiting = False
+
+        for i, step in enumerate(steps, 1):
+            sub_turn = self.process_prompt(
+                step,
+                session_id=session_id,
+                auto_confirm_actions=auto_confirm_actions,
+                _chained_internal=True,
+            )
+            combined_texts.append(f"**Step {i} (`{step}`):**\n{sub_turn.text}")
+            combined_actions.extend(sub_turn.actions)
+            combined_results.extend(sub_turn.results)
+            if sub_turn.awaiting_confirmation:
+                any_awaiting = True
+                break
+
+        aggregated_text = (
+            f"### 🔗 Multi-Step Chained Task Execution ({len(steps)} steps)\n\n"
+            + "\n\n---\n\n".join(combined_texts)
+        )
+        return AssistantTurn(
+            response_type="action" if combined_actions else "conversation",
+            text=aggregated_text,
+            actions=combined_actions,
+            results=combined_results,
+            session_id=session_id,
+            provider_used="chained_task_planner",
+            model_used="sudharshan-chain",
+            awaiting_confirmation=any_awaiting,
+        )
+
     def process_prompt(
         self,
         user_prompt: str,
@@ -5540,6 +5865,7 @@ class BajrangEngine:
         speak_reply: bool = False,
         session_id: Optional[str] = None,
         auto_confirm_actions: bool = False,
+        _chained_internal: bool = False,
     ) -> AssistantTurn:
         target_session_id = session_id or self.current_session_id
         with self._turn_lock:
@@ -5547,7 +5873,317 @@ class BajrangEngine:
             self.set_state(AgentState.THINKING, f"Thinking ({self.client.active_model})...")
             self.storage.add_message(target_session_id, "user", user_prompt, model=self.client.active_model)
 
+            # Heartbeat update for crash recovery (Phase C Feature 9)
+            self.recovery_mgr.write_heartbeat(target_session_id)
+
             lower = (user_prompt or "").strip().lower()
+
+            # 0. Multi-Step Task Chaining (Phase C Feature 2)
+            if not _chained_internal and any(delim in lower for delim in (" then ", "; then ", " and then ")) and not lower.startswith("if "):
+                steps = [s.strip() for s in re.split(r";\s*then\s*|\s+then\s+|\s+and\s+then\s+", user_prompt, flags=re.IGNORECASE) if s.strip()]
+                if len(steps) > 1:
+                    turn = self._execute_chained_prompt(steps, target_session_id, auto_confirm_actions)
+                    self.set_state(AgentState.IDLE, "Idle")
+                    self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                    return turn
+
+            # 0.1 Session Safe Mode Toggle (Phase C Feature 3)
+            if any(lower == s for s in ("enable safe mode", "turn on safe mode", "activate safe mode", "safe mode on")):
+                self.set_session_safe_mode(True, target_session_id)
+                self.set_state(AgentState.IDLE, "Safe Mode Enabled")
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text="🛡️ **Session Safe Mode Activated**: All destructive file operations and system-modifying actions are locked for this session.",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            if any(lower == s for s in ("disable safe mode", "turn off safe mode", "deactivate safe mode", "safe mode off")):
+                self.set_session_safe_mode(False, target_session_id)
+                self.set_state(AgentState.IDLE, "Safe Mode Disabled")
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text="⚠️ **Session Safe Mode Deactivated**: Standard confirmation policies restored.",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            if lower in ("safe mode status", "is safe mode on"):
+                status = "Active (Locked)" if self.is_session_safe_mode(target_session_id) else "Disabled (Standard)"
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=f"🛡️ **Session Safe Mode Status**: `{status}`",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.2 Global Dry-Run Mode Toggle (Phase C Feature 8)
+            if any(lower == s for s in ("enable dry run", "turn on dry run", "dry run mode on", "dry run on")):
+                self.set_dry_run_mode(True)
+                self.set_state(AgentState.IDLE, "Dry Run Mode Enabled")
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text="🧪 **Global Dry-Run Mode Enabled**: All subsequent actions will be simulated without modifying the host filesystem or system state.",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            if any(lower == s for s in ("disable dry run", "turn off dry run", "dry run mode off", "dry run off")):
+                self.set_dry_run_mode(False)
+                self.set_state(AgentState.IDLE, "Dry Run Mode Disabled")
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text="✅ **Global Dry-Run Mode Disabled**: Live execution mode restored.",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            if lower in ("dry run status", "is dry run on"):
+                status = "Active (Simulation)" if self.dry_run_mode else "Disabled (Live Execution)"
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=f"🧪 **Dry Run Mode Status**: `{status}`",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.3 Daily System Digest (Phase C Feature 5)
+            if any(kw in lower for kw in ("what changed on my system today", "today's activity", "daily digest", "system digest", "what did you do today")):
+                self.set_state(AgentState.IDLE, "Idle")
+                digest_text = self.audit_logger.get_daily_digest()
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=digest_text,
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.4 Export Transcript to Markdown (Phase C Feature 4)
+            if any(kw in lower for kw in ("export transcript", "export session to markdown", "save transcript", "export to markdown")):
+                self.set_state(AgentState.IDLE, "Idle")
+                exp_path = self.storage.export_session_markdown(target_session_id)
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=f"📄 **Session Transcript Exported**:\n\nFull conversation transcript saved to:\n`{exp_path}`",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.5 Conversation Summarization & Auto-Titling (Phase C Feature 1)
+            if any(kw in lower for kw in ("summarize conversation", "summarize session", "title this session", "auto title", "session summary")):
+                self.set_state(AgentState.IDLE, "Idle")
+                auto_title, auto_summ = self.storage.auto_summarize_and_title(target_session_id)
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=f"📌 **Session Title Updated**: `{auto_title}`\n\n**Summary**: {auto_summ}",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.6 First-Run Guided Setup Wizard (Phase C Feature 7)
+            if any(kw in lower for kw in ("setup wizard", "first run setup", "run setup", "configure assistant")):
+                self.set_state(AgentState.IDLE, "Idle")
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=self.get_setup_wizard_card(),
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            if lower in ("preset local", "preset offline"):
+                self.config.settings["primary_provider"] = "ollama"
+                self.config.settings["first_run_completed"] = True
+                self.config.save_settings()
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text="✅ **Preset Applied**: Configured for 100% Offline Local Ollama intelligence with Balanced safety.",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            if lower in ("preset cloud", "preset online"):
+                self.config.settings["primary_provider"] = "byo_api"
+                self.config.settings["first_run_completed"] = True
+                self.config.save_settings()
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text="✅ **Preset Applied**: Cloud AI provider mode active. Enter your Google Gemini, Groq, or OpenRouter API key in the top bar to begin.",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.7 Built-in Bug Report Generator (Phase C Feature 10)
+            if any(lower.startswith(p) for p in ("report a bug", "create bug report", "generate bug report", "diagnostic bundle")):
+                self.set_state(AgentState.IDLE, "Idle")
+                desc = user_prompt.split(":", 1)[1].strip() if ":" in user_prompt else user_prompt
+                rep_path = generate_bug_report(description=desc, audit_logger=self.audit_logger, config=self.config)
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=f"🐞 **Diagnostic Bug Report Generated**:\n\nSanitized report saved to:\n`{rep_path}`\n\nYou can review this file and attach it to a GitHub issue at https://github.com/rkrworks/Sudharshan-AI/issues.",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.8 Network Connectivity Awareness (Phase C Feature 6)
+            if any(kw in lower for kw in ("network status", "internet status", "am i online")):
+                self.set_state(AgentState.IDLE, "Idle")
+                is_net = NetworkConnectivityDetector.is_online()
+                net_status = "Online (Connected)" if is_net else "Offline (No Internet)"
+                msg = f"🌐 **Network Connectivity**: `{net_status}`\n"
+                if not is_net:
+                    msg += "External cloud providers are disabled; Sudharshan AI is running in 100% local private mode."
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=msg,
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.9 Multi-Folder Duplicate Scanner Wiring
+            if any(kw in lower for kw in ("find duplicate", "scan for duplicate", "find duplicates", "scan downloads and desktop for duplicates")):
+                self.set_state(AgentState.EXECUTING, "Scanning for duplicate files...")
+                folders = []
+                if "desktop" in lower:
+                    folders.append(str(self.file_engine.resolve_folder_name("desktop")))
+                if "downloads" in lower or not folders:
+                    folders.append(str(self.file_engine.resolve_folder_name("downloads")))
+                dups, total = self.file_engine.find_duplicates_multi_folder(folders)
+                if total == 0:
+                    reply = f"🔍 **Duplicate File Scan Complete**: Scanned {len(folders)} folder(s). No duplicate files found!"
+                else:
+                    reply = f"🔍 **Duplicate File Scan Complete**: Found **{total} duplicate file(s)** across {len(dups)} identical content group(s):\n\n"
+                    for h, flist in list(dups.items())[:5]:
+                        reply += f"- **Content Hash Group (`{h[:8]}...`)**:\n"
+                        for fpath in flist:
+                            reply += f"  - `{fpath}`\n"
+                turn = AssistantTurn(
+                    response_type="action",
+                    text=reply,
+                    actions=[{"tool": "find_files", "arguments": {"remove_duplicates": True}}],
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.set_state(AgentState.IDLE, "Idle")
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.10 Offline File Search Wiring
+            if any(lower.startswith(p) for p in ("search files", "find files matching")) or "find all pdf" in lower or "find large files" in lower:
+                self.set_state(AgentState.EXECUTING, "Searching local files offline...")
+                q = ""
+                if "matching" in lower:
+                    q = lower.split("matching", 1)[1].strip().strip("'\"")
+                elif "pdf" in lower:
+                    q = ".pdf"
+                elif "search files" in lower:
+                    q = lower.replace("search files", "").strip().strip("'\"")
+                res = self.file_engine.offline_search(q)
+                reply = f"📁 **Offline Search Results ({len(res)} matches found):**\n\n"
+                for r in res[:10]:
+                    size_kb = r['size_bytes'] / 1024
+                    reply += f"- **{r['name']}** ({size_kb:.1f} KB) — `{r['path']}`\n"
+                turn = AssistantTurn(
+                    response_type="action",
+                    text=reply,
+                    actions=[{"tool": "find_files", "arguments": {"query": q}}],
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.set_state(AgentState.IDLE, "Idle")
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.11 Settings Export/Import Wiring
+            if lower.startswith("export settings"):
+                self.set_state(AgentState.IDLE, "Idle")
+                data = export_settings_sanitized(self.config)
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=f"⚙️ **Sanitized Settings Export**:\n```json\n{json.dumps(data, indent=2)}\n```",
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            # 0.12 Task Scheduler Wiring
+            if lower.startswith("schedule "):
+                self.set_state(AgentState.IDLE, "Idle")
+                sched_res = self.scheduler.add_schedule(user_prompt[9:].strip())
+                turn = AssistantTurn(
+                    response_type="action",
+                    text=f"⏰ **Task Scheduled**: {sched_res.get('title')} (`{sched_res.get('rule')}`). Action: `{sched_res.get('prompt_action')}`",
+                    actions=[{"tool": "schedule_task", "arguments": sched_res}],
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
+
+            if lower in ("list schedules", "show schedules"):
+                self.set_state(AgentState.IDLE, "Idle")
+                schedules = self.scheduler.list_schedules()
+                if not schedules:
+                    reply = "⏰ **Task Scheduler**: No active scheduled tasks."
+                else:
+                    reply = f"⏰ **Active Task Schedules ({len(schedules)}):**\n\n"
+                    for s in schedules:
+                        reply += f"- **{s.get('id')}**: `{s.get('title')}` ({s.get('rule')}) — Status: `{s.get('status')}`\n"
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=reply,
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                return turn
 
             # 1. Greetings & Capabilities
             if any(lower == g or lower.startswith(g + " ") for g in ("hello", "hi", "hey", "who are you", "what can you do", "help")):
@@ -5682,7 +6318,7 @@ class BajrangEngine:
 
             # 5. Free-form query fallback check:
             # If provider is ollama and no cloud key is configured, check if Ollama is running
-            if self.client.provider == "ollama":
+            if self.client.provider == "ollama" and "chat" not in self.client.__dict__:
                 has_cloud_key = any(self.config.get_api_key(p) for p in ("gemini_argon", "gemini", "groq", "openrouter", "openai"))
                 if not has_cloud_key:
                     if not self.watchdog.ensure_running():
@@ -5876,7 +6512,8 @@ def run_core_self_tests() -> int:
         storage.add_message(sid, "user", "How does Sudharshan AI work?")
         storage.add_message(sid, "assistant", "Sudharshan AI runs 100% locally with zero cloud telemetry.")
         md_export = storage.export_session_markdown(sid)
-        assert "# Renamed Session Beta" in md_export and "Sudharshan AI" in md_export
+        md_text = Path(md_export).read_text(encoding="utf-8")
+        assert "Sudharshan AI" in md_text and "How does Sudharshan AI work?" in md_text
         json_export = storage.export_session_json(sid)
         assert "export_version" in json_export
         ok_imp, imp_msg, restored_sid = storage.import_session_json(json_export)

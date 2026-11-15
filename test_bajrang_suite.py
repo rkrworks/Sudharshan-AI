@@ -2,6 +2,7 @@
 import inspect
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -539,6 +540,144 @@ class TestBajrangAuditRemediations(unittest.TestCase):
             self.assertTrue(engine.auto_approve_mode)
             engine.trigger_emergency_kill()
             self.assertFalse(engine.auto_approve_mode, "Emergency kill must immediately disable auto-approve mode")
+
+    def test_phase_a_regression_ollama_autostart_and_offline_card(self):
+        """Phase A Regression Test: Ensure Ollama watchdog and autostart handle offline states safely."""
+        # 1. Direct watchdog call with dead host
+        watchdog = bajrang_core.OllamaWatchdogManager(ollama_host="http://127.0.0.1:59999")
+        res_watchdog = watchdog.ensure_running()
+        self.assertIsInstance(res_watchdog, bool)
+        self.assertFalse(res_watchdog, "Watchdog on dead port must return False without raising TypeError")
+
+        # 2. Direct static method call
+        res_static = bajrang_core.UnifiedModelClient._try_autostart_ollama("http://127.0.0.1:59999")
+        self.assertIsInstance(res_static, bool)
+        self.assertFalse(res_static, "_try_autostart_ollama on dead port must return False without raising TypeError")
+
+        # 3. Full process_prompt flow with offline Ollama and no cloud API key
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
+            cfg.vault._memory_secrets = {}
+            cfg.vault.get_secret = lambda k: ""
+            cfg.settings["ollama_host"] = "http://127.0.0.1:59999"
+            adapter = windows.WindowsPlatformAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
+            engine.watchdog.ollama_host = "http://127.0.0.1:59999"
+
+            turn = engine.process_prompt("what is quantum computing?")
+            self.assertIn("Local Ollama AI Engine Offline", turn.text)
+            self.assertEqual(turn.provider_used, "offline_fallback")
+            self.assertEqual(turn.model_used, "offline")
+
+            # Verify SQLite persisted the turn properly
+            msgs = engine.storage.get_session_messages(engine.current_session_id)
+            self.assertEqual(len(msgs), 2)
+            self.assertEqual(msgs[0]["role"], "user")
+            self.assertEqual(msgs[1]["role"], "assistant")
+            self.assertIn("Local Ollama AI Engine Offline", msgs[1]["content"])
+
+    def test_phase_c_10_features(self):
+        """Phase C Comprehensive Verification: Tests all 10 newly added production features."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=root / "cfg", data_dir=root / "data")
+            adapter = windows.WindowsPlatformAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
+
+            # Feature 1: Conversation Summarization & Auto-Titling
+            engine.process_prompt("organize my downloads and clean pdf files")
+            turn_sum = engine.process_prompt("summarize conversation")
+            self.assertIn("Session Title Updated", turn_sum.text)
+            sessions = engine.storage.list_sessions()
+            self.assertTrue(any("Organizer" in s["title"] or "Downloads" in s["title"] for s in sessions))
+
+            # Feature 2: Multi-Step Task Chaining
+            turn_chain = engine.process_prompt("list windows then status")
+            self.assertEqual(turn_chain.provider_used, "chained_task_planner")
+            self.assertIn("Multi-Step Chained Task Execution (2 steps)", turn_chain.text)
+            self.assertIn("Step 1", turn_chain.text)
+            self.assertIn("Step 2", turn_chain.text)
+
+            # Feature 3: Per-Session Safe Mode
+            turn_sm_on = engine.process_prompt("enable safe mode")
+            self.assertTrue(engine.is_session_safe_mode())
+            self.assertIn("Session Safe Mode Activated", turn_sm_on.text)
+
+            # Mutating action must be blocked in Safe Mode even if auto-approve is active
+            engine.set_auto_approve_mode(True, acknowledged_risk=True)
+            res_blocked = engine.execute_action({"tool": "type_text", "arguments": {"text": "hello"}})
+            self.assertTrue(res_blocked.blocked)
+            self.assertIn("Refused by Session Safe Mode", res_blocked.output)
+
+            turn_sm_off = engine.process_prompt("disable safe mode")
+            self.assertFalse(engine.is_session_safe_mode())
+            self.assertIn("Session Safe Mode Deactivated", turn_sm_off.text)
+
+            # Feature 4: Export Session Transcript to Markdown
+            turn_exp = engine.process_prompt("export transcript")
+            self.assertIn("Session Transcript Exported", turn_exp.text)
+            m_path = re.search(r"`([^`]+\.md)`", turn_exp.text)
+            self.assertIsNotNone(m_path)
+            exp_file = Path(m_path.group(1))
+            self.assertTrue(exp_file.is_file())
+            content_exp = exp_file.read_text(encoding="utf-8")
+            self.assertIn("# Sudharshan AI (Alpha v0.9) — Conversation Transcript", content_exp)
+
+            # Feature 5: Local Daily System Activity Digest
+            engine.audit_logger.log_event("file_operation", ["/test/doc.pdf"], "success")
+            turn_digest = engine.process_prompt("what changed on my system today")
+            self.assertIn("Daily System Digest", turn_digest.text)
+            self.assertIn("Sudharshan AI monitored", turn_digest.text)
+
+            # Feature 6: Network-Aware Mode Switching
+            turn_net = engine.process_prompt("network status")
+            self.assertIn("Network Connectivity", turn_net.text)
+            # Socket timeout test
+            is_fake_online = bajrang_core.NetworkConnectivityDetector.is_online(host="192.0.2.1", port=53, timeout_sec=0.1)
+            self.assertFalse(is_fake_online)
+
+            # Feature 7: First-Run Guided Setup Wizard
+            turn_wiz = engine.process_prompt("setup wizard")
+            self.assertIn("Guided Setup Wizard", turn_wiz.text)
+            self.assertIn("Local Ollama", turn_wiz.text)
+            turn_preset = engine.process_prompt("preset local")
+            self.assertIn("Preset Applied", turn_preset.text)
+            self.assertTrue(engine.config.settings.get("first_run_completed"))
+
+            # Feature 8: Global Dry-Run Everything Mode
+            turn_dr_on = engine.process_prompt("enable dry run")
+            self.assertTrue(engine.dry_run_mode)
+            self.assertIn("Global Dry-Run Mode Enabled", turn_dr_on.text)
+
+            res_sim = engine.execute_action({"tool": "click_point", "arguments": {"x": 50, "y": 75}})
+            self.assertTrue(res_sim.success)
+            self.assertIn("DRY-RUN SIMULATION", res_sim.output)
+            self.assertTrue(res_sim.metadata.get("dry_run"))
+
+            turn_dr_off = engine.process_prompt("disable dry run")
+            self.assertFalse(engine.dry_run_mode)
+            self.assertIn("Global Dry-Run Mode Disabled", turn_dr_off.text)
+
+            # Feature 9: Crash-and-Restart Session Recovery
+            rec_file = root / "data" / ".sudharshan_session_heartbeat.json"
+            rec_file.write_text(json.dumps({"session_id": "sess_crashed_999", "clean_shutdown": False}), encoding="utf-8")
+            engine_crash_recover = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
+            self.assertIsNotNone(engine_crash_recover.unclean_shutdown_recovered)
+            self.assertEqual(engine_crash_recover.unclean_shutdown_recovered["session_id"], "sess_crashed_999")
+            engine_crash_recover.recovery_mgr.mark_clean_shutdown()
+            self.assertIsNone(engine_crash_recover.recovery_mgr.check_unclean_shutdown())
+
+            # Feature 10: Built-in Bug Report Generator
+            turn_bug = engine.process_prompt("report a bug: local model slow on older cpu")
+            self.assertIn("Diagnostic Bug Report Generated", turn_bug.text)
+            m_bug = re.search(r"`([^`]+\.md)`", turn_bug.text)
+            self.assertIsNotNone(m_bug)
+            bug_file = Path(m_bug.group(1))
+            self.assertTrue(bug_file.is_file())
+            content_bug = bug_file.read_text(encoding="utf-8")
+            self.assertIn("Sudharshan AI (Alpha v0.9) Diagnostic Bug Report", content_bug)
+            self.assertIn("local model slow on older cpu", content_bug)
 
 
 if __name__ == "__main__":

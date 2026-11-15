@@ -60,16 +60,22 @@ class GenericLinuxAdapter(BasePlatformAdapter):
         self.display_server = "wayland" if os.environ.get("WAYLAND_DISPLAY") else ("x11" if os.environ.get("DISPLAY") else "headless")
 
     @staticmethod
-    def detect_distro() -> Tuple[str, str, str]:
+    def detect_distro(os_rel_path: Optional[Path] = None, os_rel_content: Optional[str] = None) -> Tuple[str, str, str]:
         distro_id = "linux"
         id_like = ""
-        os_rel = Path("/etc/os-release")
-        if os_rel.is_file():
-            for line in os_rel.read_text(encoding="utf-8", errors="replace").splitlines():
-                if line.startswith("ID="):
-                    distro_id = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
-                elif line.startswith("ID_LIKE="):
-                    id_like = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+        lines = []
+        if os_rel_content is not None:
+            lines = os_rel_content.splitlines()
+        else:
+            os_rel = os_rel_path or Path("/etc/os-release")
+            if os_rel.is_file():
+                lines = os_rel.read_text(encoding="utf-8", errors="replace").splitlines()
+
+        for line in lines:
+            if line.startswith("ID="):
+                distro_id = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+            elif line.startswith("ID_LIKE="):
+                id_like = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
 
         if distro_id in ("fedora", "rhel", "centos") or "fedora" in id_like or "rhel" in id_like:
             return distro_id, "dnf", "sudo dnf install -y gtk4 libadwaita python3-gobject ydotool pipewire-utils"
@@ -349,9 +355,16 @@ def run_self_tests() -> int:
     res_k = adapter.press_key("nonexistent_key_999")
     assert res_k.success is False and res_k.blocked is True, "Unknown key must be blocked"
 
-    # Verify distro detection
+    # Verify distro detection and package managers across distributions
     distro, pkg_mgr, hint = GenericLinuxAdapter.detect_distro()
     assert distro and pkg_mgr and hint, "Distro detection must return non-empty strings"
+
+    # Simulated distro checks
+    assert GenericLinuxAdapter.detect_distro(os_rel_content='ID=ubuntu\nID_LIKE=debian')[1] == "apt"
+    assert GenericLinuxAdapter.detect_distro(os_rel_content='ID=arch\n')[1] == "pacman"
+    assert GenericLinuxAdapter.detect_distro(os_rel_content='ID=opensuse-tumbleweed\nID_LIKE="suse opensuse"')[1] == "zypper"
+    assert GenericLinuxAdapter.detect_distro(os_rel_content='ID=alpine\n')[1] == "apk"
+    assert GenericLinuxAdapter.detect_distro(os_rel_content='ID=fedora\n')[1] == "dnf"
 
     print("All GenericLinuxAdapter self-tests passed!")
     return 0
