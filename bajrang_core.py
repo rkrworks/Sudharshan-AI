@@ -946,9 +946,9 @@ class ShellRunner:
 
 
 class DatabaseMigrationManager:
-    """Manages SQLite3 schema migrations v1 -> v3 while preserving existing user data."""
+    """Manages SQLite3 schema migrations v1 -> v5 while preserving existing user data."""
 
-    CURRENT_SCHEMA_VERSION = 3
+    CURRENT_SCHEMA_VERSION = 5
 
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
@@ -988,6 +988,27 @@ class DatabaseMigrationManager:
     def run_migrations(self) -> List[int]:
         applied: List[int] = []
         with self.connect() as conn:
+            def _heal_messages_table() -> None:
+                try:
+                    cols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
+                    if cols:
+                        if "timestamp" not in cols:
+                            conn.execute("ALTER TABLE messages ADD COLUMN timestamp TEXT NOT NULL DEFAULT ''")
+                            if "created_at" in cols:
+                                conn.execute("UPDATE messages SET timestamp = created_at WHERE timestamp = ''")
+                        if "created_at" not in cols:
+                            conn.execute("ALTER TABLE messages ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
+                            if "timestamp" in cols:
+                                conn.execute("UPDATE messages SET created_at = timestamp WHERE created_at = ''")
+                        if "actions_json" not in cols:
+                            conn.execute("ALTER TABLE messages ADD COLUMN actions_json TEXT NOT NULL DEFAULT '[]'")
+                        if "results_json" not in cols:
+                            conn.execute("ALTER TABLE messages ADD COLUMN results_json TEXT NOT NULL DEFAULT '[]'")
+                        conn.commit()
+                except Exception:
+                    pass
+
+            _heal_messages_table()
             current = self.get_current_version(conn)
             now = datetime.datetime.now().isoformat(timespec="seconds")
 
@@ -1008,7 +1029,8 @@ class DatabaseMigrationManager:
                         content TEXT NOT NULL,
                         actions_json TEXT NOT NULL DEFAULT '[]',
                         results_json TEXT NOT NULL DEFAULT '[]',
-                        timestamp TEXT NOT NULL,
+                        timestamp TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL DEFAULT '',
                         FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
                     );
                     CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
@@ -1101,6 +1123,11 @@ class DatabaseMigrationManager:
                 conn.execute("INSERT INTO schema_migrations (version, applied_at, description) VALUES (4, ?, ?)", (now, "Add conversation tags, pinning, workflows, and provider metrics"))
                 applied.append(4)
 
+            if current < 5:
+                conn.execute("INSERT INTO schema_migrations (version, applied_at, description) VALUES (5, ?, ?)", (now, "Ensure messages table timestamp and created_at columns"))
+                applied.append(5)
+
+            _heal_messages_table()
             conn.commit()
         return applied
 
@@ -1167,10 +1194,18 @@ class LocalChatStorage:
                 if new_title in ("New Conversation", "Conversation", "Windows Session", "Linux Session") and role == "user" and safe_content.strip():
                     new_title = safe_content.strip()[:40]
                 conn.execute("UPDATE sessions SET title = ?, model = ?, updated_at = ? WHERE session_id = ?", (new_title, model, now, session_id))
-            conn.execute(
-                "INSERT INTO messages (session_id, role, content, actions_json, results_json, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, role, safe_content, json.dumps(actions or []), json.dumps(serialized_results), now),
-            )
+            msg_cols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
+            cols = ["session_id", "role", "content", "actions_json", "results_json"]
+            vals = [session_id, role, safe_content, json.dumps(actions or []), json.dumps(serialized_results)]
+            if "timestamp" in msg_cols:
+                cols.append("timestamp")
+                vals.append(now)
+            if "created_at" in msg_cols:
+                cols.append("created_at")
+                vals.append(now)
+            placeholders = ", ".join(["?"] * len(cols))
+            col_names = ", ".join(cols)
+            conn.execute(f"INSERT INTO messages ({col_names}) VALUES ({placeholders})", tuple(vals))
             conn.commit()
         self._sync_sessions_json()
 
@@ -1178,10 +1213,12 @@ class LocalChatStorage:
 
     def get_session_messages(self, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT role, content, results_json, timestamp FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?",
-                (session_id, limit),
-            ).fetchall()
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
+            ts_expr = "timestamp" if "timestamp" in cols else ("created_at" if "created_at" in cols else "''")
+            res_expr = "results_json" if "results_json" in cols else "'[]'"
+            act_expr = "actions_json" if "actions_json" in cols else "'[]'"
+            query = f"SELECT role, content, {res_expr} AS results_json, {act_expr} AS actions_json, {ts_expr} AS timestamp FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?"
+            rows = conn.execute(query, (session_id, limit)).fetchall()
         out: List[Dict[str, Any]] = []
         for r in rows:
             try:
@@ -1292,7 +1329,10 @@ class LocalChatStorage:
             sess = conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
             if not sess:
                 return f"# Error\n\nSession `{session_id}` not found."
-            rows = conn.execute("SELECT role, content, results_json, timestamp FROM messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
+            ts_expr = "timestamp" if "timestamp" in cols else ("created_at" if "created_at" in cols else "''")
+            res_expr = "results_json" if "results_json" in cols else "'[]'"
+            rows = conn.execute(f"SELECT role, content, {res_expr} AS results_json, {ts_expr} AS timestamp FROM messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
 
         cat = sess["category"] if "category" in sess.keys() else "General"
         md_lines = [
@@ -1325,7 +1365,11 @@ class LocalChatStorage:
             sess = conn.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
             if not sess:
                 return json.dumps({"error": f"Session {session_id} not found."})
-            rows = conn.execute("SELECT role, content, actions_json, results_json, timestamp FROM messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
+            ts_expr = "timestamp" if "timestamp" in cols else ("created_at" if "created_at" in cols else "''")
+            res_expr = "results_json" if "results_json" in cols else "'[]'"
+            act_expr = "actions_json" if "actions_json" in cols else "'[]'"
+            rows = conn.execute(f"SELECT role, content, {act_expr} AS actions_json, {res_expr} AS results_json, {ts_expr} AS timestamp FROM messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
 
         msg_list = []
         for r in rows:
@@ -1370,13 +1414,22 @@ class LocalChatStorage:
                 "INSERT INTO sessions (session_id, title, model, created_at, updated_at, category, is_pinned) VALUES (?, ?, ?, ?, ?, ?, 0)",
                 (new_sid, f"[Imported] {title}", model, now, now, category),
             )
+            msg_cols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
             for m in messages:
                 actions = m.get("actions", [])
                 results = m.get("results", [])
-                conn.execute(
-                    "INSERT INTO messages (session_id, role, content, actions_json, results_json, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                    (new_sid, m.get("role", "user"), m.get("content", ""), json.dumps(actions), json.dumps(results), m.get("timestamp", now)),
-                )
+                ts = m.get("timestamp") or m.get("created_at") or now
+                cols = ["session_id", "role", "content", "actions_json", "results_json"]
+                vals = [new_sid, m.get("role", "user"), m.get("content", ""), json.dumps(actions), json.dumps(results)]
+                if "timestamp" in msg_cols:
+                    cols.append("timestamp")
+                    vals.append(ts)
+                if "created_at" in msg_cols:
+                    cols.append("created_at")
+                    vals.append(ts)
+                placeholders = ", ".join(["?"] * len(cols))
+                col_names = ", ".join(cols)
+                conn.execute(f"INSERT INTO messages ({col_names}) VALUES ({placeholders})", tuple(vals))
             conn.commit()
         self._sync_sessions_json()
         return True, f"Successfully restored session '{title}' ({len(messages)} messages).", new_sid

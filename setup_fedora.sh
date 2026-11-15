@@ -58,11 +58,11 @@ if [ "${BAJRANG_SKIP_SYSTEM_PKGS:-0}" != "1" ]; then
     echo "[2/6] Installing Fedora system packages (GTK4, Libadwaita, PipeWire, ydotool, grim, slurp, wl-clipboard)..."
     if command -v dnf >/dev/null 2>&1; then
         if [ "$(id -u)" -eq 0 ]; then
-            dnf install -y python3 python3-pip python3-gobject gtk4 libadwaita pipewire-utils speech-dispatcher ydotool grim slurp wl-clipboard || true
+            dnf install -y python3 python3-pip python3-tkinter python3-gobject gtk4 libadwaita pipewire-utils speech-dispatcher ydotool grim slurp wl-clipboard || true
         elif sudo -n true 2>/dev/null; then
-            sudo dnf install -y python3 python3-pip python3-gobject gtk4 libadwaita pipewire-utils speech-dispatcher ydotool grim slurp wl-clipboard || true
+            sudo dnf install -y python3 python3-pip python3-tkinter python3-gobject gtk4 libadwaita pipewire-utils speech-dispatcher ydotool grim slurp wl-clipboard || true
         elif [ -t 0 ] || [ -t 1 ]; then
-            sudo dnf install -y python3 python3-pip python3-gobject gtk4 libadwaita pipewire-utils speech-dispatcher ydotool grim slurp wl-clipboard || true
+            sudo dnf install -y python3 python3-pip python3-tkinter python3-gobject gtk4 libadwaita pipewire-utils speech-dispatcher ydotool grim slurp wl-clipboard || true
         else
             echo "  -> Sudo password required for system packages; skipping in non-interactive pipeline."
         fi
