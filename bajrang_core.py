@@ -240,6 +240,47 @@ PROVIDER_PRESETS: Dict[str, Dict[str, str]] = {
     },
 }
 
+UI_DESIGN_TOKENS: Dict[str, Any] = {
+    "dark": {
+        "bg": "#050505",
+        "surface": "#0f0c0a",
+        "surface_card": "#171412",
+        "border": "#26201c",
+        "ink": "#fafafa",
+        "ink_muted": "#a69b93",
+        "accent": "#ff6b1a",
+        "accent_hover": "#ff8542",
+        "accent_ink": "#050505",
+        "success": "#10b981",
+        "success_bg": "#064e3b",
+        "warning": "#f59e0b",
+        "danger": "#ef4444",
+        "danger_bg": "#450a0a",
+        "code_bg": "#000000",
+    },
+    "light": {
+        "bg": "#fcfbfa",
+        "surface": "#f5f3f0",
+        "surface_card": "#ebe7e1",
+        "border": "#ded8ce",
+        "ink": "#141210",
+        "ink_muted": "#6e665f",
+        "accent": "#ff6b1a",
+        "accent_hover": "#e0580c",
+        "accent_ink": "#ffffff",
+        "success": "#059669",
+        "success_bg": "#d1fae5",
+        "warning": "#d97706",
+        "danger": "#dc2626",
+        "danger_bg": "#fee2e2",
+        "code_bg": "#f4f1ea",
+    },
+    "fonts": {
+        "sans": "Instrument Sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+        "mono": "DM Mono, Menlo, Monaco, Consolas, monospace",
+    },
+}
+
 
 class SecurityVault:
     """
@@ -425,6 +466,21 @@ class SecurityVault:
                     except Exception:
                         pass
         return count
+
+    def get_active_backend(self) -> str:
+        if importlib.util.find_spec("keyring") is not None:
+            try:
+                import keyring
+                backend = keyring.get_keyring()
+                if backend and "fail" not in backend.__class__.__name__.lower():
+                    return f"os_keyring ({backend.__class__.__name__})"
+            except Exception:
+                pass
+        if platform.system() == "Windows":
+            return "windows_dpapi"
+        if platform.system() == "Linux" and shutil.which("secret-tool") and os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+            return "linux_secret_tool"
+        return "local_vault_file (0600)"
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -726,12 +782,20 @@ class SafetyGuard:
 
     SHELL_METACHAR_PATTERN = re.compile(r"[;&|`$><\n\r]")
 
+    @staticmethod
+    def check_hotkey(keys: List[str]) -> Tuple[bool, str]:
+        ok, reason, _ = ToolSchemaValidator.validate_action({"tool": "navigate_hotkey", "arguments": {"keys": keys}})
+        if not ok:
+            return True, reason
+        return False, ""
+
     # Launchers that MUST take ZERO arguments (len(tokens) == 1)
     ZERO_ARG_BINARIES: Set[str] = {
         "notepad",
         "notepad.exe",
         "calc",
         "calc.exe",
+        "calculator",
         "mspaint",
         "mspaint.exe",
         "gnome-calculator",
@@ -742,6 +806,9 @@ class SafetyGuard:
         "ptyxis",
         "kgx",
         "wt.exe",
+        "safari",
+        "textedit",
+        "terminal",
         "whoami",
         "hostname",
         "date",
@@ -2512,6 +2579,18 @@ class OllamaWatchdogManager:
         if self._thread:
             self._thread.join(timeout=1.0)
             self._thread = None
+
+    def ensure_running(self) -> bool:
+        """Verifies if Ollama is running; if not, attempts autostart."""
+        try:
+            req = urllib.request.Request(f"{self.ollama_host}/api/version", method="GET")
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+
+        return UnifiedModelClient._try_autostart_ollama(self.ollama_host)
 
     def detect_heavy_activity(self) -> Tuple[bool, str]:
         try:
@@ -4310,6 +4389,806 @@ class DiagnosticsRecoveryCentre:
         )
 
 
+class PlatformCapabilityMatrix:
+    """
+    Phase 2: Cross-Platform Capability Matrix.
+    Returns structured OS-level and session capabilities.
+    """
+    @staticmethod
+    def get_capabilities(os_name: Optional[str] = None) -> Dict[str, Any]:
+        os_key = (os_name or platform.system()).lower()
+        if "darwin" in os_key or "mac" in os_key:
+            return {
+                "os": "macOS",
+                "voice_capture": bool(shutil.which("rec") or shutil.which("sox") or importlib.util.find_spec("sounddevice")),
+                "tts_streaming": bool(shutil.which("say")),
+                "native_screen_capture": bool(os.path.exists("/usr/sbin/screencapture")),
+                "input_injection_backend": "Quartz (CGEvent) / osascript",
+                "window_management": "osascript (System Events)",
+                "keyring_backend": "macOS Keychain (keyring)",
+                "tray_integration": True,
+                "auto_start_support": True,
+                "quarantine_supported": True,
+            }
+        elif "windows" in os_key or "win" in os_key:
+            return {
+                "os": "Windows",
+                "voice_capture": bool(importlib.util.find_spec("sounddevice") or shutil.which("ffmpeg")),
+                "tts_streaming": True,
+                "native_screen_capture": True,
+                "input_injection_backend": "SendInput (user32.dll)",
+                "window_management": "EnumWindows / SetForegroundWindow",
+                "keyring_backend": "Windows DPAPI (CryptProtectData)",
+                "tray_integration": True,
+                "auto_start_support": True,
+                "quarantine_supported": True,
+            }
+        else:
+            is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
+            return {
+                "os": "Linux",
+                "display_server": "Wayland" if is_wayland else "X11",
+                "voice_capture": bool(shutil.which("pw-record") or shutil.which("parecord") or shutil.which("arecord")),
+                "tts_streaming": bool(shutil.which("espeak-ng") or shutil.which("espeak") or shutil.which("spd-say")),
+                "native_screen_capture": bool(shutil.which("grim") or shutil.which("scrot") or shutil.which("import")),
+                "input_injection_backend": "ydotool" if is_wayland else "xdotool",
+                "window_management": "gnome-shell / kwin / wmctrl",
+                "keyring_backend": "Secret Service API / 0600 file",
+                "tray_integration": True,
+                "auto_start_support": True,
+                "quarantine_supported": True,
+            }
+
+
+class StructuredAuditLogger:
+    """
+    Phase 4 & 6: Structured Local Audit Logger.
+    Logs every file operation, shell-command check, input-synthesis action, and license check
+    to a local SQLite table and a JSONL file. Zero external transmissions.
+    """
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.jsonl_path = self.data_dir / "audit_logs.jsonl"
+        self.db_path = self.data_dir / "history.db"
+        self._init_db()
+
+    def _init_db(self) -> None:
+        try:
+            conn = sqlite3.connect(str(self.db_path), timeout=5.0)
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS structured_audit_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    action_type TEXT NOT NULL,
+                    target_paths TEXT NOT NULL,
+                    outcome TEXT NOT NULL,
+                    auto_approve_active INTEGER NOT NULL DEFAULT 0,
+                    undo_plan_id TEXT DEFAULT '',
+                    details TEXT DEFAULT '{}'
+                )
+            """)
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+    def log_event(
+        self,
+        action_type: str,
+        target_paths: List[str],
+        outcome: str,
+        auto_approve_active: bool = False,
+        undo_plan_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        paths_str = json.dumps([str(p) for p in target_paths])
+        details_str = json.dumps(details or {})
+        plan_id = undo_plan_id or ""
+
+        try:
+            conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+            conn.execute(
+                "INSERT INTO structured_audit_logs (timestamp, action_type, target_paths, outcome, auto_approve_active, undo_plan_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (now_iso, action_type, paths_str, outcome, 1 if auto_approve_active else 0, plan_id, details_str)
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+        try:
+            record = {
+                "timestamp": now_iso,
+                "action_type": action_type,
+                "target_paths": [str(p) for p in target_paths],
+                "outcome": outcome,
+                "auto_approve_active": auto_approve_active,
+                "undo_plan_id": plan_id,
+                "details": details or {},
+            }
+            with open(self.jsonl_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+        except Exception:
+            pass
+
+    def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]:
+        results = []
+        try:
+            conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM structured_audit_logs ORDER BY id DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            for r in rows:
+                results.append({
+                    "id": r["id"],
+                    "timestamp": r["timestamp"],
+                    "action_type": r["action_type"],
+                    "target_paths": json.loads(r["target_paths"]),
+                    "outcome": r["outcome"],
+                    "auto_approve_active": bool(r["auto_approve_active"]),
+                    "undo_plan_id": r["undo_plan_id"],
+                    "details": json.loads(r["details"] or "{}"),
+                })
+            conn.close()
+        except Exception:
+            pass
+        return results
+
+
+class PermissionsManager:
+    """
+    Phase 6: Permissions Dashboard & Enforcement.
+    Maintains per-category grants:
+    - 'file_access'
+    - 'shell_exec'
+    - 'input_injection'
+    - 'microphone'
+    - 'screen_capture'
+    Enforced strictly inside BajrangEngine.execute_action.
+    """
+    CATEGORIES = ("file_access", "shell_exec", "input_injection", "microphone", "screen_capture")
+
+    def __init__(self, config: ConfigManager) -> None:
+        self.config = config
+        if "permissions" not in self.config.settings:
+            self.config.settings["permissions"] = {
+                "file_access": True,
+                "shell_exec": False,
+                "input_injection": True,
+                "microphone": True,
+                "screen_capture": True,
+            }
+            self.config.save_settings()
+
+    def is_granted(self, category: str) -> bool:
+        perms = self.config.settings.get("permissions", {})
+        return bool(perms.get(category, False))
+
+    def grant(self, category: str) -> None:
+        if category in self.CATEGORIES:
+            self.config.settings.setdefault("permissions", {})[category] = True
+            self.config.save_settings()
+
+    def revoke(self, category: str) -> None:
+        if category in self.CATEGORIES:
+            self.config.settings.setdefault("permissions", {})[category] = False
+            self.config.save_settings()
+
+    def get_all(self) -> Dict[str, bool]:
+        return {cat: self.is_granted(cat) for cat in self.CATEGORIES}
+
+
+class ClipboardContextTracker:
+    """
+    Phase 6: Clipboard-Aware Follow-ups.
+    Tracks recent clipboard paths or last executed plan ID.
+    """
+    def __init__(self) -> None:
+        self.recent_paths: List[str] = []
+        self.last_plan_id: Optional[str] = None
+        self.last_copied_timestamp: float = 0.0
+
+    def record_paths(self, paths: List[str]) -> None:
+        self.recent_paths = [str(p) for p in paths if os.path.exists(str(p))]
+        self.last_copied_timestamp = time.time()
+
+    def record_plan(self, plan_id: str) -> None:
+        self.last_plan_id = plan_id
+
+    def get_context_paths(self) -> List[str]:
+        return [p for p in self.recent_paths if os.path.exists(p)]
+
+    def get_last_plan_id(self) -> Optional[str]:
+        return self.last_plan_id
+
+
+class TaskSchedulerManager:
+    """
+    Phase 6: Scheduled/Recurring Tasks.
+    Parses phrases like 'clean up my Downloads every Friday at 6pm',
+    persists in SQLite, and supports pause/resume/delete/list.
+    """
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path = self.data_dir / "history.db"
+        self._init_db()
+
+    def _init_db(self) -> None:
+        try:
+            conn = sqlite3.connect(str(self.db_path), timeout=5.0)
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS task_schedules (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    rule TEXT NOT NULL,
+                    prompt_action TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at TEXT NOT NULL,
+                    last_run_at TEXT DEFAULT ''
+                )
+            """)
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+    def add_schedule(self, prompt: str) -> Dict[str, Any]:
+        schedule_id = f"sched_{uuid.uuid4().hex[:8]}"
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        lower = prompt.lower()
+
+        rule = "daily:09:00"
+        if "friday" in lower:
+            rule = "weekly:friday:18:00"
+        elif "monday" in lower:
+            rule = "weekly:monday:09:00"
+        elif "daily" in lower or "every day" in lower:
+            rule = "daily:09:00"
+        elif "hourly" in lower or "every hour" in lower:
+            rule = "interval:1h"
+
+        title = prompt.strip()
+        conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+        conn.execute(
+            "INSERT INTO task_schedules (id, title, rule, prompt_action, status, created_at, last_run_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (schedule_id, title, rule, prompt, "active", now_iso, "")
+        )
+        conn.commit()
+        conn.close()
+        return {"id": schedule_id, "title": title, "rule": rule, "status": "active", "created_at": now_iso}
+
+    def list_schedules(self) -> List[Dict[str, Any]]:
+        conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM task_schedules ORDER BY created_at DESC").fetchall()
+        schedules = [dict(r) for r in rows]
+        conn.close()
+        return schedules
+
+    def pause_schedule(self, schedule_id: str) -> bool:
+        conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+        cur = conn.execute("UPDATE task_schedules SET status = 'paused' WHERE id = ?", (schedule_id,))
+        conn.commit()
+        cnt = cur.rowcount
+        conn.close()
+        return cnt > 0
+
+    def resume_schedule(self, schedule_id: str) -> bool:
+        conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+        cur = conn.execute("UPDATE task_schedules SET status = 'active' WHERE id = ?", (schedule_id,))
+        conn.commit()
+        cnt = cur.rowcount
+        conn.close()
+        return cnt > 0
+
+    def delete_schedule(self, schedule_id: str) -> bool:
+        conn = sqlite3.connect(str(self.db_path), timeout=3.0)
+        cur = conn.execute("DELETE FROM task_schedules WHERE id = ?", (schedule_id,))
+        conn.commit()
+        cnt = cur.rowcount
+        conn.close()
+        return cnt > 0
+
+
+@dataclass
+class FileOpItem:
+    source_path: str
+    dest_path: str
+    operation: str  # 'move', 'copy', 'quarantine', 'rename'
+    size_bytes: int = 0
+    collision_renamed: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "source_path": self.source_path,
+            "dest_path": self.dest_path,
+            "operation": self.operation,
+            "size_bytes": self.size_bytes,
+            "collision_renamed": self.collision_renamed,
+        }
+
+
+@dataclass
+class FileOperationPlan:
+    plan_id: str
+    plain_english_summary: str
+    items: List[FileOpItem]
+    quarantine_dir: Optional[str] = None
+    requires_large_batch_confirmation: bool = False
+    blocked_reason: Optional[str] = None
+    manifest_path: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "plan_id": self.plan_id,
+            "plain_english_summary": self.plain_english_summary,
+            "items": [item.to_dict() for item in self.items],
+            "item_count": len(self.items),
+            "quarantine_dir": self.quarantine_dir,
+            "requires_large_batch_confirmation": self.requires_large_batch_confirmation,
+            "blocked_reason": self.blocked_reason,
+            "manifest_path": self.manifest_path,
+        }
+
+
+class NaturalLanguageFileEngine:
+    """
+    Phase 5 & 6: Natural Language File Operations Engine.
+    - Fully offline deterministic parser + structured LLM output planner.
+    - Protected system paths refusal (/etc, /usr, /bin, /System, C:\\Windows, dotfiles).
+    - Batch limit capped at 200 files (gate requiring secondary confirmation).
+    - Never permanently deletes — moves to ~/.sudharshan_quarantine/<plan_id>/ with manifest.json.
+    - Collision-safe non-destructive renaming.
+    - One-click lossless undo via manifest.
+    """
+    PROTECTED_SYSTEM_DIRS = {
+        "/etc", "/usr", "/bin", "/sbin", "/var", "/lib", "/lib64", "/boot", "/dev", "/proc", "/sys", "/root",
+        "c:\\windows", "c:\\program files", "c:\\program files (x86)", "c:\\programdata", "/system",
+    }
+
+    FILE_EXT_CATEGORIES: Dict[str, Tuple[str, ...]] = {
+        "documents": (".pdf", ".docx", ".doc", ".txt", ".xlsx", ".xls", ".pptx", ".csv", ".odt", ".rtf", ".md"),
+        "images": (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".bmp", ".tiff", ".ico"),
+        "videos": (".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv", ".wmv"),
+        "audio": (".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"),
+        "archives": (".zip", ".tar", ".gz", ".bz2", ".7z", ".rar", ".xz"),
+        "code": (".py", ".js", ".ts", ".html", ".css", ".json", ".sh", ".bat", ".c", ".cpp", ".rs", ".go"),
+    }
+
+    def __init__(
+        self,
+        memory_store: Optional[LocalChatStorage] = None,
+        audit_logger: Optional[StructuredAuditLogger] = None,
+        permissions: Optional[PermissionsManager] = None,
+    ) -> None:
+        self.memory_store = memory_store
+        self.audit_logger = audit_logger
+        self.permissions = permissions
+        self.home_dir = Path.home().resolve()
+        self.quarantine_base = self.home_dir / ".sudharshan_quarantine"
+        self.quarantine_base.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def is_protected_path(cls, path: Path) -> Tuple[bool, str]:
+        raw_str = str(path).lower().replace("/", "\\")
+        raw_str_posix = str(path).lower().replace("\\", "/")
+        try:
+            resolved = path.resolve()
+            res_str = str(resolved).lower().replace("/", "\\")
+            res_str_posix = str(resolved).lower().replace("\\", "/")
+        except Exception:
+            res_str = raw_str
+            res_str_posix = raw_str_posix
+
+        for prot in cls.PROTECTED_SYSTEM_DIRS:
+            prot_clean = prot.lower()
+            prot_win = prot_clean.replace("/", "\\")
+            prot_posix = prot_clean.replace("\\", "/")
+            if (raw_str == prot_win or raw_str.startswith(prot_win + "\\") or
+                raw_str_posix == prot_posix or raw_str_posix.startswith(prot_posix + "/") or
+                res_str == prot_win or res_str.startswith(prot_win + "\\") or
+                res_str_posix == prot_posix or res_str_posix.startswith(prot_posix + "/")):
+                return True, f"Refused: Protected system path ({prot})"
+        # Dotfile check
+        if path.name.startswith(".") and path.name not in (".", ".."):
+            return True, "Refused: Operations on dotfiles are restricted for safety"
+        return False, ""
+
+    @staticmethod
+    def allocate_collision_free_path(target_path: Path) -> Tuple[Path, bool]:
+        if not target_path.exists():
+            return target_path, False
+        stem = target_path.stem
+        suffix = target_path.suffix
+        parent = target_path.parent
+        counter = 1
+        while True:
+            candidate = parent / f"{stem}_{counter}{suffix}"
+            if not candidate.exists():
+                return candidate, True
+            counter += 1
+
+    def resolve_folder_name(self, name: str, base: Optional[Path] = None) -> Path:
+        n = name.strip().lower()
+        home = base or self.home_dir
+        mapping = {
+            "downloads": home / "Downloads",
+            "desktop": home / "Desktop",
+            "documents": home / "Documents",
+            "pictures": home / "Pictures",
+            "videos": home / "Videos",
+            "music": home / "Music",
+        }
+        if n in mapping:
+            return mapping[n]
+        cand = Path(name).expanduser()
+        if cand.is_absolute():
+            return cand
+        return home / name
+
+    def plan_request(
+        self,
+        prompt: str,
+        context_paths: Optional[List[str]] = None,
+        base_dir: Optional[Path] = None,
+    ) -> FileOperationPlan:
+        plan_id = f"plan_{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        lower = prompt.lower()
+        items: List[FileOpItem] = []
+
+        # 1. Protected path check on input prompt paths
+        for token in prompt.split():
+            clean_tok = token.strip("',\"()")
+            if clean_tok.startswith("/") or re.match(r"^[a-zA-Z]:\\", clean_tok):
+                p_cand = Path(clean_tok)
+                prot, reason = self.is_protected_path(p_cand)
+                if prot:
+                    return FileOperationPlan(plan_id, f"Plan rejected: {reason}", [], blocked_reason=reason)
+
+        # 2. Check for Undo intent
+        if "undo" in lower:
+            m = re.search(r"undo\s+(?:plan\s+)?(plan_[a-zA-Z0-9_]+)", lower)
+            target_plan = m.group(1) if m else (context_paths[0] if context_paths else "last_plan")
+            return FileOperationPlan(
+                plan_id=plan_id,
+                plain_english_summary=f"Undo previously executed file operations for {target_plan}.",
+                items=[],
+            )
+
+        # Determine source folder
+        source_folder = self.resolve_folder_name("downloads", base_dir)
+        if "desktop" in lower and "to desktop" not in lower:
+            source_folder = self.resolve_folder_name("desktop", base_dir)
+        elif "documents" in lower and "to documents" not in lower:
+            source_folder = self.resolve_folder_name("documents", base_dir)
+
+        # Protected source check
+        prot, reason = self.is_protected_path(source_folder)
+        if prot:
+            return FileOperationPlan(plan_id, f"Plan rejected: {reason}", [], blocked_reason=reason)
+
+        # Destination folder
+        dest_folder = None
+        if "to documents/invoices" in lower:
+            dest_folder = self.resolve_folder_name("documents", base_dir) / "invoices"
+        elif "to pictures/imported" in lower:
+            dest_folder = self.resolve_folder_name("pictures", base_dir) / "imported"
+        elif "to documents" in lower:
+            dest_folder = self.resolve_folder_name("documents", base_dir)
+        elif "to desktop" in lower or "on the desktop" in lower:
+            if "new folder on the desktop" in lower or "new folder on desktop" in lower:
+                dest_folder = self.resolve_folder_name("desktop", base_dir) / "Organized_Code"
+            else:
+                dest_folder = self.resolve_folder_name("desktop", base_dir)
+        elif "to pictures" in lower:
+            dest_folder = self.resolve_folder_name("pictures", base_dir)
+        elif "to videos" in lower:
+            dest_folder = self.resolve_folder_name("videos", base_dir)
+
+        # Check for context paths ("files I just copied")
+        target_files: List[Path] = []
+        if ("files i just copied" in lower or "those to desktop" in lower) and context_paths:
+            target_files = [Path(p) for p in context_paths if Path(p).is_file()]
+        elif source_folder.is_dir():
+            target_files = [p for p in sorted(source_folder.iterdir()) if p.is_file() and not p.name.startswith(".")]
+
+        # Filter by file extension or type
+        filtered_files: List[Path] = []
+        if "pdf" in lower:
+            filtered_files = [p for p in target_files if p.suffix.lower() == ".pdf"]
+        elif "screenshot" in lower:
+            filtered_files = [p for p in target_files if "screenshot" in p.name.lower() or p.suffix.lower() in (".png", ".jpg")]
+        elif "invoice" in lower:
+            filtered_files = [p for p in target_files if "invoice" in p.name.lower() or p.suffix.lower() in (".pdf", ".csv")]
+        elif "zip" in lower or "archives" in lower:
+            filtered_files = [p for p in target_files if p.suffix.lower() in (".zip", ".tar", ".gz", ".7z")]
+        elif "image" in lower or "images" in lower:
+            filtered_files = [p for p in target_files if p.suffix.lower() in self.FILE_EXT_CATEGORIES["images"]]
+        elif "video" in lower or "videos" in lower:
+            filtered_files = [p for p in target_files if p.suffix.lower() in self.FILE_EXT_CATEGORIES["videos"]]
+        elif "code" in lower:
+            filtered_files = [p for p in target_files if p.suffix.lower() in self.FILE_EXT_CATEGORIES["code"]]
+        else:
+            filtered_files = target_files
+
+        # Check batch limit (>200 files)
+        large_batch = len(filtered_files) > 200
+        op = "move"
+        if "copy" in lower:
+            op = "copy"
+        elif "quarantine" in lower or "delete" in lower:
+            op = "quarantine"
+
+        quarantine_dir = str(self.quarantine_base / plan_id) if op == "quarantine" else None
+
+        # Build items
+        for f in filtered_files:
+            if op == "quarantine":
+                dest = Path(quarantine_dir) / f.name
+                items.append(FileOpItem(str(f), str(dest), "quarantine", size_bytes=f.stat().st_size if f.exists() else 0))
+            elif dest_folder:
+                dest = dest_folder / f.name
+                dest_non_col, col = self.allocate_collision_free_path(dest)
+                items.append(FileOpItem(str(f), str(dest_non_col), op, size_bytes=f.stat().st_size if f.exists() else 0, collision_renamed=col))
+            elif "by file type" in lower or "into folders" in lower or "by category" in lower:
+                cat = "Other"
+                for c_name, exts in self.FILE_EXT_CATEGORIES.items():
+                    if f.suffix.lower() in exts:
+                        cat = c_name.capitalize()
+                        break
+                cat_dir = source_folder / cat
+                dest = cat_dir / f.name
+                dest_non_col, col = self.allocate_collision_free_path(dest)
+                items.append(FileOpItem(str(f), str(dest_non_col), "move", size_bytes=f.stat().st_size if f.exists() else 0, collision_renamed=col))
+            else:
+                dest = (dest_folder or (source_folder / "Organized")) / f.name
+                dest_non_col, col = self.allocate_collision_free_path(dest)
+                items.append(FileOpItem(str(f), str(dest_non_col), op, size_bytes=f.stat().st_size if f.exists() else 0, collision_renamed=col))
+
+        summary = f"Plan {plan_id}: I will {op} {len(items)} file(s) from {source_folder.name} to {dest_folder.name if dest_folder else 'organized subfolders'}."
+        if large_batch:
+            summary += " (Warning: Batch exceeds 200 files — secondary explicit confirmation gate required)."
+
+        return FileOperationPlan(
+            plan_id=plan_id,
+            plain_english_summary=summary,
+            items=items,
+            quarantine_dir=quarantine_dir,
+            requires_large_batch_confirmation=large_batch,
+        )
+
+    def execute_plan(
+        self,
+        plan: FileOperationPlan,
+        confirmed: bool = False,
+        cancel_ev: Optional[threading.Event] = None,
+        auto_approve: bool = False,
+    ) -> Tuple[bool, str, int]:
+        if plan.blocked_reason:
+            if self.audit_logger:
+                self.audit_logger.log_event("file_operation", [i.source_path for i in plan.items], "blocked", auto_approve_active=auto_approve, undo_plan_id=plan.plan_id)
+            return False, f"Cannot execute plan: {plan.blocked_reason}", 0
+
+        if plan.requires_large_batch_confirmation and not confirmed:
+            return False, "Batch size exceeds 200 files. Explicit user confirmation is required to proceed.", 0
+
+        if not plan.items:
+            return True, "No files matched operation criteria.", 0
+
+        manifest_entries = []
+        executed_count = 0
+        if plan.quarantine_dir:
+            Path(plan.quarantine_dir).mkdir(parents=True, exist_ok=True)
+
+        for item in plan.items:
+            if cancel_ev and cancel_ev.is_set():
+                break
+
+            src = Path(item.source_path)
+            dest = Path(item.dest_path)
+            if not src.exists():
+                continue
+
+            # Ensure destination directory exists
+            dest.parent.mkdir(parents=True, exist_ok=True)
+
+            # Re-check collision non-destructively
+            if dest.exists() and dest != src:
+                dest, col = self.allocate_collision_free_path(dest)
+                item.dest_path = str(dest)
+                item.collision_renamed = col
+
+            if item.operation in ("move", "quarantine"):
+                shutil.move(str(src), str(dest))
+                manifest_entries.append({"source": str(src), "dest": str(dest), "operation": item.operation})
+                executed_count += 1
+            elif item.operation == "copy":
+                shutil.copy2(str(src), str(dest))
+                manifest_entries.append({"source": str(src), "dest": str(dest), "operation": item.operation})
+                executed_count += 1
+
+        # Write manifest for undo
+        manifest_dir = Path(plan.quarantine_dir) if plan.quarantine_dir else (self.quarantine_base / plan.plan_id)
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        manifest_file = manifest_dir / "manifest.json"
+        manifest_data = {
+            "plan_id": plan.plan_id,
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "summary": plan.plain_english_summary,
+            "items": manifest_entries,
+        }
+        manifest_file.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+        plan.manifest_path = str(manifest_file)
+
+        if self.audit_logger:
+            self.audit_logger.log_event(
+                "file_operation",
+                [m["source"] for m in manifest_entries],
+                "success",
+                auto_approve_active=auto_approve,
+                undo_plan_id=plan.plan_id,
+                details={"executed_count": executed_count, "manifest": str(manifest_file)}
+            )
+
+        return True, f"Successfully executed plan {plan.plan_id}: processed {executed_count} file(s).", executed_count
+
+    def undo_plan(self, plan_id: str) -> Tuple[bool, str, int]:
+        manifest_file = self.quarantine_base / plan_id / "manifest.json"
+        if not manifest_file.is_file():
+            # Search subdirectories for manifest
+            found = list(self.quarantine_base.glob(f"**/{plan_id}/manifest.json"))
+            if found:
+                manifest_file = found[0]
+            else:
+                return False, f"Cannot undo: Manifest for plan '{plan_id}' not found.", 0
+
+        try:
+            data = json.loads(manifest_file.read_text(encoding="utf-8"))
+            items = data.get("items", [])
+            restored = 0
+            for it in reversed(items):
+                src_orig = Path(it["source"])
+                dest_curr = Path(it["dest"])
+                op = it.get("operation", "move")
+                if op in ("move", "quarantine"):
+                    if dest_curr.exists():
+                        src_orig.parent.mkdir(parents=True, exist_ok=True)
+                        dest_restore, _ = self.allocate_collision_free_path(src_orig)
+                        shutil.move(str(dest_curr), str(dest_restore))
+                        restored += 1
+                elif op == "copy":
+                    if dest_curr.exists():
+                        dest_curr.unlink(missing_ok=True)
+                        restored += 1
+
+            if self.audit_logger:
+                self.audit_logger.log_event("quarantine_undo", [it["source"] for it in items], "success", undo_plan_id=plan_id, details={"restored_count": restored})
+
+            return True, f"Undid plan {plan_id}: restored {restored} file(s) to original locations.", restored
+        except Exception as exc:
+            return False, f"Undo failed: {exc}", 0
+
+    def find_duplicates_multi_folder(self, folders: List[str]) -> Tuple[Dict[str, List[str]], int]:
+        hashes: Dict[str, List[str]] = {}
+        for fld in folders:
+            p = Path(fld).expanduser().resolve()
+            if not p.is_dir():
+                continue
+            for f in p.rglob("*"):
+                if f.is_file() and not f.name.startswith(".") and f.stat().st_size > 0:
+                    try:
+                        h = hashlib.sha256()
+                        with f.open("rb") as fp:
+                            while chunk := fp.read(65536):
+                                h.update(chunk)
+                        digest = h.hexdigest()
+                        hashes.setdefault(digest, []).append(str(f))
+                    except Exception:
+                        pass
+
+        duplicates = {k: v for k, v in hashes.items() if len(v) > 1}
+        total_dup_files = sum(len(v) - 1 for v in duplicates.values())
+        return duplicates, total_dup_files
+
+    def offline_search(self, query: str, search_dir: Optional[str] = None) -> List[Dict[str, Any]]:
+        root = Path(search_dir).expanduser().resolve() if search_dir else self.home_dir
+        q = (query or "").lower().strip()
+        results = []
+
+        # Check for extension or size filters
+        ext_filter = None
+        for cat, exts in self.FILE_EXT_CATEGORIES.items():
+            if cat in q:
+                ext_filter = set(exts)
+                break
+        if "pdf" in q:
+            ext_filter = {".pdf"}
+        elif "video" in q or "videos" in q:
+            ext_filter = set(self.FILE_EXT_CATEGORIES["videos"])
+
+        size_filter_bytes = 0
+        if "100mb" in q or "over 100mb" in q or "large files" in q:
+            size_filter_bytes = 100 * 1024 * 1024
+
+        days_filter = 0
+        if "this week" in q or "edited this week" in q:
+            days_filter = 7
+
+        cutoff_ts = time.time() - (days_filter * 86400) if days_filter else 0
+
+        for f in root.glob("*"):
+            if f.is_file() and not f.name.startswith("."):
+                st = f.stat()
+                if ext_filter and f.suffix.lower() not in ext_filter:
+                    continue
+                if size_filter_bytes and st.st_size < size_filter_bytes:
+                    continue
+                if cutoff_ts and st.st_mtime < cutoff_ts:
+                    continue
+                results.append({
+                    "name": f.name,
+                    "path": str(f),
+                    "size_bytes": st.st_size,
+                    "modified_iso": datetime.datetime.fromtimestamp(st.st_mtime, tz=datetime.timezone.utc).isoformat(),
+                })
+                if len(results) >= 100:
+                    break
+
+        return results
+
+    def explain_plan(self, plan: FileOperationPlan) -> str:
+        lines = [
+            f"**File Operation Batch Plan `{plan.plan_id}`**",
+            f"- **Summary**: {plan.plain_english_summary}",
+            f"- **Total Items**: {len(plan.items)} file(s)",
+            f"- **Quarantine Protection**: {'Enabled (~/.sudharshan_quarantine)' if plan.quarantine_dir else 'Non-destructive collision renaming enabled'}",
+            f"- **Undo Command**: `undo plan {plan.plan_id}`",
+        ]
+        if plan.requires_large_batch_confirmation:
+            lines.append("- **Safety Warning**: Batch contains >200 files. Secondary user confirmation required before execution.")
+        return "\n".join(lines)
+
+
+def export_settings_sanitized(config: ConfigManager) -> Dict[str, Any]:
+    """Phase 6: Strips all API keys, tokens, passwords, and license keys before exporting."""
+    raw = dict(config.settings)
+    sanitized = {}
+    forbidden_keys = (
+        "api_key", "byo_api_key", "gemini_key", "groq_key", "openrouter_key",
+        "openai_key", "secret", "password", "license_key", "token", "passkey"
+    )
+    for k, v in raw.items():
+        if any(f in k.lower() for f in forbidden_keys):
+            continue
+        sanitized[k] = v
+    sanitized["_exported_by"] = "Sudharshan AI (Alpha v0.9)"
+    sanitized["_exported_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return sanitized
+
+
+def import_settings_sanitized(config: ConfigManager, data: Dict[str, Any]) -> Tuple[bool, str]:
+    """Phase 6: Imports sanitized settings while never overwriting existing credentials."""
+    forbidden_keys = (
+        "api_key", "byo_api_key", "gemini_key", "groq_key", "openrouter_key",
+        "openai_key", "secret", "password", "license_key", "token", "passkey"
+    )
+    imported_count = 0
+    for k, v in data.items():
+        if k.startswith("_") or any(f in k.lower() for f in forbidden_keys):
+            continue
+        config.settings[k] = v
+        imported_count += 1
+    config.save_settings()
+    return True, f"Successfully imported {imported_count} sanitized configuration settings."
+
+
 class BasePlatformAdapter:
     """Abstract interface implemented by `WindowsPlatformAdapter` and `FedoraWaylandAdapter`."""
 
@@ -4408,6 +5287,25 @@ class BajrangEngine:
         self.provider_dashboard = IntelligentProviderDashboard(self.storage, self.config, self.client)
         self.copilot = DeveloperCopilot(self.safety)
         self.diagnostics = DiagnosticsRecoveryCentre(self.storage.db_path, self.config)
+        self.permissions = PermissionsManager(self.config)
+        self.audit_logger = StructuredAuditLogger(self.config.data_dir)
+        self.scheduler = TaskSchedulerManager(self.config.data_dir)
+        self.clipboard_tracker = ClipboardContextTracker()
+        self.file_engine = NaturalLanguageFileEngine(
+            memory_store=self.storage,
+            audit_logger=self.audit_logger,
+            permissions=self.permissions,
+        )
+        self.auto_approve_mode: bool = False
+
+    def set_auto_approve_mode(self, enabled: bool, acknowledged_risk: bool = False) -> Tuple[bool, str]:
+        if enabled:
+            if not acknowledged_risk:
+                return False, "Risk acknowledgment required: 'I understand actions will run without per-step confirmation'."
+            self.auto_approve_mode = True
+            return True, "Auto-Approve mode activated for this session."
+        self.auto_approve_mode = False
+        return True, "Auto-Approve mode deactivated."
 
     def _on_watchdog_state(self, is_offloaded: bool, reason: str) -> None:
         if is_offloaded:
@@ -4445,6 +5343,7 @@ class BajrangEngine:
         return msgs
 
     def trigger_emergency_kill(self) -> str:
+        self.auto_approve_mode = False
         self.voice.interrupt_tts()
         msg = self.kill_switch.trigger()
         self.set_state(AgentState.BLOCKED, "Stopped by Emergency Kill-Switch")
@@ -4481,7 +5380,29 @@ class BajrangEngine:
             self.storage.log_security_event("SCHEMA_REJECTED", tool or "unknown", False, reason)
             return ActionResult(tool=tool or "unknown", success=False, output=f"Blocked by ToolSchemaValidator: {reason}", blocked=True)
 
-        if requires_confirmation and not user_confirmed:
+        # PermissionsManager enforcement
+        cat_map = {
+            "read_screen": "screen_capture",
+            "capture_screen": "screen_capture",
+            "click_point": "input_injection",
+            "type_text": "input_injection",
+            "press_key": "input_injection",
+            "scroll_view": "input_injection",
+            "navigate_hotkey": "input_injection",
+            "inspect_directory": "file_access",
+            "organize_directory": "file_access",
+            "shell_exec": "shell_exec",
+        }
+        needed_perm = cat_map.get(tool)
+        if needed_perm and hasattr(self, "permissions") and not self.permissions.is_granted(needed_perm):
+            return ActionResult(
+                tool=tool or "unknown",
+                success=False,
+                output=f"Permission denied: '{needed_perm}' category is revoked in Permissions Manager.",
+                blocked=True,
+            )
+
+        if requires_confirmation and not user_confirmed and not self.auto_approve_mode:
             return ActionResult(
                 tool=tool,
                 success=False,
@@ -4602,8 +5523,12 @@ class BajrangEngine:
         self.set_state(AgentState.EXECUTING, f"Executing {len(actions)} confirmed action(s)...")
         results: List[ActionResult] = []
         for act in actions:
-            res = self.execute_action(act, user_confirmed=True)
-            results.append(res)
+            if act.get("tool") == "execute_file_plan" and "plan" in act:
+                ok_pl, msg_pl, cnt_pl = self.file_engine.execute_plan(act["plan"], confirmed=True)
+                results.append(ActionResult(tool="organize_directory", success=ok_pl, output=msg_pl, metadata={"count": cnt_pl}))
+            else:
+                res = self.execute_action(act, user_confirmed=True)
+                results.append(res)
         self.set_state(AgentState.IDLE, "Idle")
         self.storage.add_message(sid, "assistant", f"Confirmed and executed {len(results)} action(s).", actions, results, self.client.active_model)
         return results
@@ -4623,6 +5548,162 @@ class BajrangEngine:
             self.storage.add_message(target_session_id, "user", user_prompt, model=self.client.active_model)
 
             lower = (user_prompt or "").strip().lower()
+
+            # 1. Greetings & Capabilities
+            if any(lower == g or lower.startswith(g + " ") for g in ("hello", "hi", "hey", "who are you", "what can you do", "help")):
+                self.set_state(AgentState.IDLE, "Idle")
+                reply = (
+                    "**Sudharshan AI (Alpha v0.9)** — Autonomous Desktop AI Assistant\n\n"
+                    "I can help you navigate and automate your desktop:\n"
+                    "- 📁 **Natural Language File Operations**: Move, copy, clean, organize by type, or quarantine files.\n"
+                    "- 🔍 **Offline File Search & Deduplication**: Search files and scan for duplicate content.\n"
+                    "- 🖥️ **Desktop Automation**: Inspect active windows, capture screenshots, and automate tasks.\n"
+                    "- 🛡️ **Fail-Closed Security**: Reversible quarantine undo manifests with full local privacy.\n\n"
+                    "*Ask me to organize your Downloads, find duplicates, list windows, or capture the screen!*"
+                )
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=reply,
+                    actions=[],
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                if speak_reply and turn.text:
+                    self.voice.speak_tts(turn.text)
+                return turn
+
+            # 2. System Status / Diagnostics
+            if any(lower == s or lower.startswith(s + " ") for s in ("status", "system status", "health", "diagnose", "doctor")):
+                self.set_state(AgentState.IDLE, "Idle")
+                caps = PlatformCapabilityMatrix.get_capabilities()
+                ollama_status = "Online" if self.watchdog.ensure_running() else "Offline"
+                reply = (
+                    f"### ⚡ Sudharshan AI System Status\n\n"
+                    f"- **OS Platform**: {caps.get('os')} ({caps.get('display_server', platform.machine())})\n"
+                    f"- **Input Backend**: `{caps.get('input_injection_backend')}`\n"
+                    f"- **Audio Recording**: `{'Available' if caps.get('voice_capture') else 'Unavailable'}`\n"
+                    f"- **Local Ollama Daemon**: `{ollama_status}` ({self.client.active_model})\n"
+                    f"- **Active Provider**: `{self.client.provider}`\n"
+                    f"- **Keyring Backend**: `{SecurityVault(self.config.config_dir).get_active_backend()}`\n"
+                    f"- **Permissions**: {json.dumps(self.permissions.get_all())}\n"
+                    f"- **Auto-Approve Mode**: `{'Active' if self.auto_approve_mode else 'Disabled (Safe)'}`\n"
+                )
+                turn = AssistantTurn(
+                    response_type="conversation",
+                    text=reply,
+                    actions=[],
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                if speak_reply and turn.text:
+                    self.voice.speak_tts(turn.text)
+                return turn
+
+            # 3. List Open Windows
+            if any(p in lower for p in ("list windows", "show windows", "what windows are open", "open windows")):
+                self.set_state(AgentState.EXECUTING, "Listing windows...")
+                ok_w, msg_w, wins = self.computer_use.list_open_windows()
+                reply = f"**Open Windows ({len(wins)} detected):**\n\n"
+                for w in wins[:12]:
+                    reply += f"- **{w.get('title', 'Unknown')}**\n"
+                turn = AssistantTurn(
+                    response_type="action",
+                    text=reply,
+                    actions=[{"tool": "list_windows", "arguments": {}}],
+                    results=[ActionResult(tool="list_windows", success=ok_w, output=msg_w)],
+                    session_id=target_session_id,
+                    provider_used="local_deterministic",
+                    model_used="sudharshan-local",
+                )
+                self.set_state(AgentState.IDLE, "Idle")
+                self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                if speak_reply and turn.text:
+                    self.voice.speak_tts(turn.text)
+                return turn
+
+            # 4. Natural Language File Operations & Search
+            if any(kw in lower for kw in (
+                "organize", "move all", "copy all", "quarantine", "clean up my", "clean downloads",
+                "find duplicate", "scan for duplicate", "find all pdf", "find large files",
+                "files i just copied", "undo plan", "undo last", "undo that"
+            )):
+                if "undo" in lower:
+                    m = re.search(r"undo\s+(?:plan\s+)?(plan_[a-zA-Z0-9_]+)", lower)
+                    target_plan = m.group(1) if m else self.clipboard_tracker.get_last_plan_id()
+                    if target_plan:
+                        ok_u, msg_u, cnt_u = self.file_engine.undo_plan(target_plan)
+                        reply = f"**Undo Operation Complete:** {msg_u}"
+                    else:
+                        reply = "No previous file operation plan found to undo."
+                    turn = AssistantTurn(
+                        response_type="action",
+                        text=reply,
+                        actions=[],
+                        session_id=target_session_id,
+                        provider_used="local_deterministic",
+                        model_used="sudharshan-local",
+                    )
+                    self.set_state(AgentState.IDLE, "Idle")
+                    self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, turn.model_used)
+                    return turn
+
+                ctx_paths = self.clipboard_tracker.get_context_paths()
+                plan = self.file_engine.plan_request(user_prompt, context_paths=ctx_paths)
+                self.clipboard_tracker.record_plan(plan.plan_id)
+
+                if plan.blocked_reason:
+                    reply = f"⚠️ **Operation Blocked**: {plan.blocked_reason}"
+                    turn = AssistantTurn(response_type="conversation", text=reply, session_id=target_session_id)
+                    self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, "sudharshan-local")
+                    return turn
+
+                if self.auto_approve_mode or auto_confirm_actions:
+                    ok_ex, msg_ex, cnt_ex = self.file_engine.execute_plan(plan, confirmed=True, auto_approve=True)
+                    reply = f"✅ {msg_ex}\n\n*Undo at any time by saying: `undo plan {plan.plan_id}`*"
+                    turn = AssistantTurn(response_type="action", text=reply, session_id=target_session_id)
+                    self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, "sudharshan-local")
+                    return turn
+                else:
+                    turn = AssistantTurn(
+                        response_type="action",
+                        text=f"{self.file_engine.explain_plan(plan)}\n\n[Click **Approve Action** or type 'yes' to execute this plan]",
+                        actions=[{"tool": "organize_directory", "arguments": {"plan_id": plan.plan_id}}],
+                        awaiting_confirmation=True,
+                        session_id=target_session_id,
+                    )
+                    self.pending_actions[target_session_id] = [{"tool": "execute_file_plan", "plan": plan}]
+                    self.set_state(AgentState.AWAITING_CONFIRMATION, "Awaiting approval for file batch")
+                    self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, "sudharshan-local")
+                    return turn
+
+            # 5. Free-form query fallback check:
+            # If provider is ollama and no cloud key is configured, check if Ollama is running
+            if self.client.provider == "ollama":
+                has_cloud_key = any(self.config.get_api_key(p) for p in ("gemini_argon", "gemini", "groq", "openrouter", "openai"))
+                if not has_cloud_key:
+                    if not self.watchdog.ensure_running():
+                        self.set_state(AgentState.IDLE, "Idle")
+                        friendly_card = (
+                            "### ⚡ Local Ollama AI Engine Offline\n\n"
+                            "Sudharshan AI is ready, but your local Ollama server is currently stopped or unreachable at `127.0.0.1:11434`.\n\n"
+                            "**Choose an option to continue:**\n"
+                            "1. **Start Local Ollama**: Run `ollama serve` in a terminal or click the **Start Local Ollama** button.\n"
+                            "2. **Cloud AI (Free & Instant)**: Add a free Google Gemini, Groq, or OpenRouter API key in the top bar to run immediately without downloading models.\n"
+                        )
+                        turn = AssistantTurn(
+                            response_type="conversation",
+                            text=friendly_card,
+                            session_id=target_session_id,
+                            provider_used="offline_fallback",
+                            model_used="offline",
+                        )
+                        self.storage.add_message(target_session_id, "assistant", turn.text, turn.actions, turn.results, "offline")
+                        return turn
+
             if any(p in lower for p in ("take screenshot", "take a screenshot", "capture screen")):
                 self.set_state(AgentState.EXECUTING, "Capturing screenshot...")
                 res = self.execute_action({"tool": "read_screen", "arguments": {}}, user_confirmed=True)

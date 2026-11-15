@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 import inspect
 import json
+import os
+import shutil
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import bajrang_core
 import fedora
 import installer_windows
+import linux_generic
+import macos
 import razorpay_server
 import windows
 
@@ -254,6 +259,286 @@ class TestBajrangAuditRemediations(unittest.TestCase):
             msgs_s2 = engine.storage.get_session_messages(s2)
             self.assertEqual(len(msgs_s1), 2, "H8: Prompt & reply must be written to pinned session s1")
             self.assertEqual(len(msgs_s2), 0, "H8: Switched session s2 must not receive s1 messages")
+
+    def test_phase2_cross_platform_adapters_and_matrix(self):
+        # 1. macOS Platform Adapter
+        mac_adapter = macos.MacOSPlatformAdapter()
+        ctx_mac = mac_adapter.get_desktop_context()
+        self.assertIn("macOS", ctx_mac)
+
+        # Mock subprocess to verify macOS command generation
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+            res_open = mac_adapter.open_app("calculator")
+            self.assertTrue(res_open.success)
+            mock_run.assert_called_with(["open", "-a", "calculator"], capture_output=True, text=True, timeout=5, check=False)
+
+            res_notif = mac_adapter.send_notification("Test Title", "Test Body")
+            self.assertTrue(res_notif.success)
+
+        # Rejection of dangerous trampolines & unknown keys
+        res_trampoline = mac_adapter.open_app("gnome-terminal -- python3 -c 'evil'")
+        self.assertTrue(res_trampoline.blocked)
+        res_bad_key = mac_adapter.press_key("nonexistent_mac_key_999")
+        self.assertTrue(res_bad_key.blocked)
+
+        # 2. Generic Linux Adapter
+        lin_adapter = linux_generic.GenericLinuxAdapter()
+        ctx_lin = lin_adapter.get_desktop_context()
+        self.assertIn("Linux", ctx_lin)
+        distro, pkg, hint = linux_generic.GenericLinuxAdapter.detect_distro()
+        self.assertTrue(bool(distro and pkg and hint))
+
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+            with mock.patch("shutil.which", return_value="/usr/bin/notify-send"):
+                res_n = lin_adapter.send_notification("Header", "Content")
+                self.assertTrue(res_n.success)
+
+        # 3. Platform Capability Matrix
+        for os_name in ("macos", "windows", "linux"):
+            caps = bajrang_core.PlatformCapabilityMatrix.get_capabilities(os_name)
+            self.assertIn("os", caps)
+            self.assertIn("voice_capture", caps)
+            self.assertIn("native_screen_capture", caps)
+            self.assertIn("input_injection_backend", caps)
+            self.assertIn("quarantine_supported", caps)
+
+    def test_phase4_structured_audit_logger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_p = Path(tmp)
+            logger = bajrang_core.StructuredAuditLogger(tmp_p)
+
+            logger.log_event(
+                action_type="file_operation",
+                target_paths=["/home/user/Downloads/test.pdf"],
+                outcome="success",
+                auto_approve_active=True,
+                undo_plan_id="plan_test_001",
+                details={"operation": "move"},
+            )
+
+            # Verify SQLite record
+            events = logger.get_recent_events(limit=10)
+            self.assertEqual(len(events), 1)
+            ev = events[0]
+            self.assertEqual(ev["action_type"], "file_operation")
+            self.assertEqual(ev["outcome"], "success")
+            self.assertTrue(ev["auto_approve_active"])
+            self.assertEqual(ev["undo_plan_id"], "plan_test_001")
+            self.assertIn("/home/user/Downloads/test.pdf", ev["target_paths"])
+
+            # Verify JSONL log file
+            self.assertTrue(logger.jsonl_path.is_file())
+            line = logger.jsonl_path.read_text(encoding="utf-8").strip()
+            record = json.loads(line)
+            self.assertEqual(record["action_type"], "file_operation")
+            self.assertEqual(record["undo_plan_id"], "plan_test_001")
+
+    def test_phase5_natural_language_file_engine_20_phrasings_and_safety(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            storage = bajrang_core.LocalChatStorage(tmp_root / "data")
+            audit = bajrang_core.StructuredAuditLogger(tmp_root / "audit")
+            engine = bajrang_core.NaturalLanguageFileEngine(memory_store=storage, audit_logger=audit)
+
+            # Setup mock folder tree under tmp_root
+            dl_dir = tmp_root / "Downloads"
+            docs_dir = tmp_root / "Documents"
+            desk_dir = tmp_root / "Desktop"
+            pics_dir = tmp_root / "Pictures"
+            dl_dir.mkdir(parents=True)
+            docs_dir.mkdir(parents=True)
+            desk_dir.mkdir(parents=True)
+            pics_dir.mkdir(parents=True)
+
+            # Create sample files
+            (dl_dir / "invoice_101.pdf").write_text("invoice pdf")
+            (dl_dir / "invoice_102.csv").write_text("invoice csv")
+            (dl_dir / "holiday_photo.jpg").write_text("photo jpg")
+            (dl_dir / "screenshot_2026.png").write_text("screenshot png")
+            (dl_dir / "backup.zip").write_text("zip archive")
+            (dl_dir / "script.py").write_text("python script")
+            (dl_dir / "movie.mp4").write_text("video file")
+
+            # 20 Distinct Natural Language Phrasings
+            test_phrasings = [
+                "organize my downloads folder by file type",
+                "move all pdf files from downloads to documents",
+                "clean up my desktop and organize into folders",
+                "find all screenshots and move them to pictures",
+                "copy invoices from downloads to documents/invoices",
+                "quarantine all old zip files in downloads",
+                "delete duplicate files in downloads",
+                "organize downloads by month and year",
+                "move all images from downloads to pictures/imported",
+                "find large files over 100mb in downloads",
+                "rename receipts to add date prefix",
+                "move the files I just copied to desktop",
+                "undo last operation",
+                "undo plan plan_sample_123",
+                "list files in downloads",
+                "find all pdfs edited this week",
+                "scan downloads and desktop for duplicates",
+                "organize code files in downloads into a new folder on the desktop",
+                "move videos from downloads to videos folder",
+                "clean downloads folder and send duplicates to quarantine",
+            ]
+
+            self.assertEqual(len(test_phrasings), 20, "Must test at least 20 distinct phrasings")
+
+            for phrase in test_phrasings:
+                plan = engine.plan_request(phrase, base_dir=tmp_root, context_paths=[str(dl_dir / "invoice_101.pdf")])
+                self.assertIsNotNone(plan.plan_id, f"Plan ID missing for phrase: '{phrase}'")
+                self.assertTrue(len(plan.plain_english_summary) > 0, f"Summary missing for phrase: '{phrase}'")
+
+            # Test 1: Protected System Path Refusal
+            plan_bad1 = engine.plan_request("move files to /etc/shadow", base_dir=tmp_root)
+            self.assertIsNotNone(plan_bad1.blocked_reason, "Must refuse /etc")
+            self.assertIn("Protected system path", plan_bad1.blocked_reason)
+
+            plan_bad2 = engine.plan_request("clean up C:\\Windows\\System32", base_dir=tmp_root)
+            self.assertIsNotNone(plan_bad2.blocked_reason, "Must refuse C:\\Windows")
+
+            # Dotfile protection
+            dot_file = dl_dir / ".bashrc"
+            dot_file.write_text("export SECRET=1")
+            is_prot, _ = engine.is_protected_path(dot_file)
+            self.assertTrue(is_prot, "Dotfiles must be flagged as protected")
+
+            # Test 2: >200 Files Confirmation Gate
+            large_batch_dir = tmp_root / "LargeBatch"
+            large_batch_dir.mkdir(parents=True)
+            for i in range(210):
+                (large_batch_dir / f"doc_{i:03d}.pdf").write_text(f"content {i}")
+
+            large_plan = engine.plan_request("organize files", base_dir=tmp_root)
+            large_plan.items = [
+                bajrang_core.FileOpItem(str(large_batch_dir / f"doc_{i:03d}.pdf"), str(tmp_root / "out" / f"doc_{i:03d}.pdf"), "move")
+                for i in range(210)
+            ]
+            large_plan.requires_large_batch_confirmation = True
+
+            ok_gate, msg_gate, cnt_gate = engine.execute_plan(large_plan, confirmed=False)
+            self.assertFalse(ok_gate, "Unconfirmed >200 batch must fail execution")
+            self.assertIn("exceeds 200 files", msg_gate)
+
+            # With explicit confirmation, it executes
+            ok_gate_conf, _, cnt_conf = engine.execute_plan(large_plan, confirmed=True)
+            self.assertTrue(ok_gate_conf, "Confirmed >200 batch must execute")
+            self.assertEqual(cnt_conf, 210)
+
+            # Test 3: Non-destructive collision renaming
+            (docs_dir / "sample.txt").write_text("original text")
+            (dl_dir / "sample.txt").write_text("incoming text")
+            col_plan = bajrang_core.FileOperationPlan(
+                plan_id="plan_col_test",
+                plain_english_summary="Collision test",
+                items=[bajrang_core.FileOpItem(str(dl_dir / "sample.txt"), str(docs_dir / "sample.txt"), "move")],
+            )
+            ok_col, _, _ = engine.execute_plan(col_plan, confirmed=True)
+            self.assertTrue(ok_col)
+            self.assertTrue((docs_dir / "sample.txt").is_file(), "Original file must not be overwritten")
+            self.assertTrue((docs_dir / "sample_1.txt").is_file(), "Collision must be renamed to sample_1.txt")
+            self.assertEqual((docs_dir / "sample.txt").read_text(), "original text")
+            self.assertEqual((docs_dir / "sample_1.txt").read_text(), "incoming text")
+
+            # Test 4: Quarantine and Lossless One-Click Undo
+            (dl_dir / "quarantine_target.zip").write_text("zip data for quarantine")
+            q_plan = engine.plan_request("quarantine all old zip files in downloads", base_dir=tmp_root)
+            ok_q, _, cnt_q = engine.execute_plan(q_plan, confirmed=True)
+            self.assertTrue(ok_q)
+            self.assertFalse((dl_dir / "quarantine_target.zip").exists(), "Quarantined file must be moved out of source")
+
+            # Execute Undo
+            ok_undo, msg_undo, cnt_undo = engine.undo_plan(q_plan.plan_id)
+            self.assertTrue(ok_undo, f"Undo must succeed: {msg_undo}")
+            self.assertTrue((dl_dir / "quarantine_target.zip").is_file(), "Undone file must be restored to original path")
+
+    def test_phase6_integrated_features(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            cfg = bajrang_core.ConfigManager(config_dir=tmp_root / "cfg", data_dir=tmp_root / "data")
+            adapter = windows.WindowsPlatformAdapter()
+            engine = bajrang_core.BajrangEngine(adapter=adapter, config=cfg)
+
+            # 1. TaskSchedulerManager
+            sched = engine.scheduler
+            res_add = sched.add_schedule("clean up my Downloads every Friday at 6pm")
+            self.assertIn("id", res_add)
+            self.assertEqual(res_add["rule"], "weekly:friday:18:00")
+            schedules = sched.list_schedules()
+            self.assertGreaterEqual(len(schedules), 1)
+            ok_pause = sched.pause_schedule(res_add["id"])
+            self.assertTrue(ok_pause)
+            ok_resume = sched.resume_schedule(res_add["id"])
+            self.assertTrue(ok_resume)
+            ok_del = sched.delete_schedule(res_add["id"])
+            self.assertTrue(ok_del)
+
+            # 2. ClipboardContextTracker
+            clip = engine.clipboard_tracker
+            test_f = tmp_root / "copied.txt"
+            test_f.write_text("hello clipboard")
+            clip.record_paths([str(test_f)])
+            clip.record_plan("plan_clip_001")
+            self.assertEqual(clip.get_context_paths(), [str(test_f)])
+            self.assertEqual(clip.get_last_plan_id(), "plan_clip_001")
+
+            # 3. PermissionsManager
+            perms = engine.permissions
+            self.assertTrue(perms.is_granted("screen_capture"))
+            perms.revoke("screen_capture")
+            self.assertFalse(perms.is_granted("screen_capture"))
+            res_act = engine.execute_action({"tool": "read_screen", "arguments": {}}, user_confirmed=True)
+            self.assertTrue(res_act.blocked, "Action must be blocked when permission is revoked")
+            self.assertIn("Permission denied", res_act.output)
+            perms.grant("screen_capture")
+            self.assertTrue(perms.is_granted("screen_capture"))
+
+            # 4. Content-Hash Duplicate Finder (SHA-256)
+            folder_a = tmp_root / "FolderA"
+            folder_b = tmp_root / "FolderB"
+            folder_a.mkdir(parents=True)
+            folder_b.mkdir(parents=True)
+            dup_content = b"IDENTICAL DUPLICATE FILE CONTENT SHA256"
+            (folder_a / "file1.txt").write_bytes(dup_content)
+            (folder_b / "file2.txt").write_bytes(dup_content)
+            (folder_a / "unique.txt").write_bytes(b"unique content")
+
+            dups, total_dups = engine.file_engine.find_duplicates_multi_folder([str(folder_a), str(folder_b)])
+            self.assertEqual(total_dups, 1, "Must find exactly 1 duplicate file")
+            self.assertEqual(len(dups), 1, "Must find 1 hash group with multiple files")
+
+            # 5. Offline Natural-Language File Search
+            search_res = engine.file_engine.offline_search("unique", search_dir=str(folder_a))
+            self.assertGreaterEqual(len(search_res), 1)
+            self.assertEqual(search_res[0]["name"], "unique.txt")
+
+            # 6. Sanitized Settings Export / Import
+            cfg.settings["api_key_gemini"] = "AIzaSySecretDoNotExport"
+            cfg.settings["byo_api_key"] = "sk-SecretKeyDoNotExport"
+            cfg.settings["custom_theme"] = "obsidian_orange"
+            exported = bajrang_core.export_settings_sanitized(cfg)
+            self.assertNotIn("api_key_gemini", exported, "API keys must be stripped in sanitized export")
+            self.assertNotIn("byo_api_key", exported, "BYO API keys must be stripped in sanitized export")
+            self.assertEqual(exported["custom_theme"], "obsidian_orange")
+
+            # Import into clean config
+            clean_cfg = bajrang_core.ConfigManager(config_dir=tmp_root / "clean_cfg", data_dir=tmp_root / "clean_data")
+            ok_imp, _ = bajrang_core.import_settings_sanitized(clean_cfg, exported)
+            self.assertTrue(ok_imp)
+            self.assertEqual(clean_cfg.settings["custom_theme"], "obsidian_orange")
+            self.assertNotIn("api_key_gemini", clean_cfg.settings)
+
+            # 7. Auto-Approve Mode
+            ok_fail, _ = engine.set_auto_approve_mode(True, acknowledged_risk=False)
+            self.assertFalse(ok_fail, "Auto-approve must fail without risk acknowledgment")
+            ok_pass, _ = engine.set_auto_approve_mode(True, acknowledged_risk=True)
+            self.assertTrue(ok_pass)
+            self.assertTrue(engine.auto_approve_mode)
+            engine.trigger_emergency_kill()
+            self.assertFalse(engine.auto_approve_mode, "Emergency kill must immediately disable auto-approve mode")
 
 
 if __name__ == "__main__":

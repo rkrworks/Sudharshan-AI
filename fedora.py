@@ -25,11 +25,14 @@ import platform
 import shlex
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import traceback
+import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -432,13 +435,14 @@ def install_gnome_extension(target_dir: Optional[Path] = None, project_dir: Opti
 
     metadata = {
         "uuid": ext_uuid,
-        "name": "Bajrang AI Assistant",
-        "description": "Top-Bar indicator and global Kill-Switch for Bajrang AI on Fedora GNOME Wayland.",
+        "name": "Sudharshan AI Assistant",
+        "description": "Top-Bar indicator and global Kill-Switch for Sudharshan AI on Fedora GNOME Wayland.",
         "shell-version": ["45", "46", "47", "48", "49"],
-        "version": 3,
+        "version": 4,
     }
     (ext_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
+    python_exe = sys.executable or "/usr/bin/python3"
     extension_js = f"""import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
@@ -448,31 +452,32 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {{Extension}} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const SCRIPT_PATH = '{fedora_script}';
+const PYTHON_EXE = '{python_exe}';
 
-const BajrangIndicator = GObject.registerClass(
-class BajrangIndicator extends PanelMenu.Button {{
+const SudharshanIndicator = GObject.registerClass(
+class SudharshanIndicator extends PanelMenu.Button {{
     _init() {{
-        super._init(0.0, 'Bajrang AI');
-        this._label = new St.Label({{text: 'Bajrang AI', y_align: 2}});
+        super._init(0.0, 'Sudharshan AI');
+        this._label = new St.Label({{text: 'Sudharshan AI', y_align: 2}});
         this.add_child(this._label);
 
         let toggleItem = new PopupMenu.PopupMenuItem('Launch Floating HUD');
         toggleItem.connect('activate', () => {{
-            Gio.Subprocess.new(['python3', SCRIPT_PATH], Gio.SubprocessFlags.NONE);
+            Gio.Subprocess.new([PYTHON_EXE, SCRIPT_PATH], Gio.SubprocessFlags.NONE);
         }});
         this.menu.addMenuItem(toggleItem);
 
         let killItem = new PopupMenu.PopupMenuItem('Emergency Kill-Switch (Ctrl+Shift+K)');
         killItem.connect('activate', () => {{
-            Gio.Subprocess.new(['python3', SCRIPT_PATH, '--kill-running'], Gio.SubprocessFlags.NONE);
+            Gio.Subprocess.new([PYTHON_EXE, SCRIPT_PATH, '--kill-running'], Gio.SubprocessFlags.NONE);
         }});
         this.menu.addMenuItem(killItem);
     }}
 }});
 
-export default class BajrangExtension extends Extension {{
+export default class SudharshanExtension extends Extension {{
     enable() {{
-        this._indicator = new BajrangIndicator();
+        this._indicator = new SudharshanIndicator();
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }}
     disable() {{
@@ -520,6 +525,201 @@ def export_modular_project(target_dir: Path) -> Path:
     )
     run_sh.chmod(0o755)
     return target_dir
+
+
+def detect_distro_package_manager() -> Tuple[str, str, str]:
+    distro_id = "linux"
+    id_like = ""
+    os_rel = Path("/etc/os-release")
+    if os_rel.is_file():
+        for line in os_rel.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("ID="):
+                distro_id = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+            elif line.startswith("ID_LIKE="):
+                id_like = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+
+    if distro_id in ("fedora", "rhel", "centos") or "fedora" in id_like or "rhel" in id_like:
+        return distro_id, "dnf", "sudo dnf install -y gtk4 libadwaita python3-gobject ydotool pipewire-utils"
+    elif distro_id in ("ubuntu", "debian", "pop", "mint") or "debian" in id_like or "ubuntu" in id_like:
+        return distro_id, "apt", "sudo apt-get update && sudo apt-get install -y libgtk-4-dev gir1.2-gtk-4.0 gir1.2-adw-1 python3-gi ydotool pipewire"
+    elif distro_id in ("arch", "manjaro") or "arch" in id_like:
+        return distro_id, "pacman", "sudo pacman -S --needed gtk4 libadwaita python-gobject ydotool pipewire"
+    elif distro_id in ("opensuse", "suse", "opensuse-tumbleweed", "opensuse-leap") or "suse" in id_like:
+        return distro_id, "zypper", "sudo zypper install -y gtk4-devel typelib-1_0-Gtk-4_0 typelib-1_0-Adw-1 python3-gobject ydotool pipewire-tools"
+    elif distro_id == "alpine":
+        return distro_id, "apk", "sudo apk add gtk4.0 libadwaita py3-gobject ydotool pipewire"
+    return distro_id, "package_manager", "Install GTK4, Libadwaita, and ydotool via your system package manager."
+
+
+def run_preflight_checks(engine: Optional[BajrangEngine] = None) -> List[Dict[str, Any]]:
+    checks = []
+
+    # 1. Python >= 3.9
+    py_ok = sys.version_info >= (3, 9)
+    checks.append({
+        "name": "Python Runtime",
+        "status": "PASS" if py_ok else "FAIL",
+        "detail": f"Python {sys.version.split()[0]} (>= 3.9 required)",
+        "critical": True,
+        "fix": "Upgrade Python via your system package manager.",
+    })
+
+    # 2. GTK 4.0 Toolkit
+    gtk_ok = False
+    gtk_detail = ""
+    try:
+        import gi
+        gi.require_version("Gtk", "4.0")
+        from gi.repository import Gtk
+        gtk_ok = True
+        gtk_detail = "GTK 4.0 bindings available via PyGObject"
+    except Exception as exc:
+        _, _, fix_cmd = detect_distro_package_manager()
+        gtk_detail = f"GTK 4.0 bindings missing ({exc})"
+        checks.append({
+            "name": "GTK 4.0 Toolkit",
+            "status": "FAIL",
+            "detail": gtk_detail,
+            "critical": True,
+            "fix": fix_cmd,
+        })
+    if gtk_ok:
+        checks.append({
+            "name": "GTK 4.0 Toolkit",
+            "status": "PASS",
+            "detail": gtk_detail,
+            "critical": True,
+            "fix": "",
+        })
+
+    # 3. Libadwaita 1.0 (with fallback to GTK4)
+    adw_ok = False
+    try:
+        import gi
+        gi.require_version("Adw", "1")
+        from gi.repository import Adw
+        adw_ok = True
+        adw_detail = "Libadwaita 1.0 GNOME modern widgets active"
+    except Exception:
+        adw_detail = "Libadwaita 1.0 missing (Falling back to styled plain GTK4)"
+    checks.append({
+        "name": "Libadwaita Modern UI",
+        "status": "PASS" if adw_ok else "WARN",
+        "detail": adw_detail,
+        "critical": False,
+        "fix": detect_distro_package_manager()[2] if not adw_ok else "",
+    })
+
+    # 4. Display Server
+    disp = "Wayland" if os.environ.get("WAYLAND_DISPLAY") else ("X11" if os.environ.get("DISPLAY") else "Headless")
+    checks.append({
+        "name": "Display Server",
+        "status": "PASS" if disp in ("Wayland", "X11") else "WARN",
+        "detail": f"{disp} session active",
+        "critical": False,
+        "fix": "Ensure an active graphical desktop session is running if GUI is required.",
+    })
+
+    # 5. Input Injection Tool
+    input_tool = shutil.which("ydotool") or shutil.which("xdotool")
+    checks.append({
+        "name": "Input Injection Tool",
+        "status": "PASS" if input_tool else "WARN",
+        "detail": f"Found: {input_tool}" if input_tool else "Neither ydotool nor xdotool found in PATH",
+        "critical": False,
+        "fix": detect_distro_package_manager()[2],
+    })
+
+    # 6. Audio Backend
+    audio_tool = shutil.which("pw-record") or shutil.which("parecord") or shutil.which("arecord")
+    checks.append({
+        "name": "Audio Capture Backend",
+        "status": "PASS" if audio_tool else "WARN",
+        "detail": f"Found: {audio_tool}" if audio_tool else "No audio capture tool found (pw-record/parecord)",
+        "critical": False,
+        "fix": "Run: sudo dnf install -y pipewire-utils alsa-utils",
+    })
+
+    # 7. Local Ollama Reachability
+    ollama_ok = False
+    host = "http://127.0.0.1:11434"
+    if engine:
+        host = str(engine.config.settings.get("ollama_host", host)).rstrip("/")
+    try:
+        req = urllib.request.Request(f"{host}/api/version", method="GET")
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            if resp.status == 200:
+                ollama_ok = True
+    except Exception:
+        pass
+    checks.append({
+        "name": "Local Ollama Daemon",
+        "status": "PASS" if ollama_ok else "WARN",
+        "detail": f"Online at {host}" if ollama_ok else f"Offline at {host} (Start via 'ollama serve' or enter BYO API key)",
+        "critical": False,
+        "fix": "Run: ollama serve (or configure a Gemini/Groq API key in top bar)",
+    })
+
+    # 8. SQLite WAL Health
+    db_ok = True
+    try:
+        data_dir = engine.config.data_dir if engine else (Path.home() / ".local" / "share" / "bajrang-ai")
+        data_dir.mkdir(parents=True, exist_ok=True)
+        test_db = data_dir / "doctor_probe.db"
+        conn = sqlite3.connect(str(test_db), timeout=2.0)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("CREATE TABLE IF NOT EXISTS doctor_probe (id INTEGER PRIMARY KEY);")
+        conn.commit()
+        conn.close()
+        test_db.unlink(missing_ok=True)
+    except Exception:
+        db_ok = False
+    checks.append({
+        "name": "SQLite WAL Storage",
+        "status": "PASS" if db_ok else "FAIL",
+        "detail": "Local WAL storage writable" if db_ok else "Storage initialization error",
+        "critical": True,
+        "fix": "Ensure write access to ~/.local/share/bajrang-ai",
+    })
+
+    # 9. Keyring Backend
+    vault_detail = ""
+    try:
+        cfg = engine.config if engine else ConfigManager()
+        vault_detail = SecurityVault(cfg.config_dir).get_active_backend()
+    except Exception as exc:
+        vault_detail = f"Keyring probe error: {exc}"
+    checks.append({
+        "name": "SecurityVault Keyring",
+        "status": "PASS",
+        "detail": f"Active backend: {vault_detail}",
+        "critical": False,
+        "fix": "",
+    })
+
+    return checks
+
+
+def run_doctor(engine: Optional[BajrangEngine] = None) -> int:
+    print("=" * 72)
+    print(" Sudharshan AI (Alpha v0.9) — Fedora Workstation Preflight Doctor")
+    print("=" * 72)
+    checks = run_preflight_checks(engine)
+    all_critical_passed = True
+    for c in checks:
+        status_tag = f"[{c['status']}]"
+        print(f" {status_tag:<8} {c['name']:<28} {c['detail']}")
+        if c.get("fix") and c["status"] in ("FAIL", "WARN"):
+            print(f"          -> Remediation: {c['fix']}")
+        if c["critical"] and c["status"] == "FAIL":
+            all_critical_passed = False
+    print("-" * 72)
+    if all_critical_passed:
+        print(" SUCCESS: All core requirements passed! Sudharshan AI is ready.")
+        return 0
+    else:
+        print(" FAILED: One or more critical requirements are missing. Review remediation steps above.")
+        return 1
 
 
 def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
@@ -704,14 +904,26 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                 app.connect("activate", on_activate)
                 app.run(None)
                 return
-            except Exception:
-                pass
+            except Exception as exc:
+                crash_log = Path(engine.config.data_dir) / "logs" / "crash.log"
+                crash_log.parent.mkdir(parents=True, exist_ok=True)
+                with open(crash_log, "a", encoding="utf-8") as f:
+                    f.write(f"\n--- CRASH AT {datetime.datetime.now().isoformat()} ---\n")
+                    traceback.print_exc(file=f)
+                sys.stderr.write(f"Sudharshan AI encountered a GUI crash: {exc}\n")
+                sys.stderr.write(f"Full traceback saved to: {crash_log}\n")
+                sys.stderr.write("Run 'python3 fedora.py --doctor' to diagnose environment problems.\n")
+                return
 
-        try:
-            from windows import run_windows_tkinter_app
-            run_windows_tkinter_app(engine)
-        except Exception as exc:
-            print(f"No graphical display active ({exc}). Use `--prompt` for headless CLI execution.")
+        checks = run_preflight_checks(engine)
+        missing_critical = [c for c in checks if c["critical"] and c["status"] == "FAIL"]
+        if missing_critical:
+            _, _, fix_cmd = detect_distro_package_manager()
+            sys.stderr.write("Missing graphical interface or required libraries.\n")
+            sys.stderr.write(f"Remediation command: {fix_cmd}\n")
+        else:
+            sys.stderr.write("No active graphical display server (WAYLAND_DISPLAY or DISPLAY).\n")
+        sys.stderr.write("Use `--prompt \"<text>\"` for headless CLI execution, or `--doctor` for full diagnostics.\n")
     finally:
         stop_kill_ev.set()
 
@@ -777,6 +989,7 @@ def run_self_tests() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Sudharshan AI (Alpha v0.9) — Fedora Workstation (GNOME / Wayland) Assistant")
     parser.add_argument("--self-test", action="store_true", help="Run headless self-tests")
+    parser.add_argument("--doctor", "--diagnose", action="store_true", help="Run preflight doctor diagnostics")
     parser.add_argument("--kill-running", action="store_true", help="Send emergency kill signal to running instance")
     parser.add_argument("--install-gnome-extension", action="store_true", help="Install GNOME Shell 45-49 extension")
     parser.add_argument("--export-project", type=str, default="", help="Export modular project to directory")
@@ -788,6 +1001,9 @@ def main() -> int:
 
     if args.self_test:
         return run_self_tests()
+
+    if args.doctor:
+        return run_doctor()
 
     if args.kill_running:
         ok, msg = send_kill_signal_to_running_instance()

@@ -44,7 +44,7 @@ class WindowsSmartEnvironmentScanner:
             self.target_dir = target_dir
         elif IS_WINDOWS:
             local_app = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-            self.target_dir = Path(local_app) / "Programs" / "BajrangAIPro"
+            self.target_dir = Path(local_app) / "Programs" / "SudharshanAI"
         else:
             self.target_dir = Path.home() / ".local" / "share" / "bajrang-ai-pro-win-sim"
         self.config_dir = config_dir or (Path.home() / ".bajrang_ai")
@@ -249,9 +249,14 @@ class WindowsSmartEnvironmentScanner:
                 if candidate.exists():
                     shutil.copy2(candidate, self.target_dir / fname)
                     copied.append(fname)
-            launcher_bat = self.target_dir / "Launch_Bajrang_AI_Pro.bat"
+            launcher_bat = self.target_dir / "Launch_Sudharshan_AI.bat"
             launcher_bat.write_text(
                 '@echo off\r\ncd /d "%~dp0"\r\nstart "" pythonw "%~dp0windows.py"\r\n',
+                encoding="utf-8",
+            )
+            legacy_launcher = self.target_dir / "Launch_Bajrang_AI_Pro.bat"
+            legacy_launcher.write_text(
+                '@echo off\r\ncall "%~dp0Launch_Sudharshan_AI.bat"\r\n',
                 encoding="utf-8",
             )
             return True, f"Deployed {len(copied)} files to {self.target_dir}"

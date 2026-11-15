@@ -80,7 +80,9 @@ echo [OK] Using Python: %PYTHON_EXE%
 :: [Step 4] Install Required Python Packages
 echo [4/7] Installing and verifying required Python packages...
 "%PYTHON_EXE%" -m pip install --upgrade pip >nul 2>&1
-if exist "%~dp0requirements_windows.txt" (
+if exist "%~dp0requirements-windows.txt" (
+    "%PYTHON_EXE%" -m pip install -r "%~dp0requirements-windows.txt" >> "%LOG_FILE%" 2>&1
+) else if exist "%~dp0requirements_windows.txt" (
     "%PYTHON_EXE%" -m pip install -r "%~dp0requirements_windows.txt" >> "%LOG_FILE%" 2>&1
 )
 if exist "%~dp0installer_windows.py" (

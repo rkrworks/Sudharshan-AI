@@ -25,6 +25,7 @@ import io
 import os
 import platform
 import queue
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -912,15 +913,143 @@ def run_self_tests() -> int:
     return 0
 
 
+def run_preflight_checks(engine: Optional[BajrangEngine] = None) -> List[Dict[str, Any]]:
+    checks = []
+
+    # 1. Python Runtime
+    py_ok = sys.version_info >= (3, 9)
+    checks.append({
+        "name": "Python Runtime",
+        "status": "PASS" if py_ok else "FAIL",
+        "detail": f"Python {sys.version.split()[0]} (>= 3.9 required)",
+        "critical": True,
+        "fix": "Install Python 3.11+ from python.org or via 'winget install Python.Python.3.11'",
+    })
+
+    # 2. Tkinter UI Framework
+    is_win = platform.system() == "Windows"
+    tk_ok = False
+    try:
+        import tkinter
+        tk_ok = True
+        tk_detail = f"Tkinter {tkinter.TkVersion} available"
+    except Exception as exc:
+        tk_detail = f"Tkinter unavailable in current interpreter ({exc})"
+    checks.append({
+        "name": "Tkinter GUI Toolkit",
+        "status": "PASS" if tk_ok else ("FAIL" if is_win else "WARN"),
+        "detail": tk_detail,
+        "critical": is_win,
+        "fix": "Re-run Python installer and check 'tcl/tk and IDLE', or run 'sudo dnf install python3-tkinter' on Linux.",
+    })
+
+    # 3. Windows Native Layer / ctypes
+    checks.append({
+        "name": "Windows 11 Win32 Subsystem",
+        "status": "PASS" if is_win else "WARN",
+        "detail": f"{platform.system()} {platform.release()} (Win32 SendInput & DWM active)" if is_win else f"Running on {platform.system()} (Mock Win32 adapter fallback active)",
+        "critical": False,
+        "fix": "Run on Windows 10/11 for native Win32 SendInput and immersive dark mode titlebars.",
+    })
+
+    # 4. Local Ollama Reachability
+    ollama_ok = False
+    host = "http://127.0.0.1:11434"
+    if engine:
+        host = str(engine.config.settings.get("ollama_host", host)).rstrip("/")
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"{host}/api/version", method="GET")
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            if resp.status == 200:
+                ollama_ok = True
+    except Exception:
+        pass
+    checks.append({
+        "name": "Local Ollama Daemon",
+        "status": "PASS" if ollama_ok else "WARN",
+        "detail": f"Online at {host}" if ollama_ok else f"Offline at {host} (Start via 'ollama serve' or enter BYO API key)",
+        "critical": False,
+        "fix": "Run: ollama serve (or configure a Gemini/Groq API key in top bar)",
+    })
+
+    # 5. SQLite Storage
+    db_ok = True
+    db_detail = "Local WAL storage writable"
+    try:
+        data_dir = engine.config.data_dir if engine else (Path.home() / ("AppData/Local/SudharshanAI" if is_win else ".local/share/bajrang-ai"))
+        data_dir.mkdir(parents=True, exist_ok=True)
+        test_db = data_dir / "doctor_probe.db"
+        conn = sqlite3.connect(str(test_db), timeout=2.0)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("CREATE TABLE IF NOT EXISTS doctor_probe (id INTEGER PRIMARY KEY);")
+        conn.commit()
+        conn.close()
+        test_db.unlink(missing_ok=True)
+    except Exception as exc:
+        db_ok = False
+        db_detail = f"Storage initialization error: {exc}"
+    checks.append({
+        "name": "SQLite WAL Storage",
+        "status": "PASS" if db_ok else "FAIL",
+        "detail": db_detail,
+        "critical": True,
+        "fix": "Ensure write access to user application storage directory.",
+    })
+
+    # 6. Keyring / DPAPI Backend
+    vault_detail = ""
+    try:
+        cfg = engine.config if engine else ConfigManager()
+        vault_detail = SecurityVault(cfg.config_dir).get_active_backend()
+    except Exception as exc:
+        vault_detail = f"Keyring probe error: {exc}"
+    checks.append({
+        "name": "SecurityVault Keyring",
+        "status": "PASS",
+        "detail": f"Active backend: {vault_detail}",
+        "critical": False,
+        "fix": "",
+    })
+
+    return checks
+
+
+def run_doctor(engine: Optional[BajrangEngine] = None) -> int:
+    print("=" * 72)
+    print(" Sudharshan AI (Alpha v0.9) — Windows 11 Preflight Doctor")
+    print("=" * 72)
+    checks = run_preflight_checks(engine)
+    all_critical_passed = True
+    for c in checks:
+        status_tag = f"[{c['status']}]"
+        print(f" {status_tag:<8} {c['name']:<28} {c['detail']}")
+        if c.get("fix") and c["status"] in ("FAIL", "WARN"):
+            print(f"          -> Remediation: {c['fix']}")
+        if c["critical"] and c["status"] == "FAIL":
+            all_critical_passed = False
+    print("-" * 72)
+    if all_critical_passed:
+        print(" SUCCESS: All core Windows requirements passed! Sudharshan AI is ready.")
+        return 0
+    else:
+        print(" FAILED: One or more critical requirements are missing. Review remediation steps above.")
+        return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Sudharshan AI (Alpha v0.9) — Windows 11 Desktop Assistant")
     parser.add_argument("--self-test", action="store_true", help="Run headless self-tests")
+    parser.add_argument("--doctor", "--diagnose", action="store_true", help="Run preflight doctor diagnostics")
     parser.add_argument("--api-key", type=str, default="", help="Store BYO API key in SecurityVault")
     parser.add_argument("--prompt", type=str, default="", help="Run a single prompt in CLI mode")
     args = parser.parse_args()
 
     if args.self_test:
         return run_self_tests()
+
+    if args.doctor:
+        return run_doctor()
 
     cfg = ConfigManager()
     adapter = WindowsPlatformAdapter()
