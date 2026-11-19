@@ -1,706 +1,256 @@
 <!doctype html>
-<html lang="en" data-type="software" data-radius="soft" data-ground="sage" data-buttons="pill" data-motion>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sudharshan AI: desktop AI assistant for Windows and Fedora Linux</title>
-<meta name="description" content="Local-first desktop AI assistant for Windows 11 and Fedora Linux with offline Llama 3.2 inference, fail-closed safety guards, and hardware vault security.">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Sudharshan AI: desktop AI assistant for Windows and Fedora Linux">
-<meta property="og:description" content="Local-first desktop AI assistant for Windows 11 and Fedora Linux with offline Llama 3.2 inference, fail-closed safety guards, and hardware vault security.">
-<meta property="og:image" content="share.jpg">
-<meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#000000">
-<meta name="site-kind" content="software">
-<meta name="page-type" content="software">
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/system.css">
-<link rel="stylesheet" href="assets/ui/cards.css">
-<link rel="stylesheet" href="assets/motion/motion.css">
-<link rel="stylesheet" href="assets/backgrounds/backgrounds.css">
-<link rel="stylesheet" href="assets/layout/layout.css">
-<link rel="stylesheet" href="assets/icons/icon.css">
-<link rel="stylesheet" href="assets/ui/base.css">
-<link rel="stylesheet" href="assets/ui/window/fragment.css">
-<link rel="stylesheet" href="assets/ui/terminal-run/fragment.css">
-<link rel="stylesheet" href="assets/ui/voice/fragment.css">
-<link rel="stylesheet" href="assets/ui/toggles/fragment.css">
-<link rel="stylesheet" href="assets/ui/checklist/fragment.css">
-<link rel="stylesheet" href="assets/ui/chat/fragment.css">
-<link rel="stylesheet" href="assets/moments/word-highlight/moment.css">
-
-<style>
-:root {
-  --p-bg: #0B0B0D; --p-surface: #141418; --p-hairline: #24242B; --p-ink: #F4F4F6; --p-muted: #9E9EA8;
-  --p-accent: #FF5A1F; --p-accent-ink: #0B0B0D; --p-action: #FF5A1F; --p-action-ink: #0B0B0D;
-  --p-inv-bg: #FF5A1F; --p-inv-surface: #E84E15; --p-inv-ink: #0B0B0D; --p-inv-muted: #24242B;
-  --p-inv-accent: #0B0B0D; --p-inv-accent-ink: #FF5A1F; --p-inv-action: #0B0B0D; --p-inv-action-ink: #FF5A1F;
-  --u-border: #24242B;
-  --r-container: 10px;
-  --r-input: 8px;
-  --r-cta: 9999px;
-  --hue: 18;
-  --font-display: "Instrument Sans", system-ui, sans-serif;
-  --font-text: "Instrument Sans", system-ui, sans-serif;
-  --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --display-weight: 500;
-  --display-tracking: -0.028em;
-  --display-tracking-xl: -0.036em;
-  --display-stretch: 96%;
-  --ly-scale: 1.04;
-}
-
-/* Shape-Consistency Lock */
-.card, .panel, .visit--card, .tile__media, .device { border-radius: 10px !important; }
-input, select, textarea, .input { border-radius: 8px !important; }
-.btn--primary, a.btn--primary, button.btn--primary { border-radius: 9999px !important; }
-
-#features .panel { --p-h: 280px; }
-@media (max-width: 639px) { #features .panel { --p-h: 200px; } }
-
-#workspace .app.ui {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  margin-top: var(--s-7);
-  background: var(--u-bg);
-  border: 1px solid var(--u-border);
-  border-radius: var(--u-r);
-  box-shadow: var(--u-shadow);
-  flex: 1 1 0;
-  min-height: 0;
-  max-height: 520px;
-}
-#workspace .app > .app__pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; height: 100%; }
-#workspace .app > .app__pane + .app__pane { border-left: 1px solid var(--u-line); }
-#workspace .app > .app__pane > .ui-panel { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
-#workspace .app > .app__pane::after { content: ""; position: absolute; inset: auto 0 0 0; height: 48px; background: linear-gradient(transparent, var(--u-bg)); pointer-events: none; }
-@media (min-width: 1024px) and (max-width: 1279px) { #workspace .app.ui { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); } }
-@media (max-width: 1023px) {
-  #workspace .app.ui { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  #workspace .app > .app__pane--list { max-height: 220px; }
-  #workspace .app > .app__pane--list::after { display: none; }
-  #workspace .app .ui-win__side { display: none; }
-  #workspace .app .ui-win__body { grid-template-columns: minmax(0, 1fr); }
-  #workspace .app > .app__pane + .app__pane { border-left: 0; border-top: 1px solid var(--u-line); }
-}
-@media (max-width: 639px) {
-  #workspace .app.ui { grid-template-rows: minmax(0, 1fr); }
-  #workspace .app > .app__pane--list { display: none; }
-  #workspace .app > .app__pane + .app__pane { border-top: 0; }
-}
-
-.statement { padding-block: var(--s-10); }
-.statement .t-label { color: var(--muted); margin-bottom: var(--s-6); }
-.author-pill { display: inline-flex; align-items: center; gap: var(--s-2); padding: 4px 14px; border-radius: 9999px; background: rgba(255, 107, 26, 0.10); border: 1px solid rgba(255, 107, 26, 0.32); font-size: var(--t-small); color: #ffb085; margin-top: var(--s-4); }
-.hero--split { background-image: radial-gradient(circle at 78% 28%, rgba(255, 107, 26, 0.16), transparent 48%); }
-.card.is-featured { border-color: rgba(255, 107, 26, 0.55); box-shadow: 0 0 36px -10px rgba(255, 107, 26, 0.25); }
-</style>
-
-<script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
-<script src="assets/backgrounds/backgrounds.js"></script>
-<script>document.documentElement.classList.add('mo-js');setTimeout(()=>document.documentElement.classList.add('mo-safe'),2500)</script>
-<link rel="modulepreload" href="assets/moments/moments.js">
-<link rel="modulepreload" href="assets/moments/lib.js">
-<link rel="modulepreload" href="assets/moments/word-highlight/moment.js">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sudharshan AI v1.0 — Local-First Desktop AI &amp; Sudharshan OS</title>
+  <meta name="description" content="Sudharshan AI v1.0 is a local-first, fail-closed desktop AI assistant powered by an adaptive Qwen 3.5 multi-model engine, evolving into Sudharshan OS on Fedora 43.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<!-- type: software
-     deal: hero split, nav nav-mega, close close-word, footer footer-statement, rhythm surface-pairs, buttons tonal, mark initial, grounds bg-dots, bg-band
-     moments: word-highlight on #statement
--->
-
-<header class="nav">
-  <div class="wrap nav__bar">
-    <a class="skip-link" href="#top">Skip to content</a>
-    <a class="nav__logo" href="#top"><span class="mark mark--initial" aria-hidden="true">S</span>Sudharshan AI <small style="font-size:11px;color:var(--p-accent);font-family:var(--font-mono);margin-left:6px;">ALPHA</small></a>
-    <nav class="nav__links" aria-label="Main">
-      <div class="nav__item">
-        <a class="nav__link" href="#features">Features <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-        <div class="nav__menu">
-          <div class="wrap grid">
-            <div class="menu-col span-3">
-              <p class="t-label">Capabilities</p>
-              <a href="#workspace">Unified Workspace<span>Desktop assistant across two systems</span></a>
-              <a href="#features">Spectral Voice Spotter<span>Offline 8-band Goertzel DSP</span></a>
-              <a href="#features">Safety Guard Allowlist<span>Fail-closed execution model</span></a>
-            </div>
-            <div class="menu-col span-3">
-              <p class="t-label">Dual Architecture</p>
-              <a href="#platforms">Windows 11 Adapter<span>Win32 ctypes and Tkinter HUD</span></a>
-              <a href="#platforms">Fedora GNOME Wayland<span>PipeWire and ydotool synthesis</span></a>
-              <a href="#pricing">Pro RSA Licensing<span>Asymmetric offline verification</span></a>
-            </div>
-            <div class="menu-card span-4 start-9">
-              <div class="panel" style="padding:16px;font-size:12px;font-family:var(--font-mono);color:var(--p-accent)">Sudharshan Core v0.9-alpha<br><span style="color:var(--p-muted)">SHA-256 Verified Safe</span></div>
-              <span class="t-card">Local Llama 3.2</span>
-              <span class="t-small muted">Zero cloud telemetry required</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="nav__item"><a class="nav__link" href="#workspace">Workspace</a></div>
-      <div class="nav__item"><a class="nav__link" href="#models">Models</a></div>
-      <div class="nav__item"><a class="nav__link" href="#platforms">Platforms</a></div>
-      <div class="nav__item"><a class="nav__link" href="#pricing">Pricing</a></div>
-      <div class="nav__item"><a class="nav__link" href="#faq">Questions</a></div>
-      <div class="nav__item"><a class="nav__link" href="downloads.html">Downloads</a></div>
-      <div class="nav__item"><a class="nav__link" href="privacy.html">Privacy</a></div>
-      <div class="nav__item"><a class="nav__link" href="terms.html">Terms</a></div>
-      <div class="nav__item"><a class="nav__link" href="https://github.com/rkrworks/Sudharshan-AI" target="_blank" rel="noopener">GitHub</a></div>
-    </nav>
-    <div class="nav__actions">
-      <a class="btn btn--primary" href="downloads.html">Download desktop app</a>
+  <header class="site-header">
+    <div class="container nav-row">
+      <a href="index.html" class="brand"><span class="brand-mark" aria-hidden="true">S</span> Sudharshan AI</a>
+      <nav class="nav-links" aria-label="Primary Navigation">
+        <a href="#models">Multi-Model Engine</a>
+        <a href="#waves">100 Features</a>
+        <a href="#sudharshan-os">Sudharshan OS</a>
+        <a href="#faq">FAQ</a>
+        <a href="docs.html">Architecture Docs</a>
+      </nav>
+      <a href="downloads.html" class="btn btn-primary">Download v1.0</a>
     </div>
-    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-  </div>
-</header>
+  </header>
 
-<main id="top">
-  <section class="hero hero--split bg-dots" data-enter aria-labelledby="hero-h" style="--h: 1">
-    <div class="wrap"><div class="hero-text grid hero__grid">
-      <div class="hero__text span-5">
-        <p class="hero__kicker"><span class="dot" aria-hidden="true"></span>Alpha v0.9 • Offline Llama 3.2 & Native Desktop Control</p>
-        <h1 id="hero-h">Desktop AI assistant for Windows and Fedora Linux</h1>
-        <p class="hero__lead">Run local models on Ollama or bring your own cloud API keys. Features hardware credential encryption, fail-closed command guards, and native desktop automation.</p>
-        <div class="btn-row"><a class="btn btn--primary" href="downloads.html">Download desktop app</a><a class="btn btn--secondary" href="#features">Explore features</a></div>
-        <div class="author-pill">Engineered by Kaushik Ram Ravuru (B.E. IT, Section IT-1, CBIT Hyderabad)</div>
-      </div>
-      <div class="hero__media span-6 start-7">
-        <img src="assets/layout/img/photo-1081.jpg" alt="Developer workstation running Sudharshan AI desktop assistant" fetchpriority="high">
-        <div class="ly-float">
-          <div class="ly-float__row"><span class="ly-live">Hardware safety</span><span>Ctrl+Escape</span></div>
-          <div class="ly-float__title">Fail-closed kill switch armed</div>
-        </div>
-      </div>
-    </div></div>
-  </section>
-
-  <section class="section" id="workspace" aria-labelledby="workspace-h" style="--h: 1">
-    <div class="wrap">
-      <div class="section-head--split">
+  <main>
+    <section>
+      <div class="container hero-grid">
         <div>
-          <h2 id="workspace-h">One unified assistant across Windows 11 and Fedora</h2>
-          <p class="t-lead">Connect your local Ollama runtime or hardware-vaulted API keys to automate terminal workflows and file organization.</p>
-        </div>
-      </div>
-      <div class="ui app fill" role="img" aria-label="Sudharshan AI (Alpha) desktop assistant workspace" data-ui-pause-host>
-        <div class="app__pane app__pane--list">
-          <div class="ui ui-panel ui-win" data-ui="window" data-open="Queued" data-work="Running" data-done="Verified">
-            <div class="ui-win__bar">
-              <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span class="ui-win__crumb">Tasks <i>/</i> <b>Queue</b></span>
-              <span class="ui-spacer"></span>
-              <span class="ui-chip ui-chip--ink">4 Jobs</span>
-            </div>
-            <div class="ui-win__body">
-              <div class="ui-win__main">
-                <div class="ui-win__cols" aria-hidden="true"><span>Action</span><span>Target</span><span>Security</span><span>Time</span></div>
-                <ul class="ui-win__rows">
-                  <li class="ui-win__row"><span class="ui-avatar" data-tone="1">DL</span><span class="ui-win__who">Audit Downloads</span><span class="ui-win__sub">Isolate duplicate zip files</span><span class="ui-win__st">Safe</span><span class="ui-win__age">1m</span></li>
-                  <li class="ui-win__row"><span class="ui-avatar" data-tone="3">VO</span><span class="ui-win__who">Voice Keyword Spotter</span><span class="ui-win__sub">Listening on PipeWire</span><span class="ui-win__st">Local</span><span class="ui-win__age">3m</span></li>
-                  <li class="ui-win__row"><span class="ui-avatar" data-tone="4">WL</span><span class="ui-win__who">Wayland Input Synthesizer</span><span class="ui-win__sub">ydotoold /dev/uinput</span><span class="ui-win__st">Guarded</span><span class="ui-win__age">7m</span></li>
-                  <li class="ui-win__row"><span class="ui-avatar" data-tone="2">DB</span><span class="ui-win__who">SQLite Memory Commit</span><span class="ui-win__sub">WAL checkpoint sync</span><span class="ui-win__st">Indexed</span><span class="ui-win__age">12m</span></li>
-                </ul>
-              </div>
-            </div>
+          <span class="eyebrow mono">v1.0 RELEASE &bull; 100/100 FEATURES VERIFIED &bull; ZERO TELEMETRY</span>
+          <h1>Local-First Desktop AI. Evolving into an AI-Native Linux OS.</h1>
+          <p class="lead">Built by Kaushik Ram Ravuru for Fedora Workstation and Windows 11. Runs an adaptive Qwen 3.5 / Phi-4 / GLM-OCR stack locally with fail-closed security, hash-chained audit logs, and zero cloud lock-in.</p>
+          <div class="cta-row">
+            <a href="downloads.html" class="btn btn-primary">Download Desktop App</a>
+            <a href="docs.html" class="btn btn-secondary">Explore Architecture</a>
+            <a href="https://github.com/rkrworks/Sudharshan-AI" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">GitHub Source</a>
+          </div>
+          <div class="metrics-strip">
+            <div class="metric-card"><div class="metric-val mono">100</div><div class="metric-lbl">Verified Features</div></div>
+            <div class="metric-card"><div class="metric-val mono">0 B</div><div class="metric-lbl">External Telemetry</div></div>
+            <div class="metric-card"><div class="metric-val mono">6</div><div class="metric-lbl">Adaptive Local Models</div></div>
+            <div class="metric-card"><div class="metric-val mono">RSA-2048</div><div class="metric-lbl">Offline Verification</div></div>
           </div>
         </div>
-        <div class="app__pane app__pane--open" data-ui-loop>
-          <div class="ui ui-panel ui-term" data-ui="terminal-run">
-            <div class="ui-term__head">
-              <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span class="ui-term__title">sudharshan-ai</span>
-              <span class="ui-meta">python3</span>
-              <span class="ui-spacer"></span>
-              <span class="ui-chip ui-chip--plain ui-term__branch"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="3.5" r="1.5"/><circle cx="5" cy="12.5" r="1.5"/><circle cx="11" cy="5.5" r="1.5"/><path d="M5 5v6M11 7c0 2.6-6 1.8-6 4"/></svg>main</span>
-            </div>
-            <div class="ui-term__screen" data-term-screen>
-              <div class="ui-term__track" data-term-track>
-                <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/sudharshan-ai</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>python3 -m bajrang_core --self-test</span></div>
-                <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>4 of 4 checks</span></div>
-                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">security/vault.py</span><span class="ui-term__n">OS Keyring Pass</span><span class="ui-term__t">12ms</span></div>
-                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">safety/allowlist.py</span><span class="ui-term__n">Fail-Closed Pass</span><span class="ui-term__t">24ms</span></div>
-                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">storage/sqlite_wal.py</span><span class="ui-term__n">Schema Migration Pass</span><span class="ui-term__t">38ms</span></div>
-                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">models/ollama_client.py</span><span class="ui-term__n">Llama 3.2 0ms Ping</span><span class="ui-term__t">51ms</span></div>
-                <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>All self-tests passed</b><span class="ui-term__dim">in 0.125s</span></div>
-              </div>
-            </div>
+
+        <div class="orb-stage">
+          <div class="orb-canvas-wrap">
+            <canvas id="tensorOrb" width="380" height="230" aria-label="Interactive Sudharshan AI Tensor Orb"></canvas>
+          </div>
+          <div class="terminal-box mono">
+            <div><span class="accent">$</span> sudharshan ask "extract invoice table via ocr"</div>
+            <div><span class="ok">[ROUTER]</span> qwen3.5:0.8b &rarr; intent=ocr &rarr; model=glm-ocr</div>
+            <div><span class="ok">[GUARD]</span> 4-tier=READ_ONLY &bull; egress=0 B &bull; free_ram=6.4 GB</div>
+            <div><span class="accent">$</span> make preview-iso &amp;&amp; make run-preview</div>
+            <div><span class="ok">[ISO]</span> SudharshanOS-Bootable-Preview.iso ready (El Torito)</div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section bg-band g2" id="features" aria-labelledby="features-h" style="--h: 2">
-    <div class="wrap">
-      <div class="group">
-        <div class="section-head">
-          <h2 id="features-h">Built for privacy, speed, and hardware control. <span class="muted">Zero telemetry.</span></h2>
-          <p>Designed from first principles to keep execution on your machine without cloud subscription gates.</p>
-        </div>
-        <div class="grid">
-          <article class="card card--row card--open span-6">
-            <h3>Listens offline with multilingual keyword spotting</h3>
-            <p>8-band Goertzel DSP filter and multilingual STT/TTS across 10+ Indian languages (Telugu, Hindi, Tamil, Kannada) and foreign languages with auto-retell.</p>
-            <div class="panel">
-              <div class="stage stage--fade-b">
-                <div class="at-rise fit" style="--fit-max:400px;--ax:max(24px, 50% - 200px);--ay:48px;--ay-sm:16px" data-ui-loop>
-                  <div class="ui ui-panel ui-voice" data-ui="voice">
-                    <div class="ui-voice__top">
-                      <span class="ui-chip ui-chip--ink">Offline DSP</span>
-                      <span class="ui-spacer"></span>
-                      <span class="ui-voice__time" data-voice-time>00:48</span>
-                    </div>
-                    <div class="ui-voice__orb" data-voice-orb></div>
-                    <div class="ui-voice__who"><span class="ui-voice__name">Sudharshan Voice</span><span class="ui-voice__with">Keyword Spotter</span></div>
-                    <div class="ui-voice__cap" data-voice-cap>Hey Sudharshan, summarize active terminal workspace.</div>
-                    <div class="ui-voice__bar">
-                      <span class="ui-voice__btn" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="6" y="2" width="4" height="8" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/></svg></span>
-                      <span class="ui-voice__wave" aria-hidden="true"><i style="--h:4"></i><i style="--h:9"></i><i style="--h:16"></i><i style="--h:11"></i><i style="--h:20"></i><i style="--h:14"></i><i style="--h:8"></i><i style="--h:17"></i><i style="--h:12"></i><i style="--h:6"></i><i style="--h:10"></i><i style="--h:18"></i><i style="--h:13"></i><i style="--h:7"></i><i style="--h:15"></i><i style="--h:9"></i><i style="--h:5"></i><i style="--h:11"></i><i style="--h:7"></i><i style="--h:4"></i></span>
-                      <span class="ui-voice__btn ui-voice__end" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 16 16"><path d="M2.2 9.6c3.4-2.6 8.2-2.6 11.6 0l-1.1 1.9-2.5-.9V8.9a7.5 7.5 0 0 0-4.4 0v1.7l-2.5.9z"/></svg></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article class="card card--row card--open span-6">
-            <h3>Fails closed with strict allowlist guards</h3>
-            <p>Blocks shell metacharacters and privilege escalation. The kill switch halts child processes on Ctrl+Escape.</p>
-            <div class="panel">
-              <div class="stage stage--fade-b">
-                <div class="at-rise fit" style="--fit-max:400px;--ax:max(24px, 50% - 200px);--ay:48px;--ay-sm:16px">
-                  <div class="ui ui-panel ui-toggles" data-ui="toggles">
-                    <div class="ui-head">
-                      <svg class="ui-icon ui-toggles__ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 13 4v3.6c0 3-2.1 5.4-5 6.6-2.9-1.2-5-3.6-5-6.6V4z"/><path d="m5.8 8 1.6 1.6 3-3.2"/></svg>
-                      <div class="ui-title">Safety Permissions</div>
-                      <span class="ui-spacer"></span>
-                      <div class="ui-meta" data-tg-count>4 of 5 on</div>
-                    </div>
-                    <ul class="ui-toggles__list">
-                      <li class="ui-tg">
-                        <span class="ui-tg__text"><span class="ui-tg__label">Block shell metacharacters</span><span class="ui-tg__sub">Disallow subshell pipes and redirects</span></span>
-                        <button class="ui-switch is-on" type="button" role="switch" aria-checked="true" aria-label="Block shell metacharacters"><i></i></button>
-                      </li>
-                      <li class="ui-tg">
-                        <span class="ui-tg__text"><span class="ui-tg__label">Disallow sudo and admin escalation</span><span class="ui-tg__sub">Enforce non-privileged user sandbox</span></span>
-                        <button class="ui-switch is-on" type="button" role="switch" aria-checked="true" aria-label="Disallow admin escalation"><i></i></button>
-                      </li>
-                      <li class="ui-tg">
-                        <span class="ui-tg__text"><span class="ui-tg__label">Require confirmation for file moves</span><span class="ui-tg__sub">Explicit user sign-off required</span></span>
-                        <button class="ui-switch is-on" type="button" role="switch" aria-checked="true" aria-label="Require confirmation for file moves"><i></i></button>
-                      </li>
-                      <li class="ui-tg">
-                        <span class="ui-tg__text"><span class="ui-tg__label">Kill switch on Ctrl+Escape</span><span class="ui-tg__sub">Immediate SIGTERM to worker tree</span></span>
-                        <button class="ui-switch is-on" type="button" role="switch" aria-checked="true" aria-label="Kill switch on Ctrl Escape"><i></i></button>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
+    <section id="models" class="section-border">
+      <div class="container">
+        <span class="eyebrow mono">ADAPTIVE MULTI-MODEL LOCAL ENGINE</span>
+        <h2>Six Specialized Local Models. Zero Cloud Dependency.</h2>
+        <p class="lead">Automatically routes every task to the fastest local weight and downgrades from 4B to 2B whenever host free RAM drops below 2.5 GB.</p>
+        <div class="grid-3">
+          <article class="card"><span class="badge mono">PRIMARY</span><h3>qwen3.5:4b (Q4_K_M)</h3><p>Daily driver brain with strict JSON-schema tool calling and native screen vision.</p></article>
+          <article class="card"><span class="badge mono">LOW-RAM FALLBACK</span><h3>qwen3.5:2b-q4_K_M</h3><p>Auto-engaged when free RAM drops below 2.5 GB with hysteresis to prevent OOM.</p></article>
+          <article class="card"><span class="badge mono">REASONING</span><h3>phi4-mini</h3><p>Selectable reasoning alternate for multi-step math, architecture, and code debugging.</p></article>
+          <article class="card"><span class="badge mono">FAST ROUTER</span><h3>qwen3.5:0.8b</h3><p>Sub-second intent classifier routing commands before waking the primary 4B brain.</p></article>
+          <article class="card"><span class="badge mono">EMBEDDINGS</span><h3>qwen3-embedding:0.6b</h3><p>Powers local SQLite hybrid BM25 + cosine vector RAG with embeddinggemma-2 fallback.</p></article>
+          <article class="card"><span class="badge mono">ON-DEMAND OCR</span><h3>glm-ocr</h3><p>Extracts clean code blocks and structured Markdown/CSV tables from screen regions.</p></article>
         </div>
       </div>
+    </section>
 
-      <div class="grid">
-        <article class="card card--row card--open span-6">
-          <h3>Automates desktop workflows with native adapters</h3>
-          <p>Synthesizes Wayland input on Fedora and Win32 ctypes on Windows 11 without electron runtime overhead.</p>
-          <div class="panel">
-            <div class="stage stage--fade-b">
-              <div class="at-rise fit" style="--fit-max:400px;--ax:max(24px, 50% - 200px);--ay:48px;--ay-sm:16px">
-                <div class="ui ui-panel ui-chat" data-ui="chat">
-                  <div class="ui-head">
-                    <span class="ui-agent" aria-hidden="true"></span>
-                    <div class="ui-title">Sudharshan Assistant</div>
-                    <span class="ui-chat__online">Ready</span>
-                    <span class="ui-spacer"></span>
-                  </div>
-                  <div class="ui-chat__body">
-                    <div class="ui-chat__day">Today, 10:14</div>
-                    <div class="ui-msg ui-msg--me" data-chat-q>
-                      <span class="ui-msg__text">Check system status and organize downloads.</span>
-                    </div>
-                    <div class="ui-msg ui-msg--bot" data-chat-a>
-                      <span class="ui-agent ui-msg__av" aria-hidden="true"></span>
-                      <span class="ui-msg__col">
-                        <span class="ui-chat__answer">Scanned 14 files. Found <b>3 duplicates</b> ready for user review.</span>
-                        <span class="ui-chat__srcs">
-                          <span class="ui-chat__src"><img class="ic ic-16" src="assets/icons/python.svg" alt="" width="16" height="16">bajrang_core.py</span>
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                  <div class="ui-chat__input">
-                    <span class="ui-chat__ph">Send command to assistant</span>
-                    <span class="ui-chat__send" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3.5M3.8 7.5 8 3.3l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="card card--row card--open span-6">
-          <h3>Non-destructive file power &amp; SHA-256 deduplication</h3>
-          <p>Find files by size, analyze disk usage, batch rename with pattern matching, and quarantine duplicates to <code>.bajrang_trash/</code> with one-click undo.</p>
-          <div class="panel">
-            <div class="stage stage--fade-b">
-              <div class="at-rise fit" style="--fit-max:400px;--ax:max(24px, 50% - 200px);--ay:48px;--ay-sm:16px">
-                <div class="ui ui-panel ui-checks" data-ui="checklist">
-                  <div class="ui-checks__head">
-                    <div class="ui-title">Task Planner: Cleanup</div>
-                    <span class="ui-spacer"></span>
-                    <div class="ui-meta" data-checks-count>4 of 5 done</div>
-                  </div>
-                  <div class="ui-checks__bar"><i data-checks-bar style="--k:0.8"></i></div>
-                  <ul class="ui-checks__list">
-                    <li class="ui-check is-done"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">Scan ~/Downloads directory</span></li>
-                    <li class="ui-check is-done"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">Compute SHA-256 binary checksums</span></li>
-                    <li class="ui-check is-done"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">Identify 3 duplicate archive bundles</span></li>
-                    <li class="ui-check is-done"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">Request user review and confirmation</span></li>
-                    <li class="ui-check"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">Commit file organization plan</span></li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <section class="section statement" id="statement" data-moment="word-highlight" aria-labelledby="statement-h" style="--h: 1">
-    <div class="wrap">
-      <p class="t-label">Privacy architecture</p>
-      <h2 id="statement-h" class="mo-wh__text">Desktop automation should live on <strong>your hardware</strong>. Sudharshan AI stores chat history in SQLite WAL mode, seals API credentials inside OS security vaults, and never uploads your screen captures or microphone audio to remote servers.</h2>
-    </div>
-  </section>
-
-  <section class="section" id="platforms" aria-labelledby="platforms-h" style="--h: 1">
-    <div class="wrap grid grid--middle">
-      <div class="span-6">
-        <div class="section-head">
-          <h2 id="platforms-h">Native adapters for Windows 11 and Fedora Linux</h2>
-          <p>Direct Win32 user32.dll automation on Windows, and GTK4 Libadwaita with ydotool Wayland synthesis on Fedora Workstation.</p>
+    <section id="waves" class="section-border">
+      <div class="container">
+        <span class="eyebrow mono">10 SEQUENTIAL ENGINEERING WAVES</span>
+        <h2>All 100 Features, Tested End-to-End.</h2>
+        <p class="lead">Select any wave to inspect the implemented subsystems shipped in Sudharshan AI v1.0.</p>
+        <div class="wave-tabs" role="tablist" aria-label="Feature Waves" id="waveTabs"></div>
+        <div class="panel">
+          <h3 id="waveTitle" style="margin-bottom:14px;">Wave 1 — Core Intelligence &amp; Multi-Model Orchestration</h3>
+          <ul class="wave-list mono" id="waveList"></ul>
         </div>
-        <ul class="rows">
-          <li><span class="rows__name">Windows 11 Adapter<small>Win32 ctypes, Tkinter HUD, Smart pre-flight installer</small></span><span class="rows__value"><img class="ic ic-24" src="assets/icons/windows.svg" alt="Windows" width="24" height="24"></span></li>
-          <li><span class="rows__name">Fedora Wayland Adapter<small>GTK4 Libadwaita, PipeWire voice, ydotool daemon</small></span><span class="rows__value"><img class="ic ic-24" src="assets/icons/fedora.svg" alt="Fedora" width="24" height="24"></span></li>
-          <li><span class="rows__name">Local Llama 3.2 Inference<small>Ollama engine on 127.0.0.1:11434 with zero network latency</small></span><span class="rows__value"><img class="ic ic-24" src="assets/icons/ollama.svg" alt="Ollama" width="24" height="24"></span></li>
-          <li><span class="rows__name">Cloud Model Key Vault<small>Hardware-vaulted storage for Gemini and OpenAI credentials</small></span><span class="rows__value"><img class="ic ic-24" src="assets/icons/gemini.svg" alt="Gemini" width="24" height="24"></span></li>
-        </ul>
       </div>
-      <div class="frame frame--fill span-6 start-7" style="height: 100%; min-height: 480px; position: relative;">
-        <div data-fx="orb-sphere" data-fx-seed="42" role="img" aria-label="Rotating mathematical sphere representing local LLM tensor weights" style="position: absolute; inset: 0; width: 100%; height: 100%;"></div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section bg-band" id="models" aria-labelledby="models-h" style="--h: 2">
-    <div class="wrap">
-      <div class="section-head">
-        <p class="t-label">Hardware-Aware Model Hub</p>
-        <h2 id="models-h">Local Daily Drivers &amp; Legacy Model Archive</h2>
-        <p>Sudharshan AI profiles your host RAM, CPU threads, and GPU VRAM at startup to recommend the ideal daily driver. 24/7 Model Keep-Alive pins your LLM in memory for zero cold-start latency, auto-offloading when games or heavy creative software launch.</p>
-      </div>
-
-      <div class="grid" style="margin-bottom: var(--s-6);">
-        <div class="card span-6">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-            <h3>24/7 Smart Keep-Alive</h3>
-            <span class="ui-chip ui-chip--ink" style="color:var(--p-accent);border-color:rgba(255,107,26,0.3);">Watchdog Active</span>
+    <section id="sudharshan-os" class="section-border">
+      <div class="container">
+        <span class="eyebrow mono">FUTURE LINUX OS DEVELOPMENT PLAN</span>
+        <h2>Sudharshan OS — AI-Native Fedora 43 Bootc Linux</h2>
+        <p class="lead">We are building Sudharshan OS from the ground up as an immutable, offline-first Linux distribution with a dedicated Unix-socket Neural Bus daemon (<code>sudharshand</code>), kernel cgroup AI slicing (<code>ai-inference.slice</code>), Landlock + SELinux confinement, and Makefile-powered bootable ISO builds.</p>
+        <div class="grid-2">
+          <div class="card">
+            <span class="badge mono">RUN ON FEDORA TODAY</span>
+            <h3>Instant Bootable El Torito Preview ISO</h3>
+            <p>Compile the x86 interactive boot monitor and boot it inside QEMU on Fedora Workstation in seconds:</p>
+            <pre class="code-block mono">make fedora-deps
+make test
+make preview-iso
+make run-preview</pre>
           </div>
-          <p>Sudharshan pins local weights in VRAM with <code>keep_alive: -1</code> for instant single-digit millisecond latency. When high-load games (Steam, CS2, Valorant) or 3D renderers start, the background watchdog automatically offloads weights to free memory, restoring them seamlessly once the session finishes.</p>
-          <div class="panel" style="padding:16px;margin-top:16px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:13px;">
-            <div style="color:var(--p-muted);margin-bottom:6px;"># Hardware Tier Classification:</div>
-            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Workstation (32GB+ RAM):</span> qwen2.5:32b · llama3.1:70b</div>
-            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">High (16GB–32GB RAM):</span> llama3.1:8b · deepseek-r1:8b · mistral:7b</div>
-            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Balanced (8GB–16GB RAM):</span> qwen3.5:4b (Recommended Primary Engine)</div>
-            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Eco (&lt;8GB RAM / Low-RAM):</span> qwen3.5:2b-q4_K_M · qwen3.5:0.8b</div>
-          </div>
-        </div>
-
-        <div class="card span-6">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-            <h3>Multilingual Voice &amp; Retell</h3>
-            <span class="ui-chip ui-chip--ink" style="color:var(--p-accent);border-color:rgba(255,107,26,0.3);">15+ Languages</span>
-          </div>
-          <p>Speak in any major Indian language (Telugu, Hindi, Tamil, Kannada, Malayalam, Bengali, Gujarati, Marathi, Punjabi, Urdu, Indian English) or foreign language (Spanish, French, German, Japanese, Chinese, Arabic). The engine auto-detects language and retells/replies in the exact same language with zero cloud latency.</p>
-          <div class="panel" style="padding:16px;margin-top:16px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:13px;">
-            <div style="color:var(--p-muted);margin-bottom:6px;"># Multilingual Auto-Retell Examples:</div>
-            <div style="color:var(--p-muted);">&gt; "నమస్కారం, ఈ రోజు పనులు ఏమిటి?" &rarr; <span style="color:var(--p-accent)">Replies in Telugu</span></div>
-            <div style="color:var(--p-muted);">&gt; "नमस्ते, आज के कार्य क्या हैं?" &rarr; <span style="color:var(--p-accent)">Replies in Hindi</span></div>
-            <div style="color:var(--p-muted);">&gt; "வணக்கம், கணினி நிலையைச் சரிபார்க்கவும்" &rarr; <span style="color:var(--p-accent)">Replies in Tamil</span></div>
-            <div style="color:var(--p-muted);">&gt; "Bonjour, organise mes téléchargements" &rarr; <span style="color:var(--p-accent)">Replies in French</span></div>
+          <div class="card">
+            <span class="badge mono">FEDORA BOOTC 43 PIPELINE</span>
+            <h3>Full Immutable Live / Install ISO</h3>
+            <p>Build the full Wayland + GNOME + PipeWire + Ollama + <code>sudharshand</code> bootable ISO via Podman &amp; <code>bootc-image-builder</code>:</p>
+            <pre class="code-block mono">make build-container
+make iso
+make smoke-test</pre>
           </div>
         </div>
       </div>
+    </section>
 
-      <div class="section-head" style="margin-top:var(--s-8);margin-bottom:var(--s-4);">
-        <h3>Ollama Model Directory &amp; Pull Commands</h3>
-        <p>Switch between the latest models or legacy checkpoints with instant local pull commands:</p>
-      </div>
-
-      <div class="grid">
-        <div class="card span-4">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h3 style="font-size:16px;">Qwen 3.5 4B</h3>
-            <span class="ui-chip">Primary Engine</span>
-          </div>
-          <p style="font-size:14px;margin-top:6px;">Adaptive daily driver with precision JSON tool calling, native vision, and 16k context window.</p>
-          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
-            ollama run qwen3.5:4b
-          </div>
-        </div>
-
-        <div class="card span-4">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h3 style="font-size:16px;">Llama 3.1 8B</h3>
-            <span class="ui-chip">Deep Context</span>
-          </div>
-          <p style="font-size:14px;margin-top:6px;">128k context window powerhouse for complex multi-turn coding and extensive document synthesis.</p>
-          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
-            ollama run llama3.1:8b
-          </div>
-        </div>
-
-        <div class="card span-4">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h3 style="font-size:16px;">Llama 2 7B</h3>
-            <span class="ui-chip">Legacy</span>
-          </div>
-          <p style="font-size:14px;margin-top:6px;">The battle-tested predecessor model with rock-solid stability for older GPU and CPU architectures.</p>
-          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
-            ollama run llama2:7b
-          </div>
-        </div>
-
-        <div class="card span-4">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h3 style="font-size:16px;">Mistral 7B v0.3</h3>
-            <span class="ui-chip">Tool Calling</span>
-          </div>
-          <p style="font-size:14px;margin-top:6px;">Engineered specifically for native function calling, JSON action emission, and strict desktop command parsing.</p>
-          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
-            ollama run mistral:7b
-          </div>
-        </div>
-
-        <div class="card span-4">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h3 style="font-size:16px;">Gemma 2 9B / 2B</h3>
-            <span class="ui-chip">DeepMind</span>
-          </div>
-          <p style="font-size:14px;margin-top:6px;">Google DeepMind's compact architecture delivering exceptional reasoning density per parameter.</p>
-          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
-            ollama run gemma2:2b
-          </div>
-        </div>
-
-        <div class="card span-4">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h3 style="font-size:16px;">CodeLlama 7B</h3>
-            <span class="ui-chip">Coding</span>
-          </div>
-          <p style="font-size:14px;margin-top:6px;">Specialized in Python automation scripts, terminal shell commands, and debugging desktop tasks.</p>
-          <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
-            ollama run codellama:7b
-          </div>
+    <section id="faq" class="section-border">
+      <div class="container">
+        <span class="eyebrow mono">SECURITY &amp; ARCHITECTURE FAQ</span>
+        <h2>Frequently Asked Questions</h2>
+        <div class="faq-list">
+          <details class="faq-item" open>
+            <summary>How does the safety guard prevent shell escalation?</summary>
+            <p>Sudharshan AI runs fail-closed with a 4-tier permission model (Read-Only, Safe-Write, Elevated-Confirm, Hard-Blocked), excludes arbitrary <code>shell_exec</code> from AI tool dispatch, sanitizes commands against fork bombs and pipe-to-shell patterns, and terminates all child processes immediately on the panic kill-switch.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Which packages run on Fedora Workstation?</summary>
+            <p>Fedora Workstation 39–43 with GNOME Shell on Wayland, GTK4 / Libadwaita, PipeWire for local audio capture, Ollama for local Qwen 3.5 weights, and optional QEMU/Podman for building and booting Sudharshan OS ISOs.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Where does the vault store encryption keys and chat logs?</summary>
+            <p>Chat logs and RAG indexes stay in local SQLite WAL databases on your machine. Optional BYO API keys are isolated in OS hardware vaults (GNOME Keyring / libsecret on Fedora, Windows Credential Manager / DPAPI on Windows) and never leave your device unless you explicitly toggle Cloud Burst.</p>
+          </details>
+          <details class="faq-item">
+            <summary>How does the server sign Pro license keys?</summary>
+            <p>Pro certificates use 2048-bit RSA asymmetric signatures verified completely offline in <code>bajrang_core.py</code> with zero client-side key minting and zero telemetry.</p>
+          </details>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </main>
 
-  <section class="section" id="pricing" aria-labelledby="pricing-h" style="--h: 1">
-    <div class="wrap grid grid--middle">
-      <div class="span-4">
-        <div class="section-head">
-          <h2 id="pricing-h">Transparent pricing. <span class="muted">Free core or Pro.</span></h2>
-          <p>Everything you need to run completely offline on your desktop. Both plans share the same open core library.</p>
-        </div>
-      </div>
-      <div class="span-4 start-5">
-        <div class="card card--plan">
-          <div class="card__head">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-              <h3>Community Core</h3>
-              <img class="ic ic-24" src="assets/icons/python.svg" alt="Python" width="24" height="24">
-            </div>
-            <p class="t-small muted">For developers and local AI students</p>
-            <div class="price">Free</div>
-          </div>
-          <ul class="plan-features">
-            <li>100% offline Llama 3.2 via Ollama</li>
-            <li>SQLite WAL chat persistence and memory</li>
-            <li>Safety allowlist and Ctrl+Escape kill switch</li>
-            <li>SHA-256 file duplicate cleaner</li>
-            <li>Windows Tkinter and Fedora GTK4 adapters</li>
-          </ul>
-          <div class="card__actions">
-            <a class="btn btn--secondary" href="https://github.com/rkrworks/Sudharshan-AI/archive/refs/heads/main.zip" target="_blank" rel="noopener">Get Community Core</a>
-            <div style="margin-top: 10px; font-size: 11px; color: var(--p-muted); text-align: center;">Subject to <a href="terms.html" style="color:var(--p-accent)">Terms</a> &amp; <a href="privacy.html" style="color:var(--p-accent)">Privacy Policy</a>.</div>
-          </div>
-        </div>
-      </div>
-      <div class="span-4 start-9">
-        <div class="card card--plan is-featured">
-          <div class="card__head">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-              <h3>Pro License</h3>
-              <img class="ic ic-24" src="assets/icons/windows.svg" alt="Windows" width="24" height="24">
-            </div>
-            <p class="t-small muted">For commercial setups and verified key generation</p>
-            <div class="price">₹99 <small>/ month</small></div>
-          </div>
-          <ul class="plan-features">
-            <li>Everything in Community Core</li>
-            <li>RSA server-signed certificate verification</li>
-            <li>Razorpay UPI server backend integration</li>
-            <li>Automated pre-flight Windows 11 installer</li>
-            <li>GNOME 45–49 shell quick-toggle extension</li>
-          </ul>
-          <div class="card__actions">
-            <a class="btn btn--primary" href="https://github.com/rkrworks/Sudharshan-AI/releases/latest" target="_blank" rel="noopener">Get Pro license</a>
-            <div style="margin-top: 10px; font-size: 11px; color: var(--p-muted); text-align: center;">Includes 2048-bit RSA key · <a href="terms.html" style="color:var(--p-accent)">Terms</a> &amp; <a href="privacy.html" style="color:var(--p-accent)">Privacy</a></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="faq" aria-labelledby="faq-h" style="--h: 1">
-    <div class="wrap grid grid--top">
-      <div class="span-5">
-        <div class="section-head">
-          <h2 id="faq-h">Frequently asked questions</h2>
-          <p>Technical specifications and hardware requirements for desktop automation.</p>
-        </div>
-        <div class="panel" style="padding: 24px; margin-top: var(--s-6); border: 1px solid var(--u-border); border-radius: var(--r-md); background: var(--p-surface);">
-          <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 8px;">
-            <img class="ic ic-24" src="assets/icons/fedora.svg" alt="Fedora" width="24" height="24">
-            <img class="ic ic-24" src="assets/icons/windows.svg" alt="Windows" width="24" height="24">
-            <img class="ic ic-24" src="assets/icons/ollama.svg" alt="Ollama" width="24" height="24">
-          </div>
-          <p class="t-small muted" style="margin: 0;">Verified for Windows 11 (22H2+) and Fedora Workstation (GNOME 45–49).</p>
-        </div>
-      </div>
-      <div class="span-6 start-7">
-        <div class="faq">
-          <div class="faq__item">
-            <h3>Why does Windows SmartScreen flag new downloads and how do I trust it?</h3>
-            <p>Microsoft Defender SmartScreen warns on all newly released executables that lack accumulated global telemetry. Sudharshan AI includes a 2048-bit RSA Authenticode signature. Simply run <code>install_certificate.bat</code> as Administrator or launch <code>setup_windows.bat</code> directly to register Sudharshan AI as a Trusted Publisher on your PC.</p>
-          </div>
-          <div class="faq__item">
-            <h3>How does 24/7 Keep-Alive and the Gaming Watchdog work?</h3>
-            <p>Sudharshan AI pins local models in memory using Ollama's <code>keep_alive: -1</code> configuration for zero cold-start delay. A low-overhead background watchdog continuously inspects process trees for graphics-heavy games (Steam, CS2, Valorant) and creative suites, gracefully unloading the model (<code>keep_alive: 0</code>) during high load and re-pinning it when resources clear.</p>
-          </div>
-          <div class="faq__item">
-            <h3>Which languages are supported by the Multilingual Voice Engine?</h3>
-            <p>Sudharshan supports speech recognition and natural retell across 10+ Indian languages (Telugu, Hindi, Tamil, Kannada, Malayalam, Bengali, Marathi, Gujarati, Punjabi, Urdu, Indian English) and major global languages (Spanish, French, German, Japanese, Chinese, Arabic). The engine detects your spoken language and automatically responds in the exact same language.</p>
-          </div>
-          <div class="faq__item">
-            <h3>Does the assistant require an internet connection?</h3>
-            <p>No. The core engine runs completely offline with Ollama (Llama 3.2) and local SQLite storage. An internet connection is only needed if you configure external cloud API keys.</p>
-          </div>
-          <div class="faq__item">
-            <h3>How does the safety guard prevent shell escalation?</h3>
-            <p>The engine runs with fail-closed allowlisting without shell subprocesses. It blocks metacharacters and privilege escalation, and child processes immediately terminate when pressing Ctrl+Escape.</p>
-          </div>
-          <div class="faq__item">
-            <h3>Which packages run on Fedora Workstation?</h3>
-            <p>Fedora Workstation 39 to 42 with GNOME Shell 45 to 49, PipeWire for audio capture, and ydotool with a running ydotoold daemon for Wayland input synthesis.</p>
-          </div>
-          <div class="faq__item">
-            <h3>Where does the vault store encryption keys?</h3>
-            <p>Chat logs are kept in local SQLite databases in WAL mode. API keys are encrypted in OS-level hardware credential vaults such as Windows Credential Manager and GNOME Keyring.</p>
-          </div>
-          <div class="faq__item">
-            <h3>How does the server sign Pro license keys?</h3>
-            <p>Purchases through Razorpay generate a genuine server-signed RSA cryptographic certificate that verifies locally on your device without transmitting telemetry.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-</main>
-
-<footer class="footer closing footer--statement" id="download" aria-labelledby="close-h" style="--h: 1">
-  <div class="wrap">
-    <div class="closing__cta close--word">
-      <div class="section-head--split">
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
         <div>
-          <h2 id="close-h">Download Sudharshan AI for your workstation</h2>
-          <p class="t-lead">Choose your platform installer or clone the open source repository.</p>
+          <a href="index.html" class="brand" style="margin-bottom:12px;"><span class="brand-mark" aria-hidden="true">S</span> Sudharshan AI</a>
+          <p style="color:var(--muted); font-size:14px; max-width:320px; margin:0;">Local-first desktop AI assistant and immutable Fedora-based AI OS engineered by Kaushik Ram Ravuru (CBIT Hyderabad).</p>
         </div>
-        <a class="btn btn--primary" href="downloads.html">Download desktop app<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
-      </div>
-      <p class="close__word" aria-hidden="true">Sudharshan AI</p>
-    </div>
-
-    <div class="closing__links">
-      <div class="grid">
-        <div class="span-4 stack-4">
-          <a class="nav__logo" href="#top"><span class="mark mark--initial" aria-hidden="true">S</span>Sudharshan AI <small style="font-size:11px;color:var(--p-accent);font-family:var(--font-mono);margin-left:6px;">ALPHA</small></a>
-          <p class="footer__lede">Local AI desktop assistant for Windows 11 and Fedora Linux by Kaushik Ram Ravuru.</p>
-        </div>
-        <div class="span-2 footer__col">
-          <h3>Downloads</h3>
+        <div class="footer-col">
+          <h4>Downloads</h4>
           <ul>
-            <li><a href="downloads.html">All Downloads &amp; Hashes</a></li>
-            <li><a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_windows.bat" target="_blank" rel="noopener">Windows Setup (.bat)</a></li>
-            <li><a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_fedora.sh" target="_blank" rel="noopener">Fedora Setup (.sh)</a></li>
-            <li><a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_linux.sh" target="_blank" rel="noopener">Universal Linux (.sh)</a></li>
-            <li><a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_mac.sh" target="_blank" rel="noopener">macOS Setup (.sh)</a></li>
+            <li><a href="downloads.html">Desktop Installers</a></li>
+            <li><a href="SHA256SUMS">SHA256SUMS Manifest</a></li>
+            <li><a href="https://github.com/rkrworks/Sudharshan-AI/releases/latest" target="_blank" rel="noopener noreferrer">GitHub Releases</a></li>
           </ul>
         </div>
-        <div class="span-2 footer__col">
-          <h3>Platform</h3>
+        <div class="footer-col">
+          <h4>Platform</h4>
           <ul>
-            <li><a href="#workspace">Architecture</a></li>
-            <li><a href="#models">Model Archive</a></li>
-            <li><a href="#features">Safety Guard</a></li>
-            <li><a href="#platforms">Dual-OS Adapters</a></li>
-            <li><a href="#pricing">Licensing</a></li>
+            <li><a href="docs.html">Architecture Docs</a></li>
+            <li><a href="#models">Adaptive Models</a></li>
+            <li><a href="#sudharshan-os">Sudharshan OS ISO</a></li>
           </ul>
         </div>
-        <div class="span-2 footer__col">
-          <h3>Project</h3>
+        <div class="footer-col">
+          <h4>Project</h4>
           <ul>
-            <li><a href="https://github.com/rkrworks/Sudharshan-AI">GitHub Repository</a></li>
-            <li><a href="README_INSTRUCTIONS.txt">Setup Guide</a></li>
-            <li><a href="ARCHITECTURE.md">System Design</a></li>
-            <li><a href="#faq">Questions</a></li>
-          </ul>
-        </div>
-        <div class="span-2 footer__col">
-          <h3>Contact</h3>
-          <ul>
-            <li><a href="mailto:kaushikramravuru@gmail.com">Email Developer</a></li>
             <li><a href="privacy.html">Privacy Policy</a></li>
-            <li><a href="terms.html">Terms of Service</a></li>
+            <li><a href="terms.html">Terms of Use</a></li>
             <li><a href="credits.html">Credits</a></li>
+            <li><a href="mailto:kaushikramravuru@gmail.com">Contact</a></li>
           </ul>
         </div>
       </div>
-      <div class="footer__legal">
-        <span>&copy; 2026 Sudharshan AI (Alpha v0.9) · Engineered by Kaushik Ram Ravuru (B.E. IT, Section IT-1, CBIT Hyderabad)</span>
-        <span>Product names and logos are trademarks of their owners</span>
-        <a class="credits" href="credits.html">Credits &amp; Open Source</a>
+      <div class="footer-bottom mono">
+        <span>&copy; 2026 Kaushik Ram Ravuru &bull; Sudharshan AI v1.0</span>
+        <span>Precision Obsidian (#0B0B0D) &amp; Solar Orange (#FF5A1F)</span>
       </div>
     </div>
-  </div>
-</footer>
+  </footer>
 
-<script type="module" src="assets/system.js"></script>
-<script type="module" src="assets/motion/motion.js"></script>
-<script type="module" src="assets/layout/layout.js"></script>
-<script type="module" src="assets/effects/fx.js" data-fx-auto></script>
+  <script>
+    const WAVES = [
+      { title: "Wave 1 — Core Intelligence & Multi-Model Orchestration", items: ["1. Adaptive RAM-aware 4B -> 2B model switcher", "2. Streaming token renderer with live tok/s & TTFT", "3. Hybrid rule + qwen3.5:0.8b intent router", "4. Strict JSON-schema tool caller with retry", "5. Multi-step autonomous planner (pause/resume/cancel)", "6. Rolling context window compactor", "7. Prompt template library with /slash triggers", "8. Side-by-side local model benchmark runner", "9. Offline-first Cloud Burst toggle gate", "10. Per-session system personas (Coder, SysAdmin, Tutor)"] },
+      { title: "Wave 2 — Persistent Local Memory & Semantic RAG", items: ["11. Local SQLite + vector index (qwen3-embedding:0.6b)", "12. Incremental background file indexer (MD/PDF/DOCX/Code)", "13. Hybrid BM25 + cosine vector search", "14. Clickable file:// source-cited answers", "15. Inspectable & editable episodic memory cards", "16. Project-scoped isolated RAG workspaces", "17. Instant clipboard-to-KB capture", "18. SHA-256 + semantic near-duplicate detector", "19. Auto-expiring zero-disk incognito mode", "20. PBKDF2 + HMAC encrypted backup & restore"] },
+      { title: "Wave 3 — Voice, Audio & Multimodal Perception", items: ["21. Hardened Goertzel + VAD wake-word engine", "22. Local whisper.cpp STT with auto language detect", "23. Local Piper neural TTS with barge-in interrupt", "24. Push-to-talk hotkey + hands-free mode", "25. Wayland/Windows screenshot -> qwen3.5 / glm-ocr", "26. Local meeting transcriber & action-item extractor", "27. Zero-bloat RMS audio waveform visualizer", "28. OCR-to-clipboard code & table extractor", "29. Spoken confirmation gate for high-impact actions", "30. Offline voice command macro workflows"] },
+      { title: "Wave 4 — Fail-Closed Security, Privacy & Governance", items: ["31. Hash-chained HMAC-signed tamper-evident audit log", "32. 4-tier permission model (Read -> Hard-Blocked)", "33. Interactive unified-diff command preview modal", "34. Automatic pre-action file rollback snapshots", "35. Regex + shlex shell command sanitizer", "36. Secret & PII redactor before logs or cloud burst", "37. OS keyring integration (libsecret / DPAPI)", "38. Network egress monitor & airplane-mode switch", "39. Automated SHA-256 integrity verifier", "40. Global panic kill-switch terminating child processes"] },
+      { title: "Wave 5 — Intelligent File System & Automation", items: ["41. NL batch file organizer with dry-run & 1-click undo", "42. Smart Downloads auto-classification daemon", "43. Content-aware smart renaming (invoices/MD/code)", "44. SHA-256 deduplication sweep (hardlink/trash)", "45. ZipSlip-safe archive inspect/extract/compress", "46. Disk space analyzer & safe cache recommendations", "47. NL file converter (CSV/JSON/MD/HTML)", "48. Folder watcher rule triggers", "49. 30-day quarantine trash bin with instant restore", "50. Cross-folder SHA-256 diff & smart sync"] },
+      { title: "Wave 6 — OS Control & Desktop Ergonomics", items: ["51. Fuzzy-search command palette launcher", "52. Native window management command planner", "53. SQLite clipboard history with pinned snippets", "54. System resource & thermal HUD", "55. NL system settings controller (brightness/volume/Wi-Fi)", "56. Smart Focus / DND mode + Pomodoro timer", "57. Urgency-based desktop notification triager", "58. App-aware contextual quick actions", "59. Plain-English cron & systemd timer generator", "60. Safe process manager with confirmation gate"] },
+      { title: "Wave 7 — Developer & Engineering Power Suite", items: ["61. Local Git conventional commit & conflict explainer", "62. Terminal stderr error explainer & safe fixes", "63. AST-aware symbol indexer (Python/JS/TS/Rust/Go/C)", "64. Docker/Podman & compose security validator", "65. Offline cURL parser & JSON-to-YAML converter", "66. Live regex workbench & explainer", "67. Automated Python unittest generator", "68. Localhost port & TCP service radar", "69. Interactive CLI flag translator", "70. Environment & PATH toolchain doctor"] },
+      { title: "Wave 8 — Knowledge, Productivity & Daily Workflow", items: ["71. Markdown knowledge vault with [[wikilink]] backlinks", "72. Structured paper & document executive reader", "73. SQLite task & reminder manager with .ics export", "74. Morning briefing generator (tasks/disk/git)", "75. SM-2 spaced repetition flashcard engine", "76. Safe AST calculator, unit & timezone converter", "77. Concise writing assistant & filler stripper", "78. Local .ics calendar parser & conflict detector", "79. Structured table extractor (Markdown & CSV)", "80. Privacy-first local daily activity digest"] },
+      { title: "Wave 9 — Extensibility, MCP & Plugin Ecosystem", items: ["81. First-class MCP JSON-RPC 2.0 client (stdio/SSE)", "82. Sandboxed plugin SDK with manifest capabilities", "83. Visual node-free workflow pipeline engine", "84. Static AST security scanner for imported plugins", "85. Localhost-only REST API with CSPRNG bearer auth", "86. CLI companion (ask, pipe, run, doctor, verify)", "87. Hot-reloadable custom JSON tool registry", "88. Local webhook & MQTT wildcard trigger bridge", "89. Isolated plugin subprocess supervisor", "90. Built-in tool developer sandbox with mock inputs"] },
+      { title: "Wave 10 — Packaging, Reliability & Polish", items: ["91. Native Fedora RPM, Flatpak & Windows WiX MSI specs", "92. Hardware-aware first-run onboarding wizard", "93. Self-healing sudharshan doctor diagnostics", "94. Graceful degradation matrix when offline", "95. WCAG AA contrast & keyboard accessibility audit", "96. Offline SHA256SUMS release integrity verifier", "97. Zero-telemetry dashboard (0 external bytes sent)", "98. Redacted local crash diagnostic ZIP reporter", "99. Full 100-feature + security fuzzing test suite", "100. Precision Obsidian web portal & interactive docs"] }
+    ];
+
+    const tabsEl = document.getElementById("waveTabs");
+    const titleEl = document.getElementById("waveTitle");
+    const listEl = document.getElementById("waveList");
+
+    function renderWave(idx) {
+      const w = WAVES[idx];
+      titleEl.textContent = w.title;
+      listEl.innerHTML = w.items.map(it => `<li>${it}</li>`).join("");
+      Array.from(tabsEl.children).forEach((btn, i) => btn.setAttribute("aria-selected", i === idx ? "true" : "false"));
+    }
+
+    WAVES.forEach((_, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "wave-tab mono";
+      btn.setAttribute("role", "tab");
+      btn.textContent = `Wave ${idx + 1}`;
+      btn.addEventListener("click", () => renderWave(idx));
+      tabsEl.appendChild(btn);
+    });
+    renderWave(0);
+
+    // Lightweight Canvas Tensor Orb (zero WebGL bloat, respects reduced-motion)
+    const canvas = document.getElementById("tensorOrb");
+    const ctx = canvas.getContext("2d");
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let t = 0;
+    function drawOrb() {
+      const w = canvas.width, h = canvas.height, cx = w / 2, cy = h / 2;
+      ctx.clearRect(0, 0, w, h);
+      for (let ring = 0; ring < 5; ring++) {
+        ctx.beginPath();
+        const r = 34 + ring * 16;
+        for (let a = 0; a <= Math.PI * 2; a += 0.12) {
+          const wobble = Math.sin(a * 3 + t + ring) * 3.5;
+          const x = cx + Math.cos(a) * (r + wobble);
+          const y = cy + Math.sin(a) * ((r + wobble) * 0.62);
+          if (a === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = ring === 2 ? "#FF5A1F" : "rgba(244,244,246,0.22)";
+        ctx.lineWidth = ring === 2 ? 2 : 1;
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+      ctx.fillStyle = "#FF5A1F";
+      ctx.fill();
+      if (!reduced) {
+        t += 0.02;
+        requestAnimationFrame(drawOrb);
+      }
+    }
+    drawOrb();
+  </script>
 </body>
 </html>

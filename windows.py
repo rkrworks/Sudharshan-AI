@@ -310,18 +310,18 @@ THEMES: Dict[str, Dict[str, str]] = {
     "dark": {
         "bg": "#0B0B0D",
         "panel": "#141418",
-        "subpanel": "#1C1C22",
+        "subpanel": "#181822",
         "border": "#24242B",
         "fg": "#F4F4F6",
-        "muted": "#9E9EA8",
+        "muted": "#94a3b8",
         "accent": "#FF5A1F",
-        "accent_hover": "#FF753F",
-        "user_fg": "#FF753F",
-        "bot_fg": "#F4F4F6",
+        "accent_hover": "#ff8533",
+        "user_fg": "#ff8533",
+        "bot_fg": "#f1f5f9",
         "green": "#10b981",
         "red": "#ef4444",
         "amber": "#f59e0b",
-        "code_bg": "#0B0B0D",
+        "code_bg": "#0b0c10",
         "code_fg": "#38bdf8",
     },
     "light": {
@@ -522,7 +522,7 @@ class WindowsTkinterHUD:
         self.sidebar = tk.Frame(self.main_pane, width=230)
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
 
-        self.new_sess_btn = tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), pady=5)
+        self.new_sess_btn = tk.Button(self.sidebar, text="+ New Session", command=self.on_new_session, bg="#FF5A1F", fg="#ffffff", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), pady=5)
         self.new_sess_btn.pack(fill=tk.X, pady=(0, 6))
 
         self.search_entry = tk.Entry(self.sidebar, font=("Segoe UI", 9))
@@ -562,7 +562,7 @@ class WindowsTkinterHUD:
         self.prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6), ipady=3)
         self.prompt_entry.bind("<Return>", lambda _e: self.on_send())
 
-        self.send_btn = tk.Button(self.bottom_bar, text="Send ➤", command=self.on_send, bg="#ff6b1a", fg="#ffffff", relief=tk.FLAT, padx=14, pady=3, font=("Segoe UI", 9, "bold"))
+        self.send_btn = tk.Button(self.bottom_bar, text="Send ➤", command=self.on_send, bg="#FF5A1F", fg="#ffffff", relief=tk.FLAT, padx=14, pady=3, font=("Segoe UI", 9, "bold"))
         self.send_btn.pack(side=tk.RIGHT)
 
         self.root.bind("<Control-Shift-K>", lambda _e: self.on_kill())
@@ -573,11 +573,11 @@ class WindowsTkinterHUD:
         pal = THEMES.get(self.current_theme, THEMES["dark"])
         for btn in (self.send_btn, self.new_sess_btn):
             btn.bind("<Enter>", lambda _e, b=btn: b.configure(bg=pal.get("accent_hover", "#ff8533")))
-            btn.bind("<Leave>", lambda _e, b=btn: b.configure(bg=pal.get("accent", "#ff6b1a")))
+            btn.bind("<Leave>", lambda _e, b=btn: b.configure(bg=pal.get("accent", "#FF5A1F")))
 
         for btn in (self.topmost_btn, self.compact_btn, self.clip_btn, self.theme_btn, self.key_btn,
                     self.pin_sess_btn, self.rename_sess_btn, self.export_sess_btn):
-            btn.bind("<Enter>", lambda _e, b=btn: b.configure(bg=pal.get("border", "#272733")))
+            btn.bind("<Enter>", lambda _e, b=btn: b.configure(bg=pal.get("border", "#24242B")))
             btn.bind("<Leave>", lambda _e, b=btn: b.configure(bg=pal.get("subpanel", "#181822")))
 
         self.kill_btn.bind("<Enter>", lambda _e: self.kill_btn.configure(bg="#ef4444"))
@@ -588,17 +588,17 @@ class WindowsTkinterHUD:
     def _setup_chat_tags(self) -> None:
         tk = self.tk
         pal = THEMES.get(self.current_theme, THEMES["dark"])
-        self.chat_text.tag_configure("hero_badge", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#ff6b1a"), justify=tk.CENTER)
-        self.chat_text.tag_configure("hero_title", font=("Segoe UI", 16, "bold"), foreground=pal.get("fg", "#fafafa"), justify=tk.CENTER, spacing1=10, spacing3=4)
+        self.chat_text.tag_configure("hero_badge", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#FF5A1F"), justify=tk.CENTER)
+        self.chat_text.tag_configure("hero_title", font=("Segoe UI", 16, "bold"), foreground=pal.get("fg", "#F4F4F6"), justify=tk.CENTER, spacing1=10, spacing3=4)
         self.chat_text.tag_configure("hero_sub", font=("Segoe UI", 10), foreground=pal.get("muted", "#94a3b8"), justify=tk.CENTER, spacing3=12)
-        self.chat_text.tag_configure("hero_div", font=("Consolas", 8), foreground=pal.get("border", "#272733"), justify=tk.CENTER, spacing3=14)
-        self.chat_text.tag_configure("quick_card", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#ff6b1a"), background=pal.get("subpanel", "#181822"), lmargin1=40, lmargin2=40, rmargin=40, spacing1=4, spacing3=4)
+        self.chat_text.tag_configure("hero_div", font=("Consolas", 8), foreground=pal.get("border", "#24242B"), justify=tk.CENTER, spacing3=14)
+        self.chat_text.tag_configure("quick_card", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#FF5A1F"), background=pal.get("subpanel", "#181822"), lmargin1=40, lmargin2=40, rmargin=40, spacing1=4, spacing3=4)
 
-        self.chat_text.tag_configure("user_header", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#ff6b1a"), spacing1=12, spacing3=3, lmargin1=12, lmargin2=12)
-        self.chat_text.tag_configure("user_body", font=("Segoe UI", 10), foreground=pal.get("fg", "#fafafa"), lmargin1=16, lmargin2=16, rmargin=24, spacing1=2, spacing3=10)
+        self.chat_text.tag_configure("user_header", font=("Segoe UI", 9, "bold"), foreground=pal.get("accent", "#FF5A1F"), spacing1=12, spacing3=3, lmargin1=12, lmargin2=12)
+        self.chat_text.tag_configure("user_body", font=("Segoe UI", 10), foreground=pal.get("fg", "#F4F4F6"), lmargin1=16, lmargin2=16, rmargin=24, spacing1=2, spacing3=10)
 
         self.chat_text.tag_configure("ai_header", font=("Segoe UI", 9, "bold"), foreground="#38bdf8", spacing1=12, spacing3=3, lmargin1=12, lmargin2=12)
-        self.chat_text.tag_configure("ai_body", font=("Segoe UI", 10), foreground=pal.get("fg", "#fafafa"), lmargin1=16, lmargin2=16, rmargin=24, spacing1=2, spacing3=10)
+        self.chat_text.tag_configure("ai_body", font=("Segoe UI", 10), foreground=pal.get("fg", "#F4F4F6"), lmargin1=16, lmargin2=16, rmargin=24, spacing1=2, spacing3=10)
 
         self.chat_text.tag_configure("code_block", font=("Consolas", 9), foreground="#38bdf8", background=pal.get("code_bg", "#0b0c10"), lmargin1=24, lmargin2=24, rmargin=32, spacing1=4, spacing3=4)
         self.chat_text.tag_configure("tool_tag", font=("Segoe UI", 8, "bold"), foreground="#34d399", lmargin1=24, lmargin2=24, spacing1=4, spacing3=1)

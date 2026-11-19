@@ -152,9 +152,9 @@ if %ERRORLEVEL% neq 0 (
 :daemon_verified
 
 :: Check if qwen3.5:4b is installed; if not, pull and test run
-powershell.exe -NoProfile -Command "try { $m = (Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3).models.name; if ($m -like '*qwen3.5:4b*' -or $m -like '*qwen3.5*') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+powershell.exe -NoProfile -Command "try { $m = (Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3).models.name; if ($m -like '*qwen3.5:4b*') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [MODEL] Pulling Qwen 3.5 4B primary model (~2.6 GB)...
+    echo [MODEL] Pulling Qwen 3.5 4B neural model (~2.6 GB)...
     "%OLLAMA_EXE%" pull qwen3.5:4b
     echo [VERIFY] Running quick test query on qwen3.5:4b...
     "%OLLAMA_EXE%" run qwen3.5:4b "Respond with 'Sudharshan AI Ready'"

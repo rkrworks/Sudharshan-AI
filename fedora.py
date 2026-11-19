@@ -1028,7 +1028,7 @@ def main() -> int:
         mf = cfg.write_custom_modelfile()
         print(f"Wrote Modelfile to {mf}")
         if shutil.which("ollama"):
-            subprocess.run(["ollama", "create", "sudharshan-qwen35", "-f", str(mf)], check=False)
+            subprocess.run(["ollama", "create", "sudharshan-qwen3.5", "-f", str(mf)], check=False)
         return 0
 
     if args.activate_license:

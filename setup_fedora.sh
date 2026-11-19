@@ -90,8 +90,8 @@ if ! curl -s -f http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
     sleep 2
 fi
 
-# Pull Qwen 3.5 4B model if missing
-echo "  -> Checking Qwen 3.5 4B primary model in Ollama..."
+# Pull Qwen 3.5 4B primary model if missing
+echo "  -> Checking Qwen 3.5 (4B) neural model in Ollama..."
 if ! curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | grep -q "qwen3.5:4b"; then
     echo "  -> Pulling qwen3.5:4b (~2.6 GB)..."
     ollama pull qwen3.5:4b || true

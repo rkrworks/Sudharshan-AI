@@ -1,545 +1,76 @@
 <!doctype html>
-<html lang="en" data-type="software" data-radius="soft">
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Downloads &amp; Releases · Sudharshan AI (Alpha v0.9)</title>
-<meta name="description" content="Download official verified releases of Sudharshan AI for Windows 11, Fedora Workstation, Generic Linux, and macOS. Local-first autonomous AI desktop assistant.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/system.css">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<style>
-:root {
-  --p-bg: #0B0B0D;
-  --p-surface: #141418;
-  --p-surface-2: #1C1C22;
-  --p-border: #24242B;
-  --p-border-bright: #383842;
-  --p-ink: #F4F4F6;
-  --p-muted: #9E9EA8;
-  --p-accent: #FF5A1F;
-  --p-accent-ink: #0B0B0D;
-  --p-action: #FF5A1F;
-  --p-action-ink: #0B0B0D;
-  --font-display: "Instrument Sans", system-ui, sans-serif;
-  --font-text: "Instrument Sans", system-ui, sans-serif;
-  --font-mono: "DM Mono", monospace;
-  --r-container: 10px;
-  --r-input: 8px;
-  --r-cta: 9999px;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  background: var(--p-bg);
-  color: var(--p-ink);
-  font-family: var(--font-text);
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-}
-.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 80px; }
-nav.top-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24px 0;
-  border-bottom: 1px solid var(--p-border);
-  margin-bottom: 56px;
-}
-.brand-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-decoration: none;
-  color: var(--p-ink);
-}
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #ff6b1a 0%, #b84300 100%);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: #050505;
-}
-.brand-title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.15rem;
-  letter-spacing: -0.01em;
-}
-.version-pill {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  background: rgba(255, 107, 26, 0.14);
-  color: #ff9d66;
-  border: 1px solid rgba(255, 107, 26, 0.35);
-}
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  font-size: 0.92rem;
-}
-.nav-links a {
-  color: var(--p-muted);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-.nav-links a:hover, .nav-links a.active {
-  color: var(--p-ink);
-}
-.badge-hero {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 14px;
-  border-radius: 9999px;
-  background: rgba(255, 107, 26, 0.1);
-  border: 1px solid rgba(255, 107, 26, 0.3);
-  color: #ff9d66;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  margin-bottom: 20px;
-}
-.hero-head {
-  max-width: 780px;
-  margin-bottom: 48px;
-}
-h1 {
-  font-family: var(--font-display);
-  font-size: clamp(2.4rem, 5vw, 3.6rem);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.03em;
-  margin-bottom: 18px;
-}
-.hero-desc {
-  color: var(--p-muted);
-  font-size: 1.15rem;
-  max-width: 660px;
-}
-.platforms-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
-  margin-bottom: 64px;
-}
-.platform-card {
-  background: var(--p-surface);
-  border: 1px solid var(--p-border);
-  border-radius: 14px;
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  transition: border-color 0.2s, transform 0.2s;
-}
-.platform-card:hover {
-  border-color: var(--p-border-bright);
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.os-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  padding: 3px 10px;
-  border-radius: 9999px;
-  background: var(--p-surface-2);
-  color: var(--p-muted);
-  border: 1px solid var(--p-border);
-}
-.platform-title {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-.platform-desc {
-  color: var(--p-muted);
-  font-size: 0.95rem;
-  margin-bottom: 20px;
-  flex-grow: 1;
-}
-.spec-list {
-  list-style: none;
-  font-size: 0.88rem;
-  color: var(--p-muted);
-  margin-bottom: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.spec-list li::before {
-  content: "✓ ";
-  color: var(--p-accent);
-  font-weight: 700;
-}
-.cmd-box {
-  background: var(--p-bg);
-  border: 1px solid var(--p-border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: #ffb085;
-  word-break: break-all;
-  margin-bottom: 18px;
-  user-select: all;
-  position: relative;
-}
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: var(--p-accent);
-  color: #050505;
-  font-weight: 600;
-  padding: 12px 20px;
-  border-radius: 8px;
-  text-decoration: none;
-  font-size: 0.94rem;
-  transition: opacity 0.15s, transform 0.1s;
-}
-.btn-primary:hover {
-  opacity: 0.92;
-  transform: translateY(-1px);
-}
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: transparent;
-  color: var(--p-ink);
-  border: 1px solid var(--p-border);
-  font-weight: 500;
-  padding: 11px 18px;
-  border-radius: 8px;
-  text-decoration: none;
-  font-size: 0.92rem;
-  margin-top: 8px;
-  transition: background 0.15s, border-color 0.15s;
-}
-.btn-secondary:hover {
-  background: var(--p-surface-2);
-  border-color: var(--p-border-bright);
-}
-.info-section {
-  background: var(--p-surface);
-  border: 1px solid var(--p-border);
-  border-radius: 14px;
-  padding: 36px;
-  margin-bottom: 48px;
-}
-.info-section h2 {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  margin-bottom: 16px;
-  letter-spacing: -0.01em;
-}
-.info-section p {
-  color: var(--p-muted);
-  font-size: 1.02rem;
-  margin-bottom: 16px;
-}
-.callout-box {
-  background: rgba(255, 107, 26, 0.08);
-  border: 1px solid rgba(255, 107, 26, 0.3);
-  border-radius: 10px;
-  padding: 18px 20px;
-  margin: 20px 0;
-}
-.callout-title {
-  font-weight: 700;
-  color: #ff9d66;
-  margin-bottom: 6px;
-  font-size: 0.95rem;
-}
-.callout-desc {
-  font-size: 0.9rem;
-  color: var(--p-muted);
-}
-table.checksum-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  margin-top: 16px;
-}
-table.checksum-table th, table.checksum-table td {
-  padding: 10px 12px;
-  text-align: left;
-  border-bottom: 1px solid var(--p-border);
-}
-table.checksum-table th {
-  color: var(--p-accent);
-  background: var(--p-surface-2);
-}
-table.checksum-table td {
-  color: var(--p-muted);
-}
-table.checksum-table td.file-col {
-  color: var(--p-ink);
-  font-weight: 500;
-}
-table.checksum-table td.hash-col {
-  word-break: break-all;
-}
-footer.bottom-bar {
-  border-top: 1px solid var(--p-border);
-  padding: 36px 0 0;
-  margin-top: 64px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  color: var(--p-muted);
-  font-size: 0.88rem;
-}
-footer a {
-  color: var(--p-muted);
-  text-decoration: none;
-}
-footer a:hover {
-  color: var(--p-accent);
-}
-.footer-links {
-  display: flex;
-  gap: 20px;
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Downloads — Sudharshan AI v1.0 &amp; Sudharshan OS</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="wrap">
-  <nav class="top-nav">
-    <a href="index.html" class="brand-group">
-      <div class="brand-mark">S</div>
-      <div class="brand-title">Sudharshan AI</div>
-      <span class="version-pill">Alpha v0.9</span>
-    </a>
-    <div class="nav-links">
-      <a href="index.html#features">Features</a>
-      <a href="index.html#platforms">Platforms</a>
-      <a href="index.html#pricing">Pricing</a>
-      <a href="downloads.html" class="active">Downloads</a>
-      <a href="https://github.com/rkrworks/Sudharshan-AI" target="_blank" rel="noopener">GitHub</a>
+  <header class="site-header">
+    <div class="container nav-row">
+      <a href="index.html" class="brand"><span class="brand-mark" aria-hidden="true">S</span> Sudharshan AI</a>
+      <nav class="nav-links" aria-label="Primary Navigation">
+        <a href="index.html">Home</a>
+        <a href="docs.html">Architecture Docs</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+      </nav>
+      <a href="https://github.com/rkrworks/Sudharshan-AI/releases/latest" class="btn btn-primary" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
     </div>
-  </nav>
+  </header>
 
-  <div class="hero-head">
-    <div class="badge-hero">⚡ Official Cryptographically Verified Releases</div>
-    <h1>Download Sudharshan AI</h1>
-    <p class="hero-desc">
-      Hardware-isolated, 100% private desktop AI automation. Native support for Windows 11, Fedora Workstation, generic Linux distributions, and Apple macOS.
-    </p>
-  </div>
+  <main>
+    <section>
+      <div class="container">
+        <span class="eyebrow mono">VERIFIED OFFLINE INSTALLERS &bull; SHA256SUMS</span>
+        <h1>Download Sudharshan AI v1.0</h1>
+        <p class="lead">Choose your platform below. Every installer defaults to the local adaptive <code>qwen3.5:4b</code> engine with zero telemetry.</p>
+        <div class="grid-3">
+          <article class="card">
+            <span class="badge mono">FEDORA WORKSTATION 39–43</span>
+            <h3>Fedora GNOME Wayland</h3>
+            <p>Native GTK4/Libadwaita HUD, PipeWire voice studio, and <code>sudharshan</code> CLI companion.</p>
+            <pre class="code-block mono">curl -fsSL https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_fedora.sh | bash</pre>
+            <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_fedora.sh" class="btn btn-primary" style="margin-top:12px;">Download setup_fedora.sh</a>
+          </article>
+          <article class="card">
+            <span class="badge mono">WINDOWS 11 (x64)</span>
+            <h3>Windows Desktop App</h3>
+            <p>Precision Obsidian HUD, DPAPI credential isolation, and WiX MSI / pre-flight installer.</p>
+            <pre class="code-block mono">setup_windows.bat</pre>
+            <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_windows.bat" class="btn btn-primary" style="margin-top:12px;">Download setup_windows.bat</a>
+          </article>
+          <article class="card">
+            <span class="badge mono">LINUX &amp; MACOS</span>
+            <h3>Universal Linux / macOS</h3>
+            <p>Supports dnf, apt, pacman, zypper, apk, and Apple Silicon / macOS adapters.</p>
+            <pre class="code-block mono">curl -fsSL https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_linux.sh | bash</pre>
+            <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_linux.sh" class="btn btn-secondary" style="margin-top:12px;">Download setup_linux.sh</a>
+          </article>
+        </div>
 
-  <div class="platforms-grid">
-    <!-- WINDOWS 11 -->
-    <div class="platform-card">
-      <div class="card-header">
-        <span class="os-badge">Windows 10 / 11 · 64-bit</span>
-        <span class="version-pill">v0.9-alpha</span>
+        <div class="panel" style="margin-top:28px;">
+          <h3>Cryptographic Verification</h3>
+          <p style="color:var(--muted); margin:0 0 12px;">Verify every release file offline against our signed manifest:</p>
+          <div class="cta-row">
+            <a href="SHA256SUMS" class="btn btn-secondary mono">View SHA256SUMS</a>
+            <a href="docs.html" class="btn btn-secondary">Read Architecture Docs</a>
+          </div>
+        </div>
       </div>
-      <h2 class="platform-title">Windows 11 Edition</h2>
-      <p class="platform-desc">
-        Integrated Win32 automation HUD, automated Python 3.12 &amp; Ollama setup, SAPI5 offline voice engine, and local SQLite memory.
-      </p>
-      <ul class="spec-list">
-        <li>Automated winget setup for Ollama &amp; Qwen 3.5 4B</li>
-        <li>Immersive dark mode titlebar with Obsidian theme</li>
-        <li>Ctrl+Shift+K hardware emergency kill-switch</li>
-        <li>Non-destructive file organizer with undo</li>
-      </ul>
-      <div class="cmd-box">
-        setup_windows.bat
-      </div>
-      <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_windows.bat" class="btn-primary" download>
-        ⬇ Download Windows Installer (.bat)
-      </a>
-      <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/unblock_files.bat" class="btn-secondary" download>
-        🛡 Download Security Unblocker (.bat)
-      </a>
-    </div>
+    </section>
+  </main>
 
-    <!-- FEDORA LINUX -->
-    <div class="platform-card">
-      <div class="card-header">
-        <span class="os-badge">Fedora 38–41 · Wayland</span>
-        <span class="version-pill">v0.9-alpha</span>
-      </div>
-      <h2 class="platform-title">Fedora Workstation</h2>
-      <p class="platform-desc">
-        Native GTK 4.0 and Libadwaita HUD with GNOME Shell 44–47 Quick Settings extension and PipeWire low-latency audio capture.
-      </p>
-      <ul class="spec-list">
-        <li>GNOME Quick Settings status indicator</li>
-        <li>Wayland input injection via ydotool</li>
-        <li>8-band Goertzel spectral-DTW voice spotter</li>
-        <li>UNIX domain socket kill-switch</li>
-      </ul>
-      <div class="cmd-box">
-        curl -fsSL https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_fedora.sh | bash
-      </div>
-      <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_fedora.sh" class="btn-primary" download>
-        ⬇ Download Fedora Installer (.sh)
-      </a>
-      <a href="https://github.com/rkrworks/Sudharshan-AI" target="_blank" rel="noopener" class="btn-secondary">
-        Inspect Source on GitHub
-      </a>
-    </div>
-
-    <!-- GENERIC LINUX -->
-    <div class="platform-card">
-      <div class="card-header">
-        <span class="os-badge">Ubuntu · Debian · Arch · SUSE</span>
-        <span class="version-pill">v0.9-alpha</span>
-      </div>
-      <h2 class="platform-title">Universal Linux</h2>
-      <p class="platform-desc">
-        Self-configuring adapter detecting apt, pacman, dnf, or zypper. Runs on Wayland (grim) or X11 (scrot/xdotool) automatically.
-      </p>
-      <ul class="spec-list">
-        <li>Auto package-manager dependency installation</li>
-        <li>Automatic desktop launcher (.desktop) registration</li>
-        <li>Built-in doctor diagnostic suite</li>
-        <li>Deterministic offline command execution</li>
-      </ul>
-      <div class="cmd-box">
-        curl -fsSL https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_linux.sh | bash
-      </div>
-      <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_linux.sh" class="btn-primary" download>
-        ⬇ Download Linux Installer (.sh)
-      </a>
-      <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/linux_generic.py" class="btn-secondary" download>
-        Download Python Adapter (.py)
-      </a>
-    </div>
-
-    <!-- APPLE MACOS -->
-    <div class="platform-card">
-      <div class="card-header">
-        <span class="os-badge">macOS 12+ · Apple Silicon / Intel</span>
-        <span class="version-pill">v0.9-alpha</span>
-      </div>
-      <h2 class="platform-title">macOS Edition</h2>
-      <p class="platform-desc">
-        Native Quartz window capture, osascript desktop automation, native macOS 'say' TTS synthesis, and preflight doctor check.
-      </p>
-      <ul class="spec-list">
-        <li>Native Quartz / screencapture integration</li>
-        <li>Apple Silicon M1/M2/M3/M4 hardware acceleration</li>
-        <li>Accessibility &amp; screen recording diagnostic</li>
-        <li>Zero third-party cloud telemetry</li>
-      </ul>
-      <div class="cmd-box">
-        curl -fsSL https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_mac.sh | bash
-      </div>
-      <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/setup_mac.sh" class="btn-primary" download>
-        ⬇ Download macOS Installer (.sh)
-      </a>
-      <a href="https://raw.githubusercontent.com/rkrworks/Sudharshan-AI/main/macos.py" class="btn-secondary" download>
-        Download Python Adapter (.py)
-      </a>
-    </div>
-  </div>
-
-  <!-- WINDOWS SMARTSCREEN & SECURITY ADVISORY -->
-  <div class="info-section">
-    <h2>🛡️ Windows SmartScreen &amp; Security Guidance</h2>
-    <p>
-      If Windows Defender or Microsoft SmartScreen flags downloaded scripts or batch files, here is why that happens and how to safely proceed:
-    </p>
-    <div class="callout-box">
-      <div class="callout-title">Why does Windows display "Windows protected your PC"?</div>
-      <div class="callout-desc">
-        Microsoft SmartScreen evaluates files downloaded via web browsers based on commercial Authenticode reputation. Free, open-source community software that does not purchase an expensive annual enterprise EV certificate is flagged by default via browser Mark-of-the-Web (Zone.Identifier).
-      </div>
-    </div>
-    <p><strong>To launch cleanly on Windows 11:</strong></p>
-    <ol style="color: var(--p-muted); margin-left: 20px; margin-bottom: 20px; font-size: 0.96rem; display: flex; flex-direction: column; gap: 8px;">
-      <li><strong>Run Unblocker:</strong> Run <code>unblock_files.bat</code> in the download folder to clear browser Zone.Identifier tags automatically.</li>
-      <li><strong>Or Manual Unblock:</strong> Right-click <code>setup_windows.bat</code> &rarr; select <strong>Properties</strong> &rarr; check <strong>Unblock</strong> at the bottom &rarr; click <strong>Apply</strong>.</li>
-      <li><strong>SmartScreen Prompt:</strong> If SmartScreen appears, click <strong>More info</strong> &rarr; click <strong>Run anyway</strong>.</li>
-      <li><strong>Cryptographic Check:</strong> Verify the SHA-256 hash using the table below to guarantee your copy is authentic and unmodified.</li>
-    </ol>
-  </div>
-
-  <!-- CHECKSUMS -->
-  <div class="info-section">
-    <h2>🔒 Cryptographic SHA-256 Checksums</h2>
-    <p>
-      Every release distribution script and engine core is hashed with SHA-256. To verify on Windows: <code>CertUtil -hashfile setup_windows.bat SHA256</code>. On Linux or macOS: <code>sha256sum setup_fedora.sh</code>.
-    </p>
-    <p>
-      Full checksum manifest available at: <a href="SHA256SUMS" target="_blank"><code>SHA256SUMS</code></a>
-    </p>
-
-    <table class="checksum-table">
-      <thead>
-        <tr>
-          <th>Distribution File</th>
-          <th>SHA-256 Checksum</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="file-col">setup_windows.bat</td>
-          <td class="hash-col">2037c65b99dc5ee82c78360d7a4a99b82481785f0eedc4e125b711e7b79ac215</td>
-        </tr>
-        <tr>
-          <td class="file-col">setup_fedora.sh</td>
-          <td class="hash-col">71ce6dc21bc93e217be041d0dc0da41f8225c8257a92655dc76b98d5ad9c7f77</td>
-        </tr>
-        <tr>
-          <td class="file-col">setup_linux.sh</td>
-          <td class="hash-col">7be633999801b815d89c75f64ddef1e296d85e68d0bba353a1867d9fd30096f6</td>
-        </tr>
-        <tr>
-          <td class="file-col">setup_mac.sh</td>
-          <td class="hash-col">2b51db0451779af2a8acf6fdff5046c416088e5920fa698fd8b8f8747e32e66a</td>
-        </tr>
-        <tr>
-          <td class="file-col">unblock_files.bat</td>
-          <td class="hash-col">390bcab585e2357dbbb91fbfa13489019edae1337ab5141c17adae1fdd0d1ece</td>
-        </tr>
-        <tr>
-          <td class="file-col">bajrang_core.py</td>
-          <td class="hash-col">6814659663a24de1e25750993ae5fcc540fc448fc3d9a1e9ea65b72c354e8bc4</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <footer class="bottom-bar">
-    <div>
-      Sudharshan AI (Alpha v0.9) · Engineered by <strong>Kaushik Ram Ravuru</strong> (B.E. IT, CBIT Hyderabad)
-    </div>
-    <div class="footer-links">
-      <a href="terms.html">Terms</a>
-      <a href="privacy.html">Privacy</a>
-      <a href="credits.html">Credits</a>
-      <a href="https://github.com/rkrworks/Sudharshan-AI" target="_blank" rel="noopener">GitHub</a>
-      <a href="mailto:kaushikramravuru@gmail.com">Contact</a>
+  <footer class="site-footer">
+    <div class="container footer-bottom mono" style="margin-top:0; border-top:none; padding-top:0;">
+      <span>&copy; 2026 Kaushik Ram Ravuru &bull; Sudharshan AI v1.0</span>
+      <span><a href="index.html">Home</a> &bull; <a href="docs.html">Docs</a> &bull; <a href="privacy.html">Privacy</a> &bull; <a href="terms.html">Terms</a></span>
     </div>
   </footer>
-</div>
 </body>
 </html>

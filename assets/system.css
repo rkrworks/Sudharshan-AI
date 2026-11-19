@@ -1326,3 +1326,15 @@ main > .photo-band--hero:first-child > .photo-band__text { padding-top: calc(var
 .stack-4 > * + * { margin-top: var(--s-4); }
 .stack-5 > * + * { margin-top: var(--s-5); }
 .stack-6 > * + * { margin-top: var(--s-6); }
+
+/* Sudharshan AI — Precision Obsidian & Solar Orange Design Tokens (Phase 0) */
+:root {
+  --sudharshan-obsidian: #0B0B0D;
+  --sudharshan-surface: #141418;
+  --sudharshan-hairline: #24242B;
+  --sudharshan-accent: #FF5A1F;
+  --sudharshan-text: #F4F4F6;
+  --sudharshan-radius-container: 10px;
+  --sudharshan-radius-input: 8px;
+  --sudharshan-radius-cta: 9999px;
+}
