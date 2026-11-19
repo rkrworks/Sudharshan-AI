@@ -1,0 +1,36 @@
+{
+  "brand": "Sudharshan AI",
+  "version": "1.0.0-phase0",
+  "aesthetic": "Precision Obsidian & Solar Orange",
+  "dials": {
+    "DESIGN_VARIANCE": 7,
+    "MOTION_INTENSITY": 6,
+    "VISUAL_DENSITY": 5,
+    "VISUAL_DENSITY_TELEMETRY": 7
+  },
+  "colors": {
+    "obsidian": "#0B0B0D",
+    "surface": "#141418",
+    "hairline": "#24242B",
+    "accent": "#FF5A1F",
+    "accent_hover": "#FF7440",
+    "text": "#F4F4F6",
+    "text_muted": "#9CA3AF",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "danger": "#EF4444"
+  },
+  "radius": {
+    "container_px": 10,
+    "input_px": 8,
+    "cta_px": 9999
+  },
+  "typography": {
+    "sans": "Instrument Sans, system-ui, -apple-system, sans-serif",
+    "mono": "DM Mono, ui-monospace, SFMono-Regular, monospace"
+  },
+  "webgl": {
+    "max_contexts": 4,
+    "reduced_motion_fallback": true
+  }
+}

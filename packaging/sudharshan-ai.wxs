@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Sudharshan AI" Manufacturer="RKR Works" Version="1.0.0.0" UpgradeCode="6F4A9C1E-8B2D-4C5E-A1D3-9E0F1A2B3C4D">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Sudharshan AI is already installed." />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SudharshanAI">
+        <Component Id="MainFiles" Guid="9B1E2D3C-4A5F-6E7D-8C9B-0A1B2C3D4E5F">
+          <File Source="..\windows.py" />
+          <File Source="..\bajrang_core.py" />
+          <File Source="..\sudharshan_cli.py" />
+          <File Source="..\design_tokens.json" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Package>
+</Wix>

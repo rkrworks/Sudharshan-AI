@@ -112,12 +112,12 @@ class WindowsSmartEnvironmentScanner:
             with urllib.request.urlopen(req, timeout=1.2) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 models = [m.get("name", "") for m in data.get("models", [])]
-                has_model = any(any(k in m for k in ("qwen3.5", "llama3.2", "bajrang")) for m in models)
+                has_model = any("qwen3.5" in m or "phi4-mini" in m or "llama3.2" in m for m in models)
         except Exception:
             has_model = False
         return ComponentCheck(
             item_id="llama32_model",
-            title="Qwen 3.5 4B Primary Model (~2.6 GB)",
+            title="Qwen 3.5 4B Local Model (~2.6 GB)",
             installed=has_model,
             version_or_detail="Installed in Ollama" if has_model else "Not pulled locally",
             action_needed="Ready" if has_model else "Optional: Pull qwen3.5:4b (~2.6 GB download, requires explicit consent)",
@@ -356,7 +356,7 @@ def main() -> int:
     parser.add_argument("--scan-only", action="store_true", help="Print JSON scan report and exit")
     parser.add_argument("--headless-install", "--cli", action="store_true", help="Install missing pip dependencies headlessly")
     parser.add_argument("--consent-winget", action="store_true", help="Explicitly consent to winget Ollama install")
-    parser.add_argument("--consent-model-pull", action="store_true", help="Explicitly consent to ~2 GB Llama 3.2 pull")
+    parser.add_argument("--consent-model-pull", action="store_true", help="Explicitly consent to ~2.6 GB Qwen 3.5 4B pull")
     parser.add_argument("--uninstall", action="store_true", help="Uninstall Bajrang AI Pro and purge stored secrets")
     args = parser.parse_args()
 

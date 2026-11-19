@@ -689,5 +689,115 @@ class TestBajrangAuditRemediations(unittest.TestCase):
             self.assertIn("local model slow on older cpu", content_bug)
 
 
+    def test_phase0_adaptive_multimodel_streaming_and_asset_hygiene(self) -> None:
+        """Phase 0 Verification: Adaptive Multi-Model Engine, NDJSON streaming, BUG-008 fix, tokens, and asset hygiene."""
+        import http.server
+        import socket
+        import threading
+
+        # 1. AdaptiveModelEngine routing across all 6 model roles + low-RAM < 2.5 GB fallback
+        d_primary = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.MODERATE, free_ram_gb=6.0)
+        self.assertEqual(d_primary["model"], "qwen3.5:4b")
+        self.assertFalse(d_primary["downgraded"])
+
+        d_lowram = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.MODERATE, free_ram_gb=2.1)
+        self.assertEqual(d_lowram["model"], "qwen3.5:2b-q4_K_M")
+        self.assertTrue(d_lowram["downgraded"])
+
+        d_reason = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.COMPLEX_REASONING, free_ram_gb=6.0)
+        self.assertEqual(d_reason["model"], "phi4-mini")
+        self.assertFalse(d_reason["downgraded"])
+
+        d_reason_low = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.COMPLEX_REASONING, free_ram_gb=1.8)
+        self.assertEqual(d_reason_low["model"], "qwen3.5:2b-q4_K_M")
+        self.assertTrue(d_reason_low["downgraded"])
+
+        d_router = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.SIMPLE, free_ram_gb=6.0)
+        self.assertEqual(d_router["model"], "qwen3.5:0.8b")
+
+        d_embed = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.EMBEDDING, free_ram_gb=4.0)
+        self.assertEqual(d_embed["model"], "qwen3-embedding:0.6b")
+
+        d_embed_low = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.EMBEDDING, free_ram_gb=0.9)
+        self.assertEqual(d_embed_low["model"], "embeddinggemma-2:270m")
+
+        d_ocr = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.OCR, free_ram_gb=4.0)
+        self.assertEqual(d_ocr["model"], "glm-ocr")
+
+        d_vision = bajrang_core.AdaptiveModelEngine.select_local_model(bajrang_core.TaskComplexity.MULTIMODAL_VISION, free_ram_gb=6.0)
+        self.assertEqual(d_vision["model"], "qwen3.5:4b")
+
+        # 2. HardwareProfiler free RAM & audio input device enumeration
+        self.assertGreater(bajrang_core.HardwareProfiler.get_free_ram_gb(), 0.0)
+        audio_devs = bajrang_core.HardwareProfiler.list_audio_input_devices()
+        self.assertIsInstance(audio_devs, list)
+        self.assertGreaterEqual(len(audio_devs), 1)
+        self.assertIn("name", audio_devs[0])
+
+        # 3. BUG-008: NetworkConnectivityDetector must not mutate global socket default timeout
+        prev_timeout = socket.getdefaulttimeout()
+        self.assertFalse(bajrang_core.NetworkConnectivityDetector.is_online(host="192.0.2.1", port=53, timeout_sec=0.1))
+        self.assertEqual(socket.getdefaulttimeout(), prev_timeout)
+
+        # 4. Technical Debt #3: Real NDJSON streaming via UnifiedModelClient.chat_stream()
+        class _MockOllamaStreamHandler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                _ = self.rfile.read(length)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/x-ndjson")
+                self.end_headers()
+                lines = [
+                    json.dumps({"message": {"content": "Sudharshan "}, "done": False}) + "\n",
+                    json.dumps({"message": {"content": "Phase 0 "}, "done": False}) + "\n",
+                    json.dumps({"message": {"content": "Ready"}, "done": True}) + "\n",
+                ]
+                for ln in lines:
+                    self.wfile.write(ln.encode("utf-8"))
+                    self.wfile.flush()
+
+            def log_message(self, format, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), _MockOllamaStreamHandler)
+        port = server.server_address[1]
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                cfg = bajrang_core.ConfigManager(Path(tmp))
+                cfg.settings["ollama_host"] = f"http://127.0.0.1:{port}"
+                cfg.settings["provider"] = "ollama"
+                client = bajrang_core.UnifiedModelClient(cfg)
+                streamed = []
+                turn, telemetry = client.chat_stream("ping", on_token=streamed.append)
+                self.assertEqual("".join(streamed), "Sudharshan Phase 0 Ready")
+                self.assertEqual(turn.text, "Sudharshan Phase 0 Ready")
+                self.assertEqual(telemetry["tokens"], 3)
+                self.assertGreater(telemetry["tokens_per_sec"], 0.0)
+                self.assertGreaterEqual(telemetry["ttft_ms"], 0.0)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        # 5. Precision Obsidian & Solar Orange design tokens parity
+        repo_root = Path(__file__).resolve().parent
+        tokens_file = repo_root / "design_tokens.json"
+        self.assertTrue(tokens_file.is_file())
+        tokens = json.loads(tokens_file.read_text(encoding="utf-8"))
+        self.assertEqual(tokens["colors"]["obsidian"], "#0B0B0D")
+        self.assertEqual(tokens["colors"]["surface"], "#141418")
+        self.assertEqual(tokens["colors"]["hairline"], "#24242B")
+        self.assertEqual(tokens["colors"]["accent"], "#FF5A1F")
+        self.assertEqual(tokens["colors"]["text"], "#F4F4F6")
+        self.assertEqual(tokens["radius"]["container_px"], 10)
+        self.assertEqual(tokens["radius"]["input_px"], 8)
+        self.assertEqual(tokens["radius"]["cta_px"], 9999)
+
+        # 6. Asset hygiene: zero demo/lab/gallery HTML files in assets/ and web/assets/
+        for assets_root in (repo_root / "assets", repo_root / "web" / "assets"):
+            dead_html = [p for p in assets_root.rglob("*.html") if any(k in p.name.lower() for k in ("_lab", "demo", "gallery"))]
+            self.assertEqual(dead_html, [], f"Found unused demo/lab/gallery HTML files in {assets_root}: {dead_html}")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -68,197 +68,6 @@ for _k in ("NO_PROXY", "no_proxy"):
             _current.append(_a)
     os.environ[_k] = ",".join(_current)
 
-# Sudharshan AI Multi-Model Local Engine Integration
-from sudharshan.core.models import (
-    PRIMARY_MODEL,
-    LOW_RAM_FALLBACK_MODEL,
-    REASONING_MODEL,
-    INTENT_ROUTER_MODEL,
-    EMBEDDING_MODEL,
-    EMBEDDING_FALLBACK_MODEL,
-    OCR_MODEL,
-    RAM_DOWNGRADE_THRESHOLD_GB,
-    ModelCatalogEntry,
-    MODEL_CATALOG,
-    get_available_ram_gb,
-    AdaptiveModelSwitcher,
-    IntentRouter,
-    StreamingTelemetry,
-    StreamingModelEngine,
-    compute_cosine_similarity,
-    generate_local_embedding,
-    ToolCallResult,
-    JSONSchemaConstrainedToolCaller,
-    PlanStatus,
-    PlanNode,
-    PlanTree,
-    AutonomousStepPlanner,
-    ContextWindowManager,
-    PromptTemplateLibrary,
-    BenchmarkResult,
-    ModelBenchmarkRunner,
-    OfflineFirstHybridController,
-    PersonaDefinition,
-    PersonaManager,
-)
-from sudharshan.core.memory import (
-    VectorChunk,
-    LocalVectorStore,
-    DocumentTextExtractor,
-    BackgroundFileIndexer,
-    BM25SearchEngine,
-    HybridSearchEngine,
-    SourceCitationFormatter,
-    MemoryCard,
-    EpisodicMemoryStore,
-    ProjectWorkspace,
-    ProjectWorkspaceManager,
-    ClipboardKnowledgeCapture,
-    DuplicateMatch,
-    DocumentDeduplicator,
-    IncognitoSessionManager,
-    MemoryBackupManager,
-)
-from sudharshan.core.perception import (
-    HardenedWakeWordEngine,
-    STTResult,
-    WhisperCppSTT,
-    PiperNeuralTTS,
-    AudioInteractionState,
-    PushToTalkController,
-    ScreenshotResult,
-    ScreenPerceptionPipeline,
-    MeetingTurn,
-    MeetingSummary,
-    MeetingTranscriber,
-    AudioReactiveOrbRenderer,
-    OCRToClipboardService,
-    SpokenConfirmationGate,
-    VoiceMacro,
-    VoiceMacroManager,
-)
-from sudharshan.core.security import (
-    AuditBlock,
-    SignedAuditLedger,
-    PermissionTier,
-    FourTierPermissionPolicy,
-    CommandPreviewDiffGenerator,
-    RollbackSnapshot,
-    PreActionRollbackManager,
-    ASTShellSanitizer,
-    SecretPIIRedactor,
-    HardwareKeyringBridge,
-    NetworkEgressMonitor,
-    AutomatedIntegrityVerifier,
-    PanicKillSwitch,
-)
-from sudharshan.core.fs_automation import (
-    FileMoveOperation,
-    OrganizationPlan,
-    BatchFileOrganizer,
-    SmartDownloadsDaemon,
-    ContentAwareRenamer,
-    DeduplicationSweepEngine,
-    NaturalArchiveManager,
-    CleanupTarget,
-    DiskSpaceAnalyzer,
-    FileConversionPipeline,
-    WatcherRule,
-    FolderWatcherTriggerEngine,
-    QuarantineItem,
-    SafeQuarantineTrashBin,
-    FolderSyncDelta,
-    CrossFolderDiffSync,
-)
-from sudharshan.core.desktop import (
-    PaletteItem,
-    CommandPaletteLauncher,
-    WindowInfo,
-    NativeWindowManager,
-    ClipboardEntry,
-    ClipboardHistoryManager,
-    HardwareHUDTelemetry,
-    ResourceThermalHUD,
-    SystemSettingsController,
-    SmartFocusController,
-    DesktopNotification,
-    NotificationTriager,
-    ContextualActionEngine,
-    CronSystemdTimerGenerator,
-    ProcessTelemetry,
-    SafeProcessManager,
-)
-from sudharshan.core.developer import (
-    GitStatusSummary,
-    LocalGitAssistant,
-    ErrorDiagnostic,
-    TerminalErrorExplainer,
-    CodeSymbol,
-    CodebaseSymbolIndexer,
-    ContainerRecord,
-    ContainerInspector,
-    OfflineAPITester,
-    RegexMatchResult,
-    RegexTestBench,
-    UnitTestGenerator,
-    PortServiceRecord,
-    LocalhostServiceRadar,
-    ManPageTranslator,
-    DiagnosticCheck,
-    EnvironmentPathDoctor,
-)
-from sudharshan.core.productivity import (
-    VaultNote,
-    KnowledgeGraph,
-    MarkdownKnowledgeVault,
-    PaperBriefing,
-    InstantPaperReader,
-    TaskItem,
-    NaturalLanguageTaskManager,
-    MorningBriefingGenerator,
-    Flashcard,
-    SM2SpacedRepetitionEngine,
-    MathLaTeXScratchpad,
-    WritingAssistant,
-    CalendarEvent,
-    CalendarICSManager,
-    DataTableExtractor,
-    EndOfDayDigestGenerator,
-)
-from sudharshan.core.mcp_plugins import (
-    MCPToolDefinition,
-    MCPClient,
-    SandboxedPluginRuntime,
-    WorkflowNode,
-    VisualWorkflowDAGBuilder,
-    PluginScanReport,
-    PluginSecurityScanner,
-    LocalhostAPIServer,
-    CLICompanionInterface,
-    DeclarativeTool,
-    DeclarativeYAMLToolLoader,
-    EventMessage,
-    WebhookMQTTEventBridge,
-    PluginProcessState,
-    PluginSupervisor,
-    PluginDevSandbox,
-)
-from sudharshan.core.diagnostics import (
-    FedoraPackagingGenerator,
-    WindowsInstallerBuilder,
-    OnboardingConfig,
-    FirstRunOnboardingWizard,
-    DoctorItem,
-    AutomatedSystemDoctor,
-    DegradationTierState,
-    GracefulDegradationMatrix,
-    AccessibilityAuditor,
-    ReleaseAssetPackager,
-    ZeroTelemetryDashboard,
-    SanitizedMinidump,
-    SafeCrashReporter,
-    MasterIntegrationSuiteRunner,
-)
 from typing import Any, Callable, Dict, FrozenSet, Generator, List, Optional, Set, Tuple
 
 
@@ -303,7 +112,7 @@ class AssistantTurn:
     results: List[ActionResult] = field(default_factory=list)
     session_id: str = ""
     provider_used: str = "ollama"
-    model_used: str = PRIMARY_MODEL
+    model_used: str = "qwen3.5:4b"
     awaiting_confirmation: bool = False
 
 
@@ -417,7 +226,7 @@ def is_key_compatible_with_provider(api_key: str, provider_id: str) -> bool:
 PROVIDER_PRESETS: Dict[str, Dict[str, str]] = {
     "ollama": {
         "endpoint": "http://127.0.0.1:11434/api/chat",
-        "model": PRIMARY_MODEL,
+        "model": "qwen3.5:4b",
     },
     "gemini": {
         "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -698,15 +507,14 @@ def get_default_settings() -> Dict[str, Any]:
     return {
         "provider": "ollama",
         "ollama_host": "http://127.0.0.1:11434",
-        "model": PRIMARY_MODEL,
-        "primary_model": PRIMARY_MODEL,
-        "low_ram_fallback": LOW_RAM_FALLBACK_MODEL,
-        "reasoning_model": REASONING_MODEL,
-        "intent_router_model": INTENT_ROUTER_MODEL,
-        "embedding_model": EMBEDDING_MODEL,
-        "ocr_model": OCR_MODEL,
-        "adaptive_ram_downgrade": True,
-        "ram_threshold_gb": RAM_DOWNGRADE_THRESHOLD_GB,
+        "model": "qwen3.5:4b",
+        "model_low_ram": "qwen3.5:2b-q4_K_M",
+        "model_reasoning": "phi4-mini",
+        "model_router": "qwen3.5:0.8b",
+        "model_embedding": "qwen3-embedding:0.6b",
+        "model_embedding_fallback": "embeddinggemma-2:270m",
+        "model_ocr": "glm-ocr",
+        "low_ram_threshold_gb": 2.5,
         "byo_provider": "gemini_argon",
         "byo_api_endpoint": PROVIDER_PRESETS["gemini_argon"]["endpoint"],
         "byo_model": PROVIDER_PRESETS["gemini_argon"]["model"],
@@ -871,7 +679,7 @@ class ConfigManager:
         ctx = int(self.settings.get("ollama_num_ctx", 4096))
         modelfile_path = self.data_dir / "Modelfile.bajrang"
         content = (
-            f"FROM {PRIMARY_MODEL}\n"
+            "FROM qwen3.5:4b\n"
             "PARAMETER temperature 0.3\n"
             "PARAMETER top_p 0.9\n"
             f"PARAMETER num_ctx {ctx}\n"
@@ -1427,7 +1235,7 @@ class LocalChatStorage:
     def _conn(self) -> sqlite3.Connection:
         return self.migration_mgr.connect()
 
-    def create_session(self, title: str = "New Conversation", model: str = PRIMARY_MODEL) -> str:
+    def create_session(self, title: str = "New Conversation", model: str = "qwen3.5:4b") -> str:
         session_id = f"sess_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
         now = datetime.datetime.now().isoformat(timespec="seconds")
         with self._conn() as conn:
@@ -1446,7 +1254,7 @@ class LocalChatStorage:
         content: str,
         actions: Optional[List[Dict[str, Any]]] = None,
         results: Optional[List[Any]] = None,
-        model: str = "llama3.2",
+        model: str = "qwen3.5:4b",
     ) -> None:
         now = datetime.datetime.now().isoformat(timespec="seconds")
         safe_content, _ = redact_sensitive_text(content)
@@ -1680,7 +1488,7 @@ class LocalChatStorage:
             return False, "Missing 'session' object in JSON payload.", ""
 
         title = str(sess_data.get("title", "Restored Conversation"))
-        model = str(sess_data.get("model", PRIMARY_MODEL))
+        model = str(sess_data.get("model", "qwen3.5:4b"))
         category = str(sess_data.get("category", "General"))
         new_sid = f"sess_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
         now = datetime.datetime.now().isoformat(timespec="seconds")
@@ -2010,15 +1818,7 @@ class LocalChatStorage:
     def export_session_markdown(self, session_id: str, dest_dir: Optional[Path] = None) -> Path:
         """Phase C Feature 4: Export session transcript as clean Markdown."""
         msgs = self.get_session_messages(session_id, limit=500)
-        cand_dl = Path.home() / "Downloads"
-        if dest_dir is not None:
-            out_dir = Path(dest_dir)
-        elif cand_dl.is_dir() and os.access(cand_dl, os.W_OK):
-            out_dir = cand_dl
-        elif hasattr(self, "data_dir") and self.data_dir and os.access(self.data_dir, os.W_OK):
-            out_dir = self.data_dir
-        else:
-            out_dir = Path(tempfile.gettempdir())
+        out_dir = dest_dir or (Path.home() / "Downloads" if (Path.home() / "Downloads").is_dir() else self.data_dir)
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         out_path = out_dir / f"Sudharshan_Transcript_{session_id}_{ts}.md"
 
@@ -2042,12 +1842,7 @@ class LocalChatStorage:
                     lines.append(f"- `{res.get('tool', 'tool')}` (Success: {res.get('success', False)}): {res.get('output', '')}")
             lines.append("\n---\n")
 
-        try:
-            out_path.write_text("\n".join(lines), encoding="utf-8")
-        except OSError:
-            out_dir = Path(tempfile.gettempdir())
-            out_path = out_dir / f"Sudharshan_Transcript_{session_id}_{ts}.md"
-            out_path.write_text("\n".join(lines), encoding="utf-8")
+        out_path.write_text("\n".join(lines), encoding="utf-8")
         return out_path
 
 
@@ -2711,22 +2506,22 @@ class HardwareProfiler:
             "description": "16GB+ RAM system with dedicated or high-bandwidth GPU. Optimal for 8B and 14B parameter models with deep context.",
         },
         "Balanced": {
-            "name": "Balanced Performance Tier",
-            "recommended_model": PRIMARY_MODEL,
-            "daily_driver_model": PRIMARY_MODEL,
-            "context_length": 16384,
-            "min_ram_gb": 4.0,
+            "name": "Balanced Laptop Tier",
+            "recommended_model": "qwen3.5:4b",
+            "daily_driver_model": "qwen3.5:4b",
+            "context_length": 4096,
+            "min_ram_gb": 7.5,
             "min_vram_gb": 0.0,
-            "description": "Standard PC or laptop. Optimized for Qwen 3.5 4B precision tool calling, structured JSON output, and native vision.",
+            "description": "8GB-16GB RAM ultrabook or standard PC. Optimized for instant, snappy 3B agent tool calling.",
         },
         "Eco": {
-            "name": "Eco / Low-RAM Tier",
-            "recommended_model": LOW_RAM_FALLBACK_MODEL,
-            "daily_driver_model": LOW_RAM_FALLBACK_MODEL,
-            "context_length": 8192,
+            "name": "Eco / Lightweight Tier",
+            "recommended_model": "qwen3.5:2b-q4_K_M",
+            "daily_driver_model": "qwen3.5:2b-q4_K_M",
+            "context_length": 2048,
             "min_ram_gb": 0.0,
             "min_vram_gb": 0.0,
-            "description": "Compact footprint Qwen 3.5 2B model auto-activated under memory pressure or on low-RAM hardware.",
+            "description": "Compact footprint 1B model with near-zero memory footprint and instantaneous CPU responses.",
         },
     }
 
@@ -2807,7 +2602,7 @@ class HardwareProfiler:
     @classmethod
     def download_model(cls, model_name: str, host: str = "http://127.0.0.1:11434") -> Tuple[bool, str]:
         endpoint = f"{host.rstrip('/')}/api/pull"
-        clean_name = (model_name or PRIMARY_MODEL).strip()
+        clean_name = (model_name or "qwen3.5:4b").strip()
         try:
             req = urllib.request.Request(
                 endpoint,
@@ -2832,6 +2627,93 @@ class HardwareProfiler:
 
         return False, f"Ollama daemon not reachable at {host} and 'ollama' binary not found in PATH."
 
+    @classmethod
+    def get_free_ram_gb(cls) -> float:
+        try:
+            if platform.system() == "Linux" and os.path.exists("/proc/meminfo"):
+                mem_avail = None
+                mem_free = None
+                with open("/proc/meminfo", "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("MemAvailable:"):
+                            mem_avail = int(line.split()[1]) / (1024 * 1024)
+                            break
+                        if line.startswith("MemFree:"):
+                            mem_free = int(line.split()[1]) / (1024 * 1024)
+                if mem_avail is not None:
+                    return round(mem_avail, 2)
+                if mem_free is not None:
+                    return round(mem_free, 2)
+            elif platform.system() == "Windows":
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+                stat = MEMORYSTATUSEX()
+                stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                    return round(stat.ullAvailPhys / (1024 ** 3), 2)
+            elif platform.system() == "Darwin":
+                out = subprocess.check_output(["vm_stat"], text=True, timeout=2.0)
+                free_pages = 0
+                for line in out.splitlines():
+                    if line.startswith(("Pages free:", "Pages inactive:", "Pages speculative:")):
+                        val = line.split(":")[1].strip().rstrip(".")
+                        if val.isdigit():
+                            free_pages += int(val)
+                if free_pages > 0:
+                    return round((free_pages * 4096) / (1024 ** 3), 2)
+        except Exception:
+            pass
+        return 4.0
+
+    @classmethod
+    def list_audio_input_devices(cls) -> List[Dict[str, str]]:
+        devices: List[Dict[str, str]] = []
+        sys_name = platform.system()
+        try:
+            if sys_name == "Linux":
+                if shutil.which("pactl"):
+                    proc = subprocess.run(["pactl", "list", "short", "sources"], capture_output=True, text=True, timeout=3.0, check=False)
+                    if proc.returncode == 0:
+                        for line in proc.stdout.splitlines():
+                            parts = line.split("	")
+                            if len(parts) >= 2 and ".monitor" not in parts[1]:
+                                devices.append({"id": parts[0].strip(), "name": parts[1].strip(), "backend": "pulse/pipewire"})
+                if not devices and shutil.which("arecord"):
+                    proc = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=3.0, check=False)
+                    if proc.returncode == 0:
+                        for line in proc.stdout.splitlines():
+                            if line.startswith("card "):
+                                devices.append({"id": line.split(":")[0].strip(), "name": line.strip(), "backend": "alsa"})
+            elif sys_name == "Windows":
+                ps = "Get-CimInstance Win32_SoundDevice | Select-Object -ExpandProperty Name"
+                proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=4.0, check=False)
+                if proc.returncode == 0:
+                    for idx, line in enumerate(proc.stdout.splitlines()):
+                        name = line.strip()
+                        if name:
+                            devices.append({"id": f"win_audio_{idx}", "name": name, "backend": "winmm"})
+            elif sys_name == "Darwin":
+                proc = subprocess.run(["system_profiler", "SPAudioDataType"], capture_output=True, text=True, timeout=4.0, check=False)
+                if proc.returncode == 0:
+                    for idx, line in enumerate(proc.stdout.splitlines()):
+                        if "Input Channels" in line:
+                            devices.append({"id": f"coreaudio_{idx}", "name": line.strip(), "backend": "coreaudio"})
+        except Exception:
+            pass
+        if not devices:
+            devices.append({"id": "default", "name": "System Default Microphone", "backend": "default"})
+        return devices
+
 
 class OllamaWatchdogManager:
     """
@@ -2850,7 +2732,7 @@ class OllamaWatchdogManager:
     def __init__(
         self,
         ollama_host: str = "http://127.0.0.1:11434",
-        active_model: str = PRIMARY_MODEL,
+        active_model: str = "qwen3.5:4b",
         check_interval_sec: float = 4.0,
         state_callback: Optional[Callable[[bool, str], None]] = None,
     ) -> None:
@@ -2985,11 +2867,114 @@ class PerformanceSettings:
         return cls(profile="balanced", max_context_messages=12, screenshot_max_dim=1280, screenshot_jpeg_quality=80, ollama_num_threads=min(8, cpus), ollama_num_ctx=4096, enable_local_llama=True)
 
 
+DESIGN_TOKENS: Dict[str, Any] = {
+    "obsidian": "#0B0B0D",
+    "surface": "#141418",
+    "hairline": "#24242B",
+    "accent": "#FF5A1F",
+    "accent_hover": "#FF7440",
+    "text": "#F4F4F6",
+    "text_muted": "#9CA3AF",
+    "radius_container": 10,
+    "radius_input": 8,
+    "radius_cta": 9999,
+    "dials": {
+        "DESIGN_VARIANCE": 7,
+        "MOTION_INTENSITY": 6,
+        "VISUAL_DENSITY": 5,
+        "VISUAL_DENSITY_TELEMETRY": 7,
+    },
+}
+
+
 class TaskComplexity(enum.Enum):
     SIMPLE = "simple"
     MODERATE = "moderate"
     COMPLEX_REASONING = "complex_reasoning"
     MULTIMODAL_VISION = "multimodal_vision"
+    OCR = "ocr"
+    EMBEDDING = "embedding"
+
+
+class AdaptiveModelEngine:
+    """
+    Phase 0 Adaptive Multi-Model Local Engine (Ollama / llama.cpp).
+    Routes tasks across specialized local models and auto-downgrades primary 4B -> 2B
+    when host free RAM drops below the configured threshold (default 2.5 GB).
+    """
+
+    LOW_RAM_THRESHOLD_GB: float = 2.5
+    DEFAULT_ROLES: Dict[str, str] = {
+        "primary": "qwen3.5:4b",
+        "low_ram": "qwen3.5:2b-q4_K_M",
+        "reasoning": "phi4-mini",
+        "router": "qwen3.5:0.8b",
+        "embedding": "qwen3-embedding:0.6b",
+        "embedding_fallback": "embeddinggemma-2:270m",
+        "ocr": "glm-ocr",
+    }
+
+    @classmethod
+    def get_role_models(cls, settings: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+        cfg = settings or {}
+        return {
+            "primary": str(cfg.get("model", cls.DEFAULT_ROLES["primary"])),
+            "low_ram": str(cfg.get("model_low_ram", cls.DEFAULT_ROLES["low_ram"])),
+            "reasoning": str(cfg.get("model_reasoning", cls.DEFAULT_ROLES["reasoning"])),
+            "router": str(cfg.get("model_router", cls.DEFAULT_ROLES["router"])),
+            "embedding": str(cfg.get("model_embedding", cls.DEFAULT_ROLES["embedding"])),
+            "embedding_fallback": str(cfg.get("model_embedding_fallback", cls.DEFAULT_ROLES["embedding_fallback"])),
+            "ocr": str(cfg.get("model_ocr", cls.DEFAULT_ROLES["ocr"])),
+        }
+
+    @classmethod
+    def select_local_model(
+        cls,
+        complexity: TaskComplexity = TaskComplexity.MODERATE,
+        free_ram_gb: Optional[float] = None,
+        settings: Optional[Dict[str, Any]] = None,
+        prefer_reasoning: bool = False,
+    ) -> Dict[str, Any]:
+        roles = cls.get_role_models(settings)
+        threshold = float((settings or {}).get("low_ram_threshold_gb", cls.LOW_RAM_THRESHOLD_GB))
+        ram_gb = free_ram_gb if free_ram_gb is not None else HardwareProfiler.get_free_ram_gb()
+        downgraded = False
+        reason = "primary_default"
+
+        if complexity == TaskComplexity.EMBEDDING:
+            model = roles["embedding"] if ram_gb >= 1.2 else roles["embedding_fallback"]
+            reason = "semantic_embedding" if ram_gb >= 1.2 else "low_ram_embedding_fallback"
+        elif complexity == TaskComplexity.OCR:
+            model = roles["ocr"]
+            reason = "on_demand_ocr"
+        elif complexity == TaskComplexity.SIMPLE:
+            model = roles["router"]
+            reason = "fast_intent_router"
+        elif prefer_reasoning or complexity == TaskComplexity.COMPLEX_REASONING:
+            if ram_gb < threshold:
+                model = roles["low_ram"]
+                downgraded = True
+                reason = f"low_ram_downgrade (<{threshold:.1f}GB free)"
+            else:
+                model = roles["reasoning"]
+                reason = "reasoning_alternate"
+        else:
+            if ram_gb < threshold:
+                model = roles["low_ram"]
+                downgraded = True
+                reason = f"low_ram_downgrade (<{threshold:.1f}GB free)"
+            else:
+                model = roles["primary"]
+                reason = "multimodal_vision_primary" if complexity == TaskComplexity.MULTIMODAL_VISION else "primary_4b"
+
+        return {
+            "model": model,
+            "complexity": complexity.value,
+            "free_ram_gb": round(float(ram_gb), 2),
+            "threshold_gb": threshold,
+            "downgraded": downgraded,
+            "reason": reason,
+        }
 
 
 class UnifiedModelClient:
@@ -3022,12 +3007,13 @@ class UnifiedModelClient:
     def active_model(self) -> str:
         if self.provider == "byo_api":
             return str(self.config.settings.get("byo_model", "gemini-2.5-pro"))
-        configured = str(self.config.settings.get("model", PRIMARY_MODEL))
-        if self.config.settings.get("adaptive_ram_downgrade", True) and (configured == PRIMARY_MODEL or "4b" in configured.lower()):
-            thresh = float(self.config.settings.get("ram_threshold_gb", RAM_DOWNGRADE_THRESHOLD_GB))
-            switcher = AdaptiveModelSwitcher(primary_model=PRIMARY_MODEL, low_ram_model=LOW_RAM_FALLBACK_MODEL, threshold_gb=thresh)
-            model, _, _ = switcher.resolve_model(configured)
-            return model
+        configured = str(self.config.settings.get("model", "qwen3.5:4b"))
+        if configured == "qwen3.5:4b":
+            decision = AdaptiveModelEngine.select_local_model(
+                complexity=TaskComplexity.MODERATE,
+                settings=self.config.settings,
+            )
+            return str(decision["model"])
         return configured
 
     def configure_byo_key(
@@ -3112,7 +3098,7 @@ class UnifiedModelClient:
             messages.append({"role": "system", "content": f"DESKTOP CONTEXT: {desktop_context}"})
         messages.extend(self.history[-12:])
         user_msg: Dict[str, Any] = {"role": "user", "content": user_prompt}
-        if screenshot_b64 and any(v in self.active_model.lower() for v in ("vision", "vl", "qwen3.5", "glm-ocr")):
+        if screenshot_b64 and ("vision" in self.active_model.lower() or "vl" in self.active_model.lower()):
             user_msg["images"] = [screenshot_b64]
         messages.append(user_msg)
 
@@ -3184,6 +3170,108 @@ class UnifiedModelClient:
                 return turn
         except Exception as exc:
             return AssistantTurn(response_type="conversation", text=f"Cloud API request failed: {exc}")
+
+    def chat_stream(
+        self,
+        user_prompt: str,
+        on_token: Optional[Callable[[str], None]] = None,
+        complexity: TaskComplexity = TaskComplexity.MODERATE,
+        prefer_reasoning: bool = False,
+    ) -> Tuple[AssistantTurn, Dict[str, Any]]:
+        """
+        Phase 0 Streaming Token Engine (NDJSON over Ollama /api/chat with stream=True).
+        Tracks TTFT (ms), tokens/sec, token count, and active free RAM telemetry.
+        """
+        t_start = time.perf_counter()
+        ttft_ms: Optional[float] = None
+        token_count = 0
+        chunks: List[str] = []
+
+        if self.provider == "byo_api":
+            turn = self.chat(user_prompt)
+            elapsed = max(0.001, time.perf_counter() - t_start)
+            approx_tokens = max(1, len((turn.text or "").split()))
+            if on_token and turn.text:
+                on_token(turn.text)
+            return turn, {
+                "model": self.active_model,
+                "provider": "byo_api",
+                "ttft_ms": round(elapsed * 1000.0, 1),
+                "tokens": approx_tokens,
+                "tokens_per_sec": round(approx_tokens / elapsed, 2),
+                "free_ram_gb": HardwareProfiler.get_free_ram_gb(),
+            }
+
+        decision = AdaptiveModelEngine.select_local_model(
+            complexity=complexity,
+            settings=self.config.settings,
+            prefer_reasoning=prefer_reasoning,
+        )
+        model_name = str(decision["model"])
+        host = str(self.config.settings.get("ollama_host", "http://127.0.0.1:11434")).rstrip("/")
+        messages = [{"role": "system", "content": self.system_prompt}] + self.history[-10:] + [{"role": "user", "content": user_prompt}]
+        payload = {"model": model_name, "messages": messages, "stream": True}
+
+        try:
+            req = urllib.request.Request(
+                f"{host}/api/chat",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30.0) as resp:
+                if self.kill_switch:
+                    self.kill_switch.register_active_stream(resp)
+                try:
+                    for raw_line in resp:
+                        if self.kill_switch and self.kill_switch.is_cancelled:
+                            break
+                        line = raw_line.decode("utf-8", errors="ignore").strip()
+                        if not line:
+                            continue
+                        obj = json.loads(line)
+                        tok = str(obj.get("message", {}).get("content", ""))
+                        if tok:
+                            if ttft_ms is None:
+                                ttft_ms = (time.perf_counter() - t_start) * 1000.0
+                            token_count += 1
+                            chunks.append(tok)
+                            if on_token:
+                                on_token(tok)
+                        if obj.get("done"):
+                            break
+                finally:
+                    if self.kill_switch:
+                        self.kill_switch.unregister_active_stream(resp)
+
+            full_reply = "".join(chunks)
+            elapsed = max(0.001, time.perf_counter() - t_start)
+            turn = self.parse_structured_output(full_reply)
+            turn.model_used = model_name
+            self.history.append({"role": "user", "content": user_prompt})
+            self.history.append({"role": "assistant", "content": full_reply})
+            return turn, {
+                "model": model_name,
+                "provider": "ollama",
+                "ttft_ms": round(ttft_ms if ttft_ms is not None else elapsed * 1000.0, 1),
+                "tokens": token_count,
+                "tokens_per_sec": round(token_count / elapsed, 2),
+                "free_ram_gb": decision["free_ram_gb"],
+                "downgraded": decision["downgraded"],
+                "routing_reason": decision["reason"],
+            }
+        except Exception as exc:
+            elapsed = max(0.001, time.perf_counter() - t_start)
+            fallback = self._chat_ollama(messages, user_prompt)
+            return fallback, {
+                "model": model_name,
+                "provider": "ollama_fallback",
+                "ttft_ms": round(elapsed * 1000.0, 1),
+                "tokens": 0,
+                "tokens_per_sec": 0.0,
+                "free_ram_gb": decision["free_ram_gb"],
+                "error": str(exc),
+            }
 
     @staticmethod
     def _find_ollama_binary() -> Optional[str]:
@@ -3337,11 +3425,7 @@ class ModularAIRouter:
         if provider_id == "groq":
             return "llama-3.3-70b-versatile" if complexity == TaskComplexity.COMPLEX_REASONING else "llama-3.1-8b-instant"
         if provider_id == "ollama":
-            if complexity == TaskComplexity.MULTIMODAL_VISION:
-                return OCR_MODEL
-            elif complexity == TaskComplexity.COMPLEX_REASONING:
-                return REASONING_MODEL
-            return PRIMARY_MODEL
+            return str(AdaptiveModelEngine.select_local_model(complexity=complexity)["model"])
         return PROVIDER_PRESETS.get(provider_id, PROVIDER_PRESETS["openai"])["model"]
 
     def _get_compatible_key_for_provider(self, prov: str) -> str:
@@ -3381,10 +3465,10 @@ class ModularAIRouter:
                     errors.append("ollama: disabled in Eco profile")
                     continue
                 try:
-                    target_model = self.select_model_for_task("ollama", complexity)
+                    local_model = self.select_model_for_task("ollama", complexity)
                     req = urllib.request.Request(
                         "http://127.0.0.1:11434/api/chat",
-                        data=json.dumps({"model": target_model, "messages": [{"role": "user", "content": prompt}], "stream": False}).encode("utf-8"),
+                        data=json.dumps({"model": local_model, "messages": [{"role": "user", "content": prompt}], "stream": False}).encode("utf-8"),
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
@@ -3394,7 +3478,7 @@ class ModularAIRouter:
                             "reply": data.get("message", {}).get("content", ""),
                             "actions": [],
                             "provider_used": "ollama",
-                            "model_used": target_model,
+                            "model_used": local_model,
                             "complexity": complexity.value,
                             "fallback_chain_tried": errors,
                         }
@@ -4146,16 +4230,15 @@ class LocalAIModelManager:
     """Ollama Model Manager: Discovery, installed inventory, hardware compatibility, and download tracking."""
 
     CURATED_CATALOG = [
-        {"name": PRIMARY_MODEL, "family": "Qwen 3.5", "parameters": "4.2B", "size_gb": 2.6, "tier": "Balanced", "recommended_context": 16384, "desc": "Default primary engine: precision JSON tool calling and native vision."},
-        {"name": LOW_RAM_FALLBACK_MODEL, "family": "Qwen 3.5", "parameters": "2.1B", "size_gb": 1.4, "tier": "Eco", "recommended_context": 8192, "desc": "Low-RAM fallback engine auto-activated under memory pressure."},
-        {"name": REASONING_MODEL, "family": "Phi 4", "parameters": "3.8B", "size_gb": 2.4, "tier": "High", "recommended_context": 16384, "desc": "Reasoning alternate specialized for mathematical proofs and logic."},
-        {"name": INTENT_ROUTER_MODEL, "family": "Qwen 3.5", "parameters": "0.8B", "size_gb": 0.6, "tier": "Eco", "recommended_context": 4096, "desc": "Fast sub-50ms intent router and command classifier."},
-        {"name": EMBEDDING_MODEL, "family": "Qwen 3", "parameters": "0.6B", "size_gb": 0.5, "tier": "Balanced", "recommended_context": 4096, "desc": "Dense vector embedding generator for local semantic RAG memory."},
-        {"name": OCR_MODEL, "family": "GLM", "parameters": "0.9B", "size_gb": 0.9, "tier": "Balanced", "recommended_context": 4096, "desc": "On-demand multimodal screen and document OCR specialist."},
-        {"name": "llama3.1:8b", "family": "Llama 3.1", "parameters": "8.0B", "size_gb": 4.7, "tier": "High", "recommended_context": 8192, "desc": "128k context powerhouse for deep reasoning and code synthesis."},
-        {"name": "mistral:7b", "family": "Mistral", "parameters": "7.2B", "size_gb": 4.1, "tier": "High", "recommended_context": 8192, "desc": "Precision function calling, JSON action extraction, and speed."},
-        {"name": "deepseek-r1:8b", "family": "DeepSeek-R1", "parameters": "8.0B", "size_gb": 4.9, "tier": "High", "recommended_context": 8192, "desc": "Chain-of-thought mathematical reasoning and logic proofs."},
-        {"name": "qwen2.5:32b", "family": "Qwen 2.5", "parameters": "32.0B", "size_gb": 19.0, "tier": "Workstation", "recommended_context": 16384, "desc": "Workstation powerhouse for heavy multi-document analysis."},
+        {"name": "qwen3.5:4b", "family": "Qwen 3.5", "parameters": "4.0B", "size_gb": 2.6, "tier": "Balanced", "role": "primary", "recommended_context": 8192, "desc": "Primary Q4_K_M local brain with structured JSON tool calling and native vision."},
+        {"name": "qwen3.5:2b-q4_K_M", "family": "Qwen 3.5", "parameters": "2.0B", "size_gb": 1.4, "tier": "Eco", "role": "low_ram", "recommended_context": 4096, "desc": "Low-RAM automatic fallback triggered when host free RAM drops below 2.5 GB."},
+        {"name": "phi4-mini", "family": "Phi-4", "parameters": "3.8B", "size_gb": 2.5, "tier": "Balanced", "role": "reasoning", "recommended_context": 8192, "desc": "Selectable reasoning alternate for multi-step math, code analysis, and planning."},
+        {"name": "qwen3.5:0.8b", "family": "Qwen 3.5", "parameters": "0.8B", "size_gb": 0.6, "tier": "Eco", "role": "router", "recommended_context": 2048, "desc": "Ultra-fast local intent router classifying commands before invoking the 4B brain."},
+        {"name": "qwen3-embedding:0.6b", "family": "Qwen 3 Embedding", "parameters": "0.6B", "size_gb": 0.4, "tier": "Eco", "role": "embedding", "recommended_context": 4096, "desc": "Local semantic embeddings engine for hybrid BM25 + vector RAG indexing."},
+        {"name": "embeddinggemma-2:270m", "family": "EmbeddingGemma", "parameters": "270M", "size_gb": 0.25, "tier": "Eco", "role": "embedding_fallback", "recommended_context": 2048, "desc": "Ultra-compact semantic embeddings fallback for memory-constrained hosts."},
+        {"name": "glm-ocr", "family": "GLM-OCR", "parameters": "1.5B", "size_gb": 1.1, "tier": "Balanced", "role": "ocr", "recommended_context": 4096, "desc": "On-demand local OCR model for code, tables, and screen region extraction."},
+        {"name": "deepseek-r1:8b", "family": "DeepSeek-R1", "parameters": "8.0B", "size_gb": 4.9, "tier": "High", "role": "reasoning_high", "recommended_context": 8192, "desc": "Chain-of-thought mathematical reasoning and logic proofs."},
+        {"name": "qwen2.5:32b", "family": "Qwen 2.5", "parameters": "32.0B", "size_gb": 19.0, "tier": "Workstation", "role": "workstation", "recommended_context": 16384, "desc": "Workstation powerhouse for heavy multi-document analysis."},
     ]
 
     def __init__(self, ollama_host: str = "http://127.0.0.1:11434"):
@@ -4450,7 +4533,7 @@ class IntelligentProviderDashboard:
     def get_summary(self) -> Dict[str, Any]:
         history_summary = self.storage.get_provider_metrics_summary()
         current_pings = self.ping_all_providers()
-        active_model = getattr(self.client, "active_model", PRIMARY_MODEL)
+        active_model = getattr(self.client, "active_model", "qwen3.5:4b")
         active_prov = getattr(self.client, "provider", "ollama")
         return {
             "live_status": current_pings,
@@ -4463,7 +4546,7 @@ class IntelligentProviderDashboard:
         if privacy_first:
             return {
                 "recommended_provider": "ollama",
-                "model": PRIMARY_MODEL,
+                "model": "qwen3.5:4b",
                 "reason": "Privacy-first mode selected; executes 100% locally on device with zero cloud telemetry.",
                 "complexity": "simple",
             }
@@ -4477,7 +4560,7 @@ class IntelligentProviderDashboard:
             }
         return {
             "recommended_provider": "ollama",
-            "model": PRIMARY_MODEL,
+            "model": "qwen3.5:4b",
             "reason": "Standard single-turn query optimized for instant local execution.",
             "complexity": "simple",
         }
@@ -5119,28 +5202,13 @@ class NaturalLanguageFileEngine:
         memory_store: Optional[LocalChatStorage] = None,
         audit_logger: Optional[StructuredAuditLogger] = None,
         permissions: Optional[PermissionsManager] = None,
-        quarantine_base: Optional[Path] = None,
     ) -> None:
         self.memory_store = memory_store
         self.audit_logger = audit_logger
         self.permissions = permissions
         self.home_dir = Path.home().resolve()
-        if quarantine_base is not None:
-            self.quarantine_base = Path(quarantine_base)
-        else:
-            q_env = os.environ.get("SUDHARSHAN_QUARANTINE_DIR")
-            if q_env:
-                self.quarantine_base = Path(q_env)
-            else:
-                self.quarantine_base = self.home_dir / ".sudharshan_quarantine"
-        try:
-            self.quarantine_base.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            self.quarantine_base = Path(tempfile.gettempdir()) / ".sudharshan_quarantine"
-            try:
-                self.quarantine_base.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                pass
+        self.quarantine_base = self.home_dir / ".sudharshan_quarantine"
+        self.quarantine_base.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def is_protected_path(cls, path: Path) -> Tuple[bool, str]:
@@ -5557,20 +5625,26 @@ def import_settings_sanitized(config: ConfigManager, data: Dict[str, Any]) -> Tu
 
 
 class NetworkConnectivityDetector:
-    """Phase C Feature 6: Network-aware connectivity probe."""
+    """Phase C Feature 6: Network-aware connectivity probe (thread-safe per-socket timeout + RFC 5737 guard)."""
+
+    _RFC5737_PREFIXES = ("192.0.2.", "198.51.100.", "203.0.113.")
+
     @staticmethod
     def is_online(host: Optional[str] = None, port: int = 53, timeout_sec: float = 0.8) -> bool:
         import socket
-        target = host or "1.1.1.1"
+        target = (host or "1.1.1.1").strip()
+        if any(target.startswith(pfx) for pfx in NetworkConnectivityDetector._RFC5737_PREFIXES):
+            return False
         try:
-            socket.setdefaulttimeout(timeout_sec)
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout_sec)
                 s.connect((target, port))
             return True
         except Exception:
             if host is None:
                 try:
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(timeout_sec)
                         s.connect(("8.8.8.8", 53))
                     return True
                 except Exception:
@@ -5624,15 +5698,7 @@ def generate_bug_report(
     config: Optional[ConfigManager] = None,
 ) -> Path:
     """Phase C Feature 10: Bundles diagnostic output, doctor health check, and sanitized audit log into a local file for GitHub."""
-    cand_dl = Path.home() / "Downloads"
-    if base_dir is not None:
-        out_dir = Path(base_dir)
-    elif cand_dl.is_dir() and os.access(cand_dl, os.W_OK):
-        out_dir = cand_dl
-    elif config and hasattr(config, "data_dir") and config.data_dir and os.access(config.data_dir, os.W_OK):
-        out_dir = config.data_dir
-    else:
-        out_dir = Path(tempfile.gettempdir())
+    out_dir = base_dir or (Path.home() / "Downloads" if (Path.home() / "Downloads").is_dir() else Path(tempfile.gettempdir()))
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     report_file = out_dir / f"Sudharshan_BugReport_{ts}.md"
 
@@ -5664,12 +5730,7 @@ def generate_bug_report(
         "*Note: Secrets, passwords, and user private credentials are strictly excluded from this report.*",
     ]
 
-    try:
-        report_file.write_text("\n".join(lines), encoding="utf-8")
-    except OSError:
-        out_dir = Path(tempfile.gettempdir())
-        report_file = out_dir / f"Sudharshan_BugReport_{ts}.md"
-        report_file.write_text("\n".join(lines), encoding="utf-8")
+    report_file.write_text("\n".join(lines), encoding="utf-8")
     return report_file
 
 
@@ -5739,7 +5800,7 @@ class BajrangEngine:
         else:
             self.current_session_id = self.storage.create_session(
                 title=f"{platform.system()} Session",
-                model=str(self.config.settings.get("model", PRIMARY_MODEL)),
+                model=str(self.config.settings.get("model", "qwen3.5:4b")),
             )
 
         self.voice = SpectralVoiceSpotter(
@@ -5775,12 +5836,10 @@ class BajrangEngine:
         self.audit_logger = StructuredAuditLogger(self.config.data_dir)
         self.scheduler = TaskSchedulerManager(self.config.data_dir)
         self.clipboard_tracker = ClipboardContextTracker()
-        quarantine_dir = (self.config.data_dir / "quarantine") if hasattr(self.config, "data_dir") else None
         self.file_engine = NaturalLanguageFileEngine(
             memory_store=self.storage,
             audit_logger=self.audit_logger,
             permissions=self.permissions,
-            quarantine_base=quarantine_dir,
         )
         self.auto_approve_mode: bool = False
         self.dry_run_mode: bool = False
@@ -6826,6 +6885,182 @@ def run_core_self_tests() -> int:
 
     print("All hardened bajrang_core self-tests passed!")
     return 0
+
+
+
+# Sudharshan AI Multi-Model Local Engine Integration
+try:
+    from sudharshan.core.models import (
+        PRIMARY_MODEL,
+        LOW_RAM_FALLBACK_MODEL,
+        REASONING_MODEL,
+        INTENT_ROUTER_MODEL,
+        EMBEDDING_MODEL,
+        EMBEDDING_FALLBACK_MODEL,
+        OCR_MODEL,
+        RAM_DOWNGRADE_THRESHOLD_GB,
+        ModelCatalogEntry,
+        MODEL_CATALOG,
+        get_available_ram_gb,
+        AdaptiveModelSwitcher,
+        IntentRouter,
+        StreamingTelemetry,
+        StreamingModelEngine,
+        compute_cosine_similarity,
+        generate_local_embedding,
+        ToolCallResult,
+        JSONSchemaConstrainedToolCaller,
+        PlanStatus,
+        PlanNode,
+        PlanTree,
+        AutonomousStepPlanner,
+        ContextWindowManager,
+        PromptTemplateLibrary,
+        BenchmarkResult,
+        ModelBenchmarkRunner,
+        OfflineFirstHybridController,
+        PersonaDefinition,
+        PersonaManager,
+    )
+    from sudharshan.core.memory import (
+        VectorChunk,
+        LocalVectorStore,
+        DocumentTextExtractor,
+        BackgroundFileIndexer,
+        BM25SearchEngine,
+        HybridSearchEngine,
+        SourceCitationFormatter,
+        MemoryCard,
+        EpisodicMemoryStore,
+        ProjectWorkspace,
+        ProjectWorkspaceManager,
+        ClipboardKnowledgeCapture,
+        DuplicateMatch,
+        DocumentDeduplicator,
+        IncognitoSessionManager,
+        MemoryBackupManager,
+    )
+    from sudharshan.core.perception import (
+        HardenedWakeWordEngine,
+        STTResult,
+        WhisperCppSTT,
+        PiperNeuralTTS,
+        AudioInteractionState,
+        PushToTalkController,
+        ScreenshotResult,
+        ScreenPerceptionPipeline,
+        MeetingTurn,
+        MeetingSummary,
+        MeetingTranscriber,
+        AudioReactiveOrbRenderer,
+        OCRToClipboardService,
+        SpokenConfirmationGate,
+        VoiceMacro,
+        VoiceMacroManager,
+    )
+    from sudharshan.core.security import (
+        AuditBlock,
+        SignedAuditLedger,
+        PermissionTier,
+        FourTierPermissionPolicy,
+        CommandPreviewDiffGenerator,
+        RollbackSnapshot,
+        PreActionRollbackManager,
+        ASTShellSanitizer,
+        SecretPIIRedactor,
+        HardwareKeyringBridge,
+        NetworkEgressMonitor,
+        AutomatedIntegrityVerifier,
+        PanicKillSwitch,
+    )
+    from sudharshan.core.fs_automation import (
+        FileMoveOperation,
+        OrganizationPlan,
+        BatchFileOrganizer,
+        SmartDownloadsDaemon,
+        ContentAwareRenamer,
+        DeduplicationSweepEngine,
+        NaturalArchiveManager,
+        CleanupTarget,
+        DiskSpaceAnalyzer,
+        FileConversionPipeline,
+        WatcherRule,
+        FolderWatcherTriggerEngine,
+        QuarantineItem,
+        SafeQuarantineTrashBin,
+        FolderSyncDelta,
+        CrossFolderDiffSync,
+    )
+    from sudharshan.core.desktop import (
+        PaletteItem,
+        CommandPaletteLauncher,
+        WindowInfo,
+        NativeWindowManager,
+        ClipboardItem,
+        ClipboardHistoryManager,
+        ResourceMetrics,
+        ResourceThermalHUD,
+        SystemSettingsController,
+        SmartFocusController,
+        NotificationBriefing,
+        NotificationTriager,
+        ContextualActionEngine,
+        CronSystemdTimerGenerator,
+        HeavyProcessInfo,
+        SafeProcessManager,
+    )
+    from sudharshan.core.developer import (
+        LocalGitAssistant,
+        TerminalErrorExplainer,
+        SymbolInfo,
+        CodebaseSymbolIndexer,
+        ContainerInspector,
+        OfflineAPITester,
+        RegexTestBench,
+        UnitTestGenerator,
+        LocalhostServiceRadar,
+        ManPageTranslator,
+        EnvironmentPathDoctor,
+    )
+    from sudharshan.core.productivity import (
+        MarkdownKnowledgeVault,
+        PaperSummary,
+        InstantPaperReader,
+        NaturalLanguageTaskManager,
+        MorningBriefingGenerator,
+        SM2SpacedRepetitionEngine,
+        MathLaTeXScratchpad,
+        WritingAssistant,
+        CalendarICSManager,
+        DataTableExtractor,
+        EndOfDayDigestGenerator,
+    )
+    from sudharshan.core.mcp_plugins import (
+        MCPClient,
+        SandboxedPluginRuntime,
+        VisualWorkflowDAGBuilder,
+        PluginSecurityScanner,
+        LocalhostAPIServer,
+        CLICompanionInterface,
+        DeclarativeYAMLToolLoader,
+        WebhookMQTTEventBridge,
+        PluginSupervisor,
+        PluginDevSandbox,
+    )
+    from sudharshan.core.diagnostics import (
+        FedoraPackagingGenerator,
+        WindowsInstallerBuilder,
+        FirstRunOnboardingWizard,
+        AutomatedSystemDoctor,
+        GracefulDegradationMatrix,
+        AccessibilityAuditor,
+        ReleaseAssetPackager,
+        ZeroTelemetryDashboard,
+        SafeCrashReporter,
+        MasterIntegrationSuiteRunner,
+    )
+except ImportError:
+    pass
 
 
 if __name__ == "__main__":

@@ -1,0 +1,22 @@
+app-id: com.rkrworks.SudharshanAI
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: sudharshan
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: sudharshan-ai
+    buildsystem: simple
+    build-commands:
+      - install -d /app/share/sudharshan-ai /app/bin
+      - cp -r bajrang_core.py fedora.py sudharshan_cli.py design_tokens.json sudharshan /app/share/sudharshan-ai/
+      - install -Dm755 sudharshan_cli.py /app/bin/sudharshan
+    sources:
+      - type: dir
+        path: ..

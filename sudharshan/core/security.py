@@ -18,6 +18,7 @@ Implements:
 """
 
 import ast
+import base64
 import dataclasses
 import datetime
 import difflib
