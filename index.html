@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-type="software" data-radius="soft" data-ground="sage" data-buttons="tonal" data-motion>
+<html lang="en" data-type="software" data-radius="soft" data-ground="sage" data-buttons="pill" data-motion>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -35,11 +35,15 @@
 
 <style>
 :root {
-  --p-bg: #050505; --p-surface: #0f0c0a; --p-ink: #fafafa; --p-muted: #a69b93;
-  --p-accent: #ff6b1a; --p-accent-ink: #050505; --p-action: #ff6b1a; --p-action-ink: #050505;
-  --p-inv-bg: #ff6b1a; --p-inv-surface: #e85d0c; --p-inv-ink: #050505; --p-inv-muted: #2b1100;
-  --p-inv-accent: #050505; --p-inv-accent-ink: #ff6b1a; --p-inv-action: #050505; --p-inv-action-ink: #ff6b1a;
-  --hue: 22;
+  --p-bg: #0B0B0D; --p-surface: #141418; --p-hairline: #24242B; --p-ink: #F4F4F6; --p-muted: #9E9EA8;
+  --p-accent: #FF5A1F; --p-accent-ink: #0B0B0D; --p-action: #FF5A1F; --p-action-ink: #0B0B0D;
+  --p-inv-bg: #FF5A1F; --p-inv-surface: #E84E15; --p-inv-ink: #0B0B0D; --p-inv-muted: #24242B;
+  --p-inv-accent: #0B0B0D; --p-inv-accent-ink: #FF5A1F; --p-inv-action: #0B0B0D; --p-inv-action-ink: #FF5A1F;
+  --u-border: #24242B;
+  --r-container: 10px;
+  --r-input: 8px;
+  --r-cta: 9999px;
+  --hue: 18;
   --font-display: "Instrument Sans", system-ui, sans-serif;
   --font-text: "Instrument Sans", system-ui, sans-serif;
   --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
@@ -49,6 +53,11 @@
   --display-stretch: 96%;
   --ly-scale: 1.04;
 }
+
+/* Shape-Consistency Lock */
+.card, .panel, .visit--card, .tile__media, .device { border-radius: 10px !important; }
+input, select, textarea, .input { border-radius: 8px !important; }
+.btn--primary, a.btn--primary, button.btn--primary { border-radius: 9999px !important; }
 
 #features .panel { --p-h: 280px; }
 @media (max-width: 639px) { #features .panel { --p-h: 200px; } }
@@ -413,8 +422,8 @@
             <div style="color:var(--p-muted);margin-bottom:6px;"># Hardware Tier Classification:</div>
             <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Workstation (32GB+ RAM):</span> qwen2.5:32b · llama3.1:70b</div>
             <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">High (16GB–32GB RAM):</span> llama3.1:8b · deepseek-r1:8b · mistral:7b</div>
-            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Balanced (8GB–16GB RAM):</span> llama3.2:3b (Recommended Daily Driver)</div>
-            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Eco (&lt;8GB RAM):</span> llama3.2:1b · qwen2.5:0.5b</div>
+            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Balanced (8GB–16GB RAM):</span> qwen3.5:4b (Recommended Primary Engine)</div>
+            <div style="color:var(--p-ink);"><span style="color:var(--p-accent)">Eco (&lt;8GB RAM / Low-RAM):</span> qwen3.5:2b-q4_K_M · qwen3.5:0.8b</div>
           </div>
         </div>
 
@@ -442,12 +451,12 @@
       <div class="grid">
         <div class="card span-4">
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h3 style="font-size:16px;">Llama 3.2 3B</h3>
-            <span class="ui-chip">Daily Driver</span>
+            <h3 style="font-size:16px;">Qwen 3.5 4B</h3>
+            <span class="ui-chip">Primary Engine</span>
           </div>
-          <p style="font-size:14px;margin-top:6px;">Meta's ultra-snappy 3B parameter model optimized for instant desktop tool calling and low memory footprint.</p>
+          <p style="font-size:14px;margin-top:6px;">Adaptive daily driver with precision JSON tool calling, native vision, and 16k context window.</p>
           <div class="panel" style="padding:10px 12px;margin-top:12px;background:var(--p-surface);border:1px solid var(--u-border);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;color:var(--p-accent);user-select:all;">
-            ollama run llama3.2:3b
+            ollama run qwen3.5:4b
           </div>
         </div>
 

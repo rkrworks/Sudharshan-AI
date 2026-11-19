@@ -90,13 +90,13 @@ if ! curl -s -f http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
     sleep 2
 fi
 
-# Pull Llama 3.2 model if missing
-echo "  -> Checking Llama 3.2 neural model in Ollama..."
-if ! curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | grep -q "llama3.2"; then
-    echo "  -> Pulling llama3.2 (~2.0 GB)..."
-    ollama pull llama3.2 || true
+# Pull Qwen 3.5 4B model if missing
+echo "  -> Checking Qwen 3.5 4B primary model in Ollama..."
+if ! curl -s http://127.0.0.1:11434/api/tags 2>/dev/null | grep -q "qwen3.5:4b"; then
+    echo "  -> Pulling qwen3.5:4b (~2.6 GB)..."
+    ollama pull qwen3.5:4b || true
 else
-    echo "  -> [OK] llama3.2 model is already installed."
+    echo "  -> [OK] qwen3.5:4b model is already installed."
 fi
 
 # [4/6] Python Virtual Environment

@@ -151,16 +151,16 @@ if %ERRORLEVEL% neq 0 (
 )
 :daemon_verified
 
-:: Check if llama3.2 is installed; if not, pull and test run
-powershell.exe -NoProfile -Command "try { $m = (Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3).models.name; if ($m -like '*llama3.2*') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+:: Check if qwen3.5:4b is installed; if not, pull and test run
+powershell.exe -NoProfile -Command "try { $m = (Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3).models.name; if ($m -like '*qwen3.5:4b*' -or $m -like '*qwen3.5*') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [MODEL] Pulling Llama 3.2 neural model (~2.0 GB)...
-    "%OLLAMA_EXE%" pull llama3.2
-    echo [VERIFY] Running quick test query on llama3.2...
-    "%OLLAMA_EXE%" run llama3.2 "Respond with 'Sudharshan AI Ready'"
-    echo [OK] Llama 3.2 local model operational!
+    echo [MODEL] Pulling Qwen 3.5 4B primary model (~2.6 GB)...
+    "%OLLAMA_EXE%" pull qwen3.5:4b
+    echo [VERIFY] Running quick test query on qwen3.5:4b...
+    "%OLLAMA_EXE%" run qwen3.5:4b "Respond with 'Sudharshan AI Ready'"
+    echo [OK] Qwen 3.5 4B local model operational!
 ) else (
-    echo [OK] Llama 3.2 model is already present in Ollama.
+    echo [OK] Qwen 3.5 4B model is already present in Ollama.
 )
 
 :skip_ollama_daemon

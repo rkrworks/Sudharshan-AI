@@ -72,3 +72,23 @@
 * **Reproduction**: Inspect `certificates/` directory.
 * **Correction**: Removed certificate files from working tree, added strict exclusion rules in `.gitignore` and `.vercelignore`, and documented key rotation.
 * **Verification**: `find . -name "*.key" -o -name "*.pfx"` returns zero files in working tree.
+
+---
+
+### BUG-008: Read-Only Filesystem Sandbox Failure in Quarantine & Transcript Exports
+* **Severity**: HIGH (Execution Failure in Sandboxed / Restricted Environments)
+* **Affected File**: `bajrang_core.py` (Lines ~4893, ~1804, ~5378)
+* **Root Cause**: In restricted environments where `$HOME` is mounted read-only, calling `Path.home().mkdir()` or writing transcripts/bug reports to `Path.home() / "Downloads"` crashed with `OSError: [Errno 30] Read-only file system`.
+* **Reproduction**: Run `python3 test_bajrang_suite.py` inside standard containerized sandbox.
+* **Correction**: Introduced `quarantine_base` parameter defaulting to scoped `data_dir / "quarantine"`, enforced `os.access(..., os.W_OK)` verification, and added fallback to `tempfile.gettempdir()`.
+* **Verification**: 20/20 test suites in `test_bajrang_suite.py` pass cleanly.
+
+---
+
+### BUG-009: Environment HTTP Proxy Intercepting Localhost Socket Requests
+* **Severity**: HIGH (Network Self-Test Failure)
+* **Affected File**: `razorpay_server.py`, `test_bajrang_suite.py`, `bajrang_core.py`
+* **Root Cause**: When `http_proxy` / `HTTP_PROXY` was set in the environment without `NO_PROXY`, `urllib.request` directed `127.0.0.1` traffic through external proxy which rejected direct IP requests with `HTTP 400: Direct IP access is not allowed`.
+* **Reproduction**: Run `razorpay_server.py --self-test` in an environment where `HTTP_PROXY` is defined.
+* **Correction**: Added automatic `NO_PROXY` / `no_proxy` injection of `127.0.0.1`, `localhost`, and `::1`.
+* **Verification**: `razorpay_server.py --self-test` passes with 100% compliance.

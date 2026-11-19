@@ -737,16 +737,16 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                     css_provider = Gtk.CssProvider()
                     css_provider.load_from_data(
                         b"""
-                        window { background-color: #09090b; color: #fafafa; }
-                        .bajrang-header { background-color: #111116; border-bottom: 1px solid #272733; padding: 6px 12px; }
-                        .bajrang-status { background-color: #064e3b; color: #6ee7b7; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; }
-                        .bajrang-engine { background-color: #064e3b; color: #6ee7b7; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; margin-left: 8px; }
-                        .bajrang-sidebar { background-color: #111116; border-right: 1px solid #272733; padding: 10px; }
-                        .bajrang-chat { background-color: #09090b; color: #f1f5f9; padding: 14px; font-size: 14px; }
-                        .bajrang-stop { background-color: #dc2626; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
-                        .bajrang-approve { background-color: #10b981; color: #052e16; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
-                        .bajrang-send { background-color: #ff6b1a; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 14px; }
-                        .bajrang-newsess { background-color: #ff6b1a; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
+                        window { background-color: #0B0B0D; color: #F4F4F6; }
+                        .bajrang-header { background-color: #141418; border-bottom: 1px solid #24242B; padding: 6px 12px; border-radius: 10px; }
+                        .bajrang-status { background-color: #064e3b; color: #6ee7b7; border-radius: 9999px; padding: 4px 12px; font-weight: 700; font-size: 12px; }
+                        .bajrang-engine { background-color: #064e3b; color: #6ee7b7; border-radius: 9999px; padding: 4px 12px; font-weight: 700; font-size: 12px; margin-left: 8px; }
+                        .bajrang-sidebar { background-color: #141418; border-right: 1px solid #24242B; padding: 10px; border-radius: 10px; }
+                        .bajrang-chat { background-color: #0B0B0D; color: #F4F4F6; padding: 14px; font-size: 14px; border-radius: 10px; }
+                        .bajrang-stop { background-color: #dc2626; color: #ffffff; border-radius: 9999px; font-weight: 700; padding: 6px 12px; }
+                        .bajrang-approve { background-color: #10b981; color: #052e16; border-radius: 9999px; font-weight: 700; padding: 6px 12px; }
+                        .bajrang-send { background-color: #FF5A1F; color: #0B0B0D; border-radius: 9999px; font-weight: 700; padding: 6px 14px; }
+                        .bajrang-newsess { background-color: #FF5A1F; color: #0B0B0D; border-radius: 9999px; font-weight: 700; padding: 6px 12px; }
                         """
                     )
                     from gi.repository import Gdk
@@ -761,7 +761,7 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                     header.add_css_class("bajrang-header")
                     status_lbl = Gtk.Label(label="IDLE • Ready")
                     status_lbl.add_css_class("bajrang-status")
-                    engine_btn = Gtk.Button(label="🟢 Ollama (llama3.2)")
+                    engine_btn = Gtk.Button(label="🟢 Ollama (qwen3.5:4b)")
                     engine_btn.add_css_class("bajrang-engine")
                     confirm_btn = Gtk.Button(label="Approve Action")
                     confirm_btn.add_css_class("bajrang-approve")
@@ -1028,7 +1028,7 @@ def main() -> int:
         mf = cfg.write_custom_modelfile()
         print(f"Wrote Modelfile to {mf}")
         if shutil.which("ollama"):
-            subprocess.run(["ollama", "create", "bajrang-llama3.2", "-f", str(mf)], check=False)
+            subprocess.run(["ollama", "create", "sudharshan-qwen35", "-f", str(mf)], check=False)
         return 0
 
     if args.activate_license:

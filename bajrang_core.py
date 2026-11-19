@@ -58,6 +58,207 @@ import uuid
 import wave
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+# Ensure localhost and 127.0.0.1 bypass any local environment proxy
+for _k in ("NO_PROXY", "no_proxy"):
+    _existing = os.environ.get(_k, "")
+    _current = [x.strip() for x in _existing.split(",") if x.strip()]
+    for _a in ("127.0.0.1", "localhost", "::1"):
+        if _a not in _current:
+            _current.append(_a)
+    os.environ[_k] = ",".join(_current)
+
+# Sudharshan AI Multi-Model Local Engine Integration
+from sudharshan.core.models import (
+    PRIMARY_MODEL,
+    LOW_RAM_FALLBACK_MODEL,
+    REASONING_MODEL,
+    INTENT_ROUTER_MODEL,
+    EMBEDDING_MODEL,
+    EMBEDDING_FALLBACK_MODEL,
+    OCR_MODEL,
+    RAM_DOWNGRADE_THRESHOLD_GB,
+    ModelCatalogEntry,
+    MODEL_CATALOG,
+    get_available_ram_gb,
+    AdaptiveModelSwitcher,
+    IntentRouter,
+    StreamingTelemetry,
+    StreamingModelEngine,
+    compute_cosine_similarity,
+    generate_local_embedding,
+    ToolCallResult,
+    JSONSchemaConstrainedToolCaller,
+    PlanStatus,
+    PlanNode,
+    PlanTree,
+    AutonomousStepPlanner,
+    ContextWindowManager,
+    PromptTemplateLibrary,
+    BenchmarkResult,
+    ModelBenchmarkRunner,
+    OfflineFirstHybridController,
+    PersonaDefinition,
+    PersonaManager,
+)
+from sudharshan.core.memory import (
+    VectorChunk,
+    LocalVectorStore,
+    DocumentTextExtractor,
+    BackgroundFileIndexer,
+    BM25SearchEngine,
+    HybridSearchEngine,
+    SourceCitationFormatter,
+    MemoryCard,
+    EpisodicMemoryStore,
+    ProjectWorkspace,
+    ProjectWorkspaceManager,
+    ClipboardKnowledgeCapture,
+    DuplicateMatch,
+    DocumentDeduplicator,
+    IncognitoSessionManager,
+    MemoryBackupManager,
+)
+from sudharshan.core.perception import (
+    HardenedWakeWordEngine,
+    STTResult,
+    WhisperCppSTT,
+    PiperNeuralTTS,
+    AudioInteractionState,
+    PushToTalkController,
+    ScreenshotResult,
+    ScreenPerceptionPipeline,
+    MeetingTurn,
+    MeetingSummary,
+    MeetingTranscriber,
+    AudioReactiveOrbRenderer,
+    OCRToClipboardService,
+    SpokenConfirmationGate,
+    VoiceMacro,
+    VoiceMacroManager,
+)
+from sudharshan.core.security import (
+    AuditBlock,
+    SignedAuditLedger,
+    PermissionTier,
+    FourTierPermissionPolicy,
+    CommandPreviewDiffGenerator,
+    RollbackSnapshot,
+    PreActionRollbackManager,
+    ASTShellSanitizer,
+    SecretPIIRedactor,
+    HardwareKeyringBridge,
+    NetworkEgressMonitor,
+    AutomatedIntegrityVerifier,
+    PanicKillSwitch,
+)
+from sudharshan.core.fs_automation import (
+    FileMoveOperation,
+    OrganizationPlan,
+    BatchFileOrganizer,
+    SmartDownloadsDaemon,
+    ContentAwareRenamer,
+    DeduplicationSweepEngine,
+    NaturalArchiveManager,
+    CleanupTarget,
+    DiskSpaceAnalyzer,
+    FileConversionPipeline,
+    WatcherRule,
+    FolderWatcherTriggerEngine,
+    QuarantineItem,
+    SafeQuarantineTrashBin,
+    FolderSyncDelta,
+    CrossFolderDiffSync,
+)
+from sudharshan.core.desktop import (
+    PaletteItem,
+    CommandPaletteLauncher,
+    WindowInfo,
+    NativeWindowManager,
+    ClipboardEntry,
+    ClipboardHistoryManager,
+    HardwareHUDTelemetry,
+    ResourceThermalHUD,
+    SystemSettingsController,
+    SmartFocusController,
+    DesktopNotification,
+    NotificationTriager,
+    ContextualActionEngine,
+    CronSystemdTimerGenerator,
+    ProcessTelemetry,
+    SafeProcessManager,
+)
+from sudharshan.core.developer import (
+    GitStatusSummary,
+    LocalGitAssistant,
+    ErrorDiagnostic,
+    TerminalErrorExplainer,
+    CodeSymbol,
+    CodebaseSymbolIndexer,
+    ContainerRecord,
+    ContainerInspector,
+    OfflineAPITester,
+    RegexMatchResult,
+    RegexTestBench,
+    UnitTestGenerator,
+    PortServiceRecord,
+    LocalhostServiceRadar,
+    ManPageTranslator,
+    DiagnosticCheck,
+    EnvironmentPathDoctor,
+)
+from sudharshan.core.productivity import (
+    VaultNote,
+    KnowledgeGraph,
+    MarkdownKnowledgeVault,
+    PaperBriefing,
+    InstantPaperReader,
+    TaskItem,
+    NaturalLanguageTaskManager,
+    MorningBriefingGenerator,
+    Flashcard,
+    SM2SpacedRepetitionEngine,
+    MathLaTeXScratchpad,
+    WritingAssistant,
+    CalendarEvent,
+    CalendarICSManager,
+    DataTableExtractor,
+    EndOfDayDigestGenerator,
+)
+from sudharshan.core.mcp_plugins import (
+    MCPToolDefinition,
+    MCPClient,
+    SandboxedPluginRuntime,
+    WorkflowNode,
+    VisualWorkflowDAGBuilder,
+    PluginScanReport,
+    PluginSecurityScanner,
+    LocalhostAPIServer,
+    CLICompanionInterface,
+    DeclarativeTool,
+    DeclarativeYAMLToolLoader,
+    EventMessage,
+    WebhookMQTTEventBridge,
+    PluginProcessState,
+    PluginSupervisor,
+    PluginDevSandbox,
+)
+from sudharshan.core.diagnostics import (
+    FedoraPackagingGenerator,
+    WindowsInstallerBuilder,
+    OnboardingConfig,
+    FirstRunOnboardingWizard,
+    DoctorItem,
+    AutomatedSystemDoctor,
+    DegradationTierState,
+    GracefulDegradationMatrix,
+    AccessibilityAuditor,
+    ReleaseAssetPackager,
+    ZeroTelemetryDashboard,
+    SanitizedMinidump,
+    SafeCrashReporter,
+    MasterIntegrationSuiteRunner,
+)
 from typing import Any, Callable, Dict, FrozenSet, Generator, List, Optional, Set, Tuple
 
 
@@ -102,7 +303,7 @@ class AssistantTurn:
     results: List[ActionResult] = field(default_factory=list)
     session_id: str = ""
     provider_used: str = "ollama"
-    model_used: str = "llama3.2"
+    model_used: str = PRIMARY_MODEL
     awaiting_confirmation: bool = False
 
 
@@ -216,7 +417,7 @@ def is_key_compatible_with_provider(api_key: str, provider_id: str) -> bool:
 PROVIDER_PRESETS: Dict[str, Dict[str, str]] = {
     "ollama": {
         "endpoint": "http://127.0.0.1:11434/api/chat",
-        "model": "llama3.2",
+        "model": PRIMARY_MODEL,
     },
     "gemini": {
         "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -497,7 +698,15 @@ def get_default_settings() -> Dict[str, Any]:
     return {
         "provider": "ollama",
         "ollama_host": "http://127.0.0.1:11434",
-        "model": "llama3.2",
+        "model": PRIMARY_MODEL,
+        "primary_model": PRIMARY_MODEL,
+        "low_ram_fallback": LOW_RAM_FALLBACK_MODEL,
+        "reasoning_model": REASONING_MODEL,
+        "intent_router_model": INTENT_ROUTER_MODEL,
+        "embedding_model": EMBEDDING_MODEL,
+        "ocr_model": OCR_MODEL,
+        "adaptive_ram_downgrade": True,
+        "ram_threshold_gb": RAM_DOWNGRADE_THRESHOLD_GB,
         "byo_provider": "gemini_argon",
         "byo_api_endpoint": PROVIDER_PRESETS["gemini_argon"]["endpoint"],
         "byo_model": PROVIDER_PRESETS["gemini_argon"]["model"],
@@ -662,7 +871,7 @@ class ConfigManager:
         ctx = int(self.settings.get("ollama_num_ctx", 4096))
         modelfile_path = self.data_dir / "Modelfile.bajrang"
         content = (
-            "FROM llama3.2\n"
+            f"FROM {PRIMARY_MODEL}\n"
             "PARAMETER temperature 0.3\n"
             "PARAMETER top_p 0.9\n"
             f"PARAMETER num_ctx {ctx}\n"
@@ -1218,7 +1427,7 @@ class LocalChatStorage:
     def _conn(self) -> sqlite3.Connection:
         return self.migration_mgr.connect()
 
-    def create_session(self, title: str = "New Conversation", model: str = "llama3.2") -> str:
+    def create_session(self, title: str = "New Conversation", model: str = PRIMARY_MODEL) -> str:
         session_id = f"sess_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
         now = datetime.datetime.now().isoformat(timespec="seconds")
         with self._conn() as conn:
@@ -1471,7 +1680,7 @@ class LocalChatStorage:
             return False, "Missing 'session' object in JSON payload.", ""
 
         title = str(sess_data.get("title", "Restored Conversation"))
-        model = str(sess_data.get("model", "llama3.2"))
+        model = str(sess_data.get("model", PRIMARY_MODEL))
         category = str(sess_data.get("category", "General"))
         new_sid = f"sess_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
         now = datetime.datetime.now().isoformat(timespec="seconds")
@@ -1801,7 +2010,15 @@ class LocalChatStorage:
     def export_session_markdown(self, session_id: str, dest_dir: Optional[Path] = None) -> Path:
         """Phase C Feature 4: Export session transcript as clean Markdown."""
         msgs = self.get_session_messages(session_id, limit=500)
-        out_dir = dest_dir or (Path.home() / "Downloads" if (Path.home() / "Downloads").is_dir() else self.data_dir)
+        cand_dl = Path.home() / "Downloads"
+        if dest_dir is not None:
+            out_dir = Path(dest_dir)
+        elif cand_dl.is_dir() and os.access(cand_dl, os.W_OK):
+            out_dir = cand_dl
+        elif hasattr(self, "data_dir") and self.data_dir and os.access(self.data_dir, os.W_OK):
+            out_dir = self.data_dir
+        else:
+            out_dir = Path(tempfile.gettempdir())
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         out_path = out_dir / f"Sudharshan_Transcript_{session_id}_{ts}.md"
 
@@ -1825,7 +2042,12 @@ class LocalChatStorage:
                     lines.append(f"- `{res.get('tool', 'tool')}` (Success: {res.get('success', False)}): {res.get('output', '')}")
             lines.append("\n---\n")
 
-        out_path.write_text("\n".join(lines), encoding="utf-8")
+        try:
+            out_path.write_text("\n".join(lines), encoding="utf-8")
+        except OSError:
+            out_dir = Path(tempfile.gettempdir())
+            out_path = out_dir / f"Sudharshan_Transcript_{session_id}_{ts}.md"
+            out_path.write_text("\n".join(lines), encoding="utf-8")
         return out_path
 
 
@@ -2489,22 +2711,22 @@ class HardwareProfiler:
             "description": "16GB+ RAM system with dedicated or high-bandwidth GPU. Optimal for 8B and 14B parameter models with deep context.",
         },
         "Balanced": {
-            "name": "Balanced Laptop Tier",
-            "recommended_model": "llama3.2:3b",
-            "daily_driver_model": "llama3.2:3b",
-            "context_length": 4096,
-            "min_ram_gb": 7.5,
+            "name": "Balanced Performance Tier",
+            "recommended_model": PRIMARY_MODEL,
+            "daily_driver_model": PRIMARY_MODEL,
+            "context_length": 16384,
+            "min_ram_gb": 4.0,
             "min_vram_gb": 0.0,
-            "description": "8GB-16GB RAM ultrabook or standard PC. Optimized for instant, snappy 3B agent tool calling.",
+            "description": "Standard PC or laptop. Optimized for Qwen 3.5 4B precision tool calling, structured JSON output, and native vision.",
         },
         "Eco": {
-            "name": "Eco / Lightweight Tier",
-            "recommended_model": "llama3.2:1b",
-            "daily_driver_model": "llama3.2:1b",
-            "context_length": 2048,
+            "name": "Eco / Low-RAM Tier",
+            "recommended_model": LOW_RAM_FALLBACK_MODEL,
+            "daily_driver_model": LOW_RAM_FALLBACK_MODEL,
+            "context_length": 8192,
             "min_ram_gb": 0.0,
             "min_vram_gb": 0.0,
-            "description": "Compact footprint 1B model with near-zero memory footprint and instantaneous CPU responses.",
+            "description": "Compact footprint Qwen 3.5 2B model auto-activated under memory pressure or on low-RAM hardware.",
         },
     }
 
@@ -2585,7 +2807,7 @@ class HardwareProfiler:
     @classmethod
     def download_model(cls, model_name: str, host: str = "http://127.0.0.1:11434") -> Tuple[bool, str]:
         endpoint = f"{host.rstrip('/')}/api/pull"
-        clean_name = (model_name or "llama3.2").strip()
+        clean_name = (model_name or PRIMARY_MODEL).strip()
         try:
             req = urllib.request.Request(
                 endpoint,
@@ -2628,7 +2850,7 @@ class OllamaWatchdogManager:
     def __init__(
         self,
         ollama_host: str = "http://127.0.0.1:11434",
-        active_model: str = "llama3.2",
+        active_model: str = PRIMARY_MODEL,
         check_interval_sec: float = 4.0,
         state_callback: Optional[Callable[[bool, str], None]] = None,
     ) -> None:
@@ -2800,7 +3022,13 @@ class UnifiedModelClient:
     def active_model(self) -> str:
         if self.provider == "byo_api":
             return str(self.config.settings.get("byo_model", "gemini-2.5-pro"))
-        return str(self.config.settings.get("model", "llama3.2"))
+        configured = str(self.config.settings.get("model", PRIMARY_MODEL))
+        if self.config.settings.get("adaptive_ram_downgrade", True) and (configured == PRIMARY_MODEL or "4b" in configured.lower()):
+            thresh = float(self.config.settings.get("ram_threshold_gb", RAM_DOWNGRADE_THRESHOLD_GB))
+            switcher = AdaptiveModelSwitcher(primary_model=PRIMARY_MODEL, low_ram_model=LOW_RAM_FALLBACK_MODEL, threshold_gb=thresh)
+            model, _, _ = switcher.resolve_model(configured)
+            return model
+        return configured
 
     def configure_byo_key(
         self,
@@ -2884,7 +3112,7 @@ class UnifiedModelClient:
             messages.append({"role": "system", "content": f"DESKTOP CONTEXT: {desktop_context}"})
         messages.extend(self.history[-12:])
         user_msg: Dict[str, Any] = {"role": "user", "content": user_prompt}
-        if screenshot_b64 and ("vision" in self.active_model.lower() or "vl" in self.active_model.lower()):
+        if screenshot_b64 and any(v in self.active_model.lower() for v in ("vision", "vl", "qwen3.5", "glm-ocr")):
             user_msg["images"] = [screenshot_b64]
         messages.append(user_msg)
 
@@ -3109,7 +3337,11 @@ class ModularAIRouter:
         if provider_id == "groq":
             return "llama-3.3-70b-versatile" if complexity == TaskComplexity.COMPLEX_REASONING else "llama-3.1-8b-instant"
         if provider_id == "ollama":
-            return "llama3.2-vision" if complexity == TaskComplexity.MULTIMODAL_VISION else "bajrang-llama3.2"
+            if complexity == TaskComplexity.MULTIMODAL_VISION:
+                return OCR_MODEL
+            elif complexity == TaskComplexity.COMPLEX_REASONING:
+                return REASONING_MODEL
+            return PRIMARY_MODEL
         return PROVIDER_PRESETS.get(provider_id, PROVIDER_PRESETS["openai"])["model"]
 
     def _get_compatible_key_for_provider(self, prov: str) -> str:
@@ -3149,9 +3381,10 @@ class ModularAIRouter:
                     errors.append("ollama: disabled in Eco profile")
                     continue
                 try:
+                    target_model = self.select_model_for_task("ollama", complexity)
                     req = urllib.request.Request(
                         "http://127.0.0.1:11434/api/chat",
-                        data=json.dumps({"model": "llama3.2", "messages": [{"role": "user", "content": prompt}], "stream": False}).encode("utf-8"),
+                        data=json.dumps({"model": target_model, "messages": [{"role": "user", "content": prompt}], "stream": False}).encode("utf-8"),
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
@@ -3161,7 +3394,7 @@ class ModularAIRouter:
                             "reply": data.get("message", {}).get("content", ""),
                             "actions": [],
                             "provider_used": "ollama",
-                            "model_used": "llama3.2",
+                            "model_used": target_model,
                             "complexity": complexity.value,
                             "fallback_chain_tried": errors,
                         }
@@ -3913,15 +4146,16 @@ class LocalAIModelManager:
     """Ollama Model Manager: Discovery, installed inventory, hardware compatibility, and download tracking."""
 
     CURATED_CATALOG = [
-        {"name": "llama3.2:3b", "family": "Llama 3.2", "parameters": "3.2B", "size_gb": 2.0, "tier": "Balanced", "recommended_context": 4096, "desc": "Meta daily driver, fast tool calling and light memory footprint."},
+        {"name": PRIMARY_MODEL, "family": "Qwen 3.5", "parameters": "4.2B", "size_gb": 2.6, "tier": "Balanced", "recommended_context": 16384, "desc": "Default primary engine: precision JSON tool calling and native vision."},
+        {"name": LOW_RAM_FALLBACK_MODEL, "family": "Qwen 3.5", "parameters": "2.1B", "size_gb": 1.4, "tier": "Eco", "recommended_context": 8192, "desc": "Low-RAM fallback engine auto-activated under memory pressure."},
+        {"name": REASONING_MODEL, "family": "Phi 4", "parameters": "3.8B", "size_gb": 2.4, "tier": "High", "recommended_context": 16384, "desc": "Reasoning alternate specialized for mathematical proofs and logic."},
+        {"name": INTENT_ROUTER_MODEL, "family": "Qwen 3.5", "parameters": "0.8B", "size_gb": 0.6, "tier": "Eco", "recommended_context": 4096, "desc": "Fast sub-50ms intent router and command classifier."},
+        {"name": EMBEDDING_MODEL, "family": "Qwen 3", "parameters": "0.6B", "size_gb": 0.5, "tier": "Balanced", "recommended_context": 4096, "desc": "Dense vector embedding generator for local semantic RAG memory."},
+        {"name": OCR_MODEL, "family": "GLM", "parameters": "0.9B", "size_gb": 0.9, "tier": "Balanced", "recommended_context": 4096, "desc": "On-demand multimodal screen and document OCR specialist."},
         {"name": "llama3.1:8b", "family": "Llama 3.1", "parameters": "8.0B", "size_gb": 4.7, "tier": "High", "recommended_context": 8192, "desc": "128k context powerhouse for deep reasoning and code synthesis."},
-        {"name": "llama2:7b", "family": "Llama 2", "parameters": "7.0B", "size_gb": 3.8, "tier": "High", "recommended_context": 4096, "desc": "Legacy battle-tested model for older hardware environments."},
         {"name": "mistral:7b", "family": "Mistral", "parameters": "7.2B", "size_gb": 4.1, "tier": "High", "recommended_context": 8192, "desc": "Precision function calling, JSON action extraction, and speed."},
-        {"name": "gemma2:2b", "family": "Gemma 2", "parameters": "2.6B", "size_gb": 1.6, "tier": "Balanced", "recommended_context": 4096, "desc": "Google DeepMind compact architecture with high parameter density."},
-        {"name": "codellama:7b", "family": "CodeLlama", "parameters": "7.0B", "size_gb": 3.8, "tier": "High", "recommended_context": 4096, "desc": "Specialized in Python automation, scripting, and shell debugging."},
         {"name": "deepseek-r1:8b", "family": "DeepSeek-R1", "parameters": "8.0B", "size_gb": 4.9, "tier": "High", "recommended_context": 8192, "desc": "Chain-of-thought mathematical reasoning and logic proofs."},
         {"name": "qwen2.5:32b", "family": "Qwen 2.5", "parameters": "32.0B", "size_gb": 19.0, "tier": "Workstation", "recommended_context": 16384, "desc": "Workstation powerhouse for heavy multi-document analysis."},
-        {"name": "llama3.2:1b", "family": "Llama 3.2", "parameters": "1.2B", "size_gb": 1.3, "tier": "Eco", "recommended_context": 2048, "desc": "Ultra-lightweight model for low-spec netbooks and background workers."},
     ]
 
     def __init__(self, ollama_host: str = "http://127.0.0.1:11434"):
@@ -4216,7 +4450,7 @@ class IntelligentProviderDashboard:
     def get_summary(self) -> Dict[str, Any]:
         history_summary = self.storage.get_provider_metrics_summary()
         current_pings = self.ping_all_providers()
-        active_model = getattr(self.client, "active_model", "llama3.2")
+        active_model = getattr(self.client, "active_model", PRIMARY_MODEL)
         active_prov = getattr(self.client, "provider", "ollama")
         return {
             "live_status": current_pings,
@@ -4229,7 +4463,7 @@ class IntelligentProviderDashboard:
         if privacy_first:
             return {
                 "recommended_provider": "ollama",
-                "model": "llama3.2:3b",
+                "model": PRIMARY_MODEL,
                 "reason": "Privacy-first mode selected; executes 100% locally on device with zero cloud telemetry.",
                 "complexity": "simple",
             }
@@ -4243,7 +4477,7 @@ class IntelligentProviderDashboard:
             }
         return {
             "recommended_provider": "ollama",
-            "model": "llama3.2:3b",
+            "model": PRIMARY_MODEL,
             "reason": "Standard single-turn query optimized for instant local execution.",
             "complexity": "simple",
         }
@@ -4885,13 +5119,28 @@ class NaturalLanguageFileEngine:
         memory_store: Optional[LocalChatStorage] = None,
         audit_logger: Optional[StructuredAuditLogger] = None,
         permissions: Optional[PermissionsManager] = None,
+        quarantine_base: Optional[Path] = None,
     ) -> None:
         self.memory_store = memory_store
         self.audit_logger = audit_logger
         self.permissions = permissions
         self.home_dir = Path.home().resolve()
-        self.quarantine_base = self.home_dir / ".sudharshan_quarantine"
-        self.quarantine_base.mkdir(parents=True, exist_ok=True)
+        if quarantine_base is not None:
+            self.quarantine_base = Path(quarantine_base)
+        else:
+            q_env = os.environ.get("SUDHARSHAN_QUARANTINE_DIR")
+            if q_env:
+                self.quarantine_base = Path(q_env)
+            else:
+                self.quarantine_base = self.home_dir / ".sudharshan_quarantine"
+        try:
+            self.quarantine_base.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            self.quarantine_base = Path(tempfile.gettempdir()) / ".sudharshan_quarantine"
+            try:
+                self.quarantine_base.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
 
     @classmethod
     def is_protected_path(cls, path: Path) -> Tuple[bool, str]:
@@ -5375,7 +5624,15 @@ def generate_bug_report(
     config: Optional[ConfigManager] = None,
 ) -> Path:
     """Phase C Feature 10: Bundles diagnostic output, doctor health check, and sanitized audit log into a local file for GitHub."""
-    out_dir = base_dir or (Path.home() / "Downloads" if (Path.home() / "Downloads").is_dir() else Path(tempfile.gettempdir()))
+    cand_dl = Path.home() / "Downloads"
+    if base_dir is not None:
+        out_dir = Path(base_dir)
+    elif cand_dl.is_dir() and os.access(cand_dl, os.W_OK):
+        out_dir = cand_dl
+    elif config and hasattr(config, "data_dir") and config.data_dir and os.access(config.data_dir, os.W_OK):
+        out_dir = config.data_dir
+    else:
+        out_dir = Path(tempfile.gettempdir())
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     report_file = out_dir / f"Sudharshan_BugReport_{ts}.md"
 
@@ -5407,7 +5664,12 @@ def generate_bug_report(
         "*Note: Secrets, passwords, and user private credentials are strictly excluded from this report.*",
     ]
 
-    report_file.write_text("\n".join(lines), encoding="utf-8")
+    try:
+        report_file.write_text("\n".join(lines), encoding="utf-8")
+    except OSError:
+        out_dir = Path(tempfile.gettempdir())
+        report_file = out_dir / f"Sudharshan_BugReport_{ts}.md"
+        report_file.write_text("\n".join(lines), encoding="utf-8")
     return report_file
 
 
@@ -5477,7 +5739,7 @@ class BajrangEngine:
         else:
             self.current_session_id = self.storage.create_session(
                 title=f"{platform.system()} Session",
-                model=str(self.config.settings.get("model", "llama3.2")),
+                model=str(self.config.settings.get("model", PRIMARY_MODEL)),
             )
 
         self.voice = SpectralVoiceSpotter(
@@ -5513,10 +5775,12 @@ class BajrangEngine:
         self.audit_logger = StructuredAuditLogger(self.config.data_dir)
         self.scheduler = TaskSchedulerManager(self.config.data_dir)
         self.clipboard_tracker = ClipboardContextTracker()
+        quarantine_dir = (self.config.data_dir / "quarantine") if hasattr(self.config, "data_dir") else None
         self.file_engine = NaturalLanguageFileEngine(
             memory_store=self.storage,
             audit_logger=self.audit_logger,
             permissions=self.permissions,
+            quarantine_base=quarantine_dir,
         )
         self.auto_approve_mode: bool = False
         self.dry_run_mode: bool = False

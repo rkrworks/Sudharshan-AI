@@ -112,15 +112,15 @@ class WindowsSmartEnvironmentScanner:
             with urllib.request.urlopen(req, timeout=1.2) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 models = [m.get("name", "") for m in data.get("models", [])]
-                has_model = any("llama3.2" in m or "bajrang-llama32" in m for m in models)
+                has_model = any(any(k in m for k in ("qwen3.5", "llama3.2", "bajrang")) for m in models)
         except Exception:
             has_model = False
         return ComponentCheck(
             item_id="llama32_model",
-            title="Llama 3.2 Local Model (~2.0 GB)",
+            title="Qwen 3.5 4B Primary Model (~2.6 GB)",
             installed=has_model,
             version_or_detail="Installed in Ollama" if has_model else "Not pulled locally",
-            action_needed="Ready" if has_model else "Optional: Pull llama3.2 (~2.0 GB download, requires explicit consent)",
+            action_needed="Ready" if has_model else "Optional: Pull qwen3.5:4b (~2.6 GB download, requires explicit consent)",
             requires_consent=True,
         )
 
@@ -214,15 +214,15 @@ class WindowsSmartEnvironmentScanner:
 
         if item_id == "llama32_model":
             if not consent_model_pull:
-                return False, "Skipped Llama 3.2 pull: explicit user consent required for ~2.0 GB download (consent_model_pull=False)."
+                return False, "Skipped Qwen 3.5 pull: explicit user consent required for ~2.6 GB download (consent_model_pull=False)."
             if not shutil.which("ollama") and not dry_run:
                 return False, "Ollama binary not in PATH; skipping local model pull."
-            emit("Pulling llama3.2 via Ollama (with user consent)...")
+            emit("Pulling qwen3.5:4b via Ollama (with user consent)...")
             if dry_run:
-                return True, "[Dry-Run] Would run: ollama pull llama3.2"
+                return True, "[Dry-Run] Would run: ollama pull qwen3.5:4b"
             try:
-                proc = subprocess.run(["ollama", "pull", "llama3.2"], capture_output=True, text=True, timeout=600)
-                return (proc.returncode == 0, "Pulled llama3.2." if proc.returncode == 0 else proc.stderr[:200])
+                proc = subprocess.run(["ollama", "pull", "qwen3.5:4b"], capture_output=True, text=True, timeout=600)
+                return (proc.returncode == 0, "Pulled qwen3.5:4b." if proc.returncode == 0 else proc.stderr[:200])
             except Exception as exc:
                 return False, f"Model pull skipped: {exc}"
 

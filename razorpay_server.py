@@ -18,6 +18,15 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Generator, Optional, Tuple
 
+# Ensure localhost and 127.0.0.1 bypass any local environment proxy
+for _k in ("NO_PROXY", "no_proxy"):
+    _existing = os.environ.get(_k, "")
+    _current = [x.strip() for x in _existing.split(",") if x.strip()]
+    for _a in ("127.0.0.1", "localhost", "::1"):
+        if _a not in _current:
+            _current.append(_a)
+    os.environ[_k] = ",".join(_current)
+
 from bajrang_core import (
     RSA_2048_MODULUS,
     RSA_2048_PRIME_P,

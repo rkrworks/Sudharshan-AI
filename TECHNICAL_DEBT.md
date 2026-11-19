@@ -8,7 +8,8 @@
 ### 1. Legacy Monolith Decomposition
 * **Debt Item**: `bajrang_core.py` is an extensive module (~6,500 lines) containing security, database storage, audio DSP, tool validation, hardware monitoring, and engine routing.
 * **Impact**: While functionally cohesive and zero-circular-dependency compliant, file size increases cognitive overhead.
-* **Remediation Plan**: In future major release (v1.0), gradually factor submodules into `sudharshan/core/` package (`storage.py`, `safety.py`, `dsp.py`, `engine.py`) while preserving backward-compatible import shims in `bajrang_core.py`.
+* **Remediation Plan**: In major release v1.0, submodules are actively being factored into `sudharshan/core/` package (`models.py`, `storage.py`, `safety.py`, `dsp.py`, `engine.py`) with backward-compatible export shims in `bajrang_core.py`.
+* **Current Status**: `sudharshan/core/models.py` successfully extracted and active.
 
 ---
 
@@ -22,7 +23,8 @@
 ### 3. Asynchronous Model Streaming
 * **Debt Item**: UnifiedModelClient handles HTTP calls synchronously within the background engine worker thread (`stream: False`).
 * **Impact**: Token-by-token streaming is not displayed in the Tkinter HUD; replies appear as complete turns.
-* **Remediation Plan**: Implement SSE (Server-Sent Events) generator in `UnifiedModelClient.chat_stream()` and wire token chunk callbacks to UI transcript views.
+* **Remediation Plan**: Implemented `StreamingModelEngine` in `sudharshan/core/models.py` providing SSE generator with live Time To First Token (TTFT), tokens/sec, and RAM telemetry.
+* **Current Status**: Verified in `sudharshan.core.models` test suite.
 
 ---
 
