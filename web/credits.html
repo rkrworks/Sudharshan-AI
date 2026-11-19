@@ -3,30 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Credits — Sudharshan AI v1.0</title>
+  <title>Credits &amp; Creator — Kaushik Ram Ravuru | Sudharshan AI v1.0</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
     <div class="container nav-row">
       <a href="index.html" class="brand"><span class="brand-mark" aria-hidden="true">S</span> Sudharshan AI</a>
-      <a href="index.html" class="btn btn-secondary">Back to Home</a>
+      <nav class="nav-links" aria-label="Primary Navigation">
+        <a href="index.html">Home</a>
+        <a href="docs.html">Architecture Docs</a>
+        <a href="downloads.html">Downloads</a>
+        <a href="privacy.html">Privacy</a>
+      </nav>
+      <a href="downloads.html" class="btn btn-primary">Download v1.0</a>
     </div>
   </header>
   <main>
     <section>
-      <div class="container" style="max-width:820px;">
-        <span class="eyebrow mono">ENGINEERING &amp; OPEN-SOURCE STACK</span>
-        <h1>Credits &amp; Attributions</h1>
+      <div class="container" style="max-width:860px;">
+        <span class="eyebrow mono">CREATOR, SYSTEM ADMINISTRATOR &amp; ATTRIBUTIONS</span>
+        <h1>Credits &amp; Engineering Authorship</h1>
+        <div class="panel" style="margin-bottom:20px;">
+          <span class="badge mono">PRINCIPAL ARCHITECT &amp; ADMIN</span>
+          <h2 style="margin-top:8px;">Kaushik Ram Ravuru</h2>
+          <p style="color:var(--muted); margin:0 0 14px;">
+            Creator, Lead Systems Architect, and Administrator of <strong>Sudharshan AI v1.0</strong> and <strong>Sudharshan OS</strong>.
+            B.E. Information Technology (Section IT-1, Class Representative) at <strong>Chaitanya Bharathi Institute of Technology (CBIT)</strong>, Gandipet, Hyderabad, India.
+          </p>
+          <div class="cta-row">
+            <a href="https://github.com/rkrworks" class="btn btn-primary" target="_blank" rel="noopener noreferrer">GitHub @rkrworks</a>
+            <a href="https://github.com/rkrworks/Sudharshan-AI" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">Sudharshan AI Repo</a>
+            <a href="mailto:kaushikramravuru@gmail.com" class="btn btn-secondary mono">kaushikramravuru@gmail.com</a>
+          </div>
+        </div>
+
         <div class="panel">
-          <h3>Lead Architect</h3>
-          <p style="color:var(--muted);">Engineered by <strong>Kaushik Ram Ravuru</strong> (B.E. Information Technology, CBIT Hyderabad).</p>
-          <h3 style="margin-top:20px;">Open-Source Foundations</h3>
-          <p style="color:var(--muted);">Built with Python, GTK4/Libadwaita, Fedora Bootc, Ollama, Qwen 3.5, Phi-4 Mini, GLM-OCR, whisper.cpp, Piper TTS, and SQLite.</p>
+          <h3>Open-Source Foundations &amp; Technology Credits</h3>
+          <p style="color:var(--muted); margin:0 0 12px;">Sudharshan AI and Sudharshan OS stand on the shoulders of the open-source ecosystem:</p>
+          <ul style="color:var(--muted); margin:0; padding-left:20px; display:flex; flex-direction:column; gap:8px;">
+            <li><strong>Local AI &amp; Multimodal Weights</strong>: Ollama, Qwen 3.5 (4B / 2B / 0.8B / Embedding), Microsoft Phi-4 Mini, GLM-OCR, whisper.cpp, and Piper Neural TTS.</li>
+            <li><strong>Operating System &amp; Desktop Stack</strong>: Fedora Workstation &amp; Fedora Bootc 43, Linux Kernel (Landlock, eBPF, cgroups v2, ZRAM), GNOME Wayland, GTK4 / Libadwaita, PipeWire, and QEMU/KVM.</li>
+            <li><strong>Security &amp; Storage</strong>: SQLite (WAL mode), 2048-bit RSA asymmetric verification, GNOME Keyring (libsecret), and Windows DPAPI.</li>
+          </ul>
         </div>
       </div>
     </section>
   </main>
+  <footer class="site-footer">
+    <div class="container footer-bottom mono" style="margin-top:0; border-top:none; padding-top:0;">
+      <span>&copy; 2026 Kaushik Ram Ravuru (@rkrworks) &bull; CBIT Hyderabad</span>
+      <span><a href="index.html">Home</a> &bull; <a href="docs.html">Docs</a> &bull; <a href="downloads.html">Downloads</a></span>
+    </div>
+  </footer>
 </body>
 </html>

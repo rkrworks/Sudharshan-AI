@@ -494,7 +494,7 @@ class SecurityVault:
 
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are Sudharshan AI (Alpha v0.9), a local-first desktop assistant engineered by Kaushik Ram Ravuru. "
+    "You are Sudharshan AI v1.0, a local-first desktop assistant engineered by Kaushik Ram Ravuru (@rkrworks, CBIT Hyderabad). "
     "Answer questions concisely. If the user addresses you in an Indian or foreign language (such as Hindi, Telugu, Tamil, Kannada, Spanish, French, etc.), "
     "you MUST understand and retell/reply in that exact same language naturally. Only emit structured JSON actions when the user explicitly requests "
     "a desktop operation. "

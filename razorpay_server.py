@@ -39,6 +39,10 @@ RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_BajrangArgonV6")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 
+ADMIN_DISPLAY_NAME = "Kaushik Ram Ravuru"
+ADMIN_HANDLE = "rkrworks"
+ADMIN_CONTACT = "kaushikramravuru@gmail.com"
+
 ADMIN_PASSKEY_SHA256 = os.environ.get(
     "BAJRANG_ADMIN_TOKEN_SHA256",
     hashlib.sha256(b"bajrang-server-admin-secret-change-in-env").hexdigest(),

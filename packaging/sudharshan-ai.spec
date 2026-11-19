@@ -3,6 +3,7 @@ Version:        1.0.0
 Release:        1%{?dist}
 Summary:        Sudharshan AI — Local-First Desktop AI Operating Layer
 License:        MIT
+Packager:       Kaushik Ram Ravuru <kaushikramravuru@gmail.com>
 URL:            https://github.com/rkrworks/Sudharshan-AI
 BuildArch:      noarch
 Requires:       python3 >= 3.11, gtk4, libadwaita, python3-gobject

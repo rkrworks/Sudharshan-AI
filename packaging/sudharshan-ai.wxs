@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="Sudharshan AI" Manufacturer="RKR Works" Version="1.0.0.0" UpgradeCode="6F4A9C1E-8B2D-4C5E-A1D3-9E0F1A2B3C4D">
+  <Package Name="Sudharshan AI" Manufacturer="Kaushik Ram Ravuru (rkrworks)" Version="1.0.0.0" UpgradeCode="6F4A9C1E-8B2D-4C5E-A1D3-9E0F1A2B3C4D">
     <MajorUpgrade DowngradeErrorMessage="A newer version of Sudharshan AI is already installed." />
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="SudharshanAI">
