@@ -112,7 +112,7 @@ class WindowsSmartEnvironmentScanner:
             with urllib.request.urlopen(req, timeout=1.2) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 models = [m.get("name", "") for m in data.get("models", [])]
-                has_model = any("qwen3.5" in m or "phi4-mini" in m or "llama3.2" in m for m in models)
+                has_model = any("qwen3.5" in m or "phi4-mini" in m for m in models)
         except Exception:
             has_model = False
         return ComponentCheck(

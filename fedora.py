@@ -738,15 +738,15 @@ def run_gtk_or_fallback_app(engine: BajrangEngine) -> None:
                     css_provider.load_from_data(
                         b"""
                         window { background-color: #0B0B0D; color: #F4F4F6; }
-                        .bajrang-header { background-color: #141418; border-bottom: 1px solid #24242B; padding: 6px 12px; border-radius: 10px; }
-                        .bajrang-status { background-color: #064e3b; color: #6ee7b7; border-radius: 9999px; padding: 4px 12px; font-weight: 700; font-size: 12px; }
-                        .bajrang-engine { background-color: #064e3b; color: #6ee7b7; border-radius: 9999px; padding: 4px 12px; font-weight: 700; font-size: 12px; margin-left: 8px; }
-                        .bajrang-sidebar { background-color: #141418; border-right: 1px solid #24242B; padding: 10px; border-radius: 10px; }
-                        .bajrang-chat { background-color: #0B0B0D; color: #F4F4F6; padding: 14px; font-size: 14px; border-radius: 10px; }
-                        .bajrang-stop { background-color: #dc2626; color: #ffffff; border-radius: 9999px; font-weight: 700; padding: 6px 12px; }
-                        .bajrang-approve { background-color: #10b981; color: #052e16; border-radius: 9999px; font-weight: 700; padding: 6px 12px; }
-                        .bajrang-send { background-color: #FF5A1F; color: #0B0B0D; border-radius: 9999px; font-weight: 700; padding: 6px 14px; }
-                        .bajrang-newsess { background-color: #FF5A1F; color: #0B0B0D; border-radius: 9999px; font-weight: 700; padding: 6px 12px; }
+                        .bajrang-header { background-color: #141418; border-bottom: 1px solid #24242B; padding: 6px 12px; }
+                        .bajrang-status { background-color: #064e3b; color: #6ee7b7; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; }
+                        .bajrang-engine { background-color: #064e3b; color: #6ee7b7; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; margin-left: 8px; }
+                        .bajrang-sidebar { background-color: #141418; border-right: 1px solid #24242B; padding: 10px; }
+                        .bajrang-chat { background-color: #0B0B0D; color: #f1f5f9; padding: 14px; font-size: 14px; }
+                        .bajrang-stop { background-color: #dc2626; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
+                        .bajrang-approve { background-color: #10b981; color: #052e16; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
+                        .bajrang-send { background-color: #FF5A1F; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 14px; }
+                        .bajrang-newsess { background-color: #FF5A1F; color: #ffffff; border-radius: 8px; font-weight: 700; padding: 6px 12px; }
                         """
                     )
                     from gi.repository import Gdk

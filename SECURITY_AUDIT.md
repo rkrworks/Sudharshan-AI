@@ -57,15 +57,4 @@ All 6 automated test harnesses pass with 100% compliance and zero `ResourceWarni
   3. `fedora.py --self-test` -> **PASSED (0)**
   4. `razorpay_server.py --self-test` -> **PASSED (0)**
   5. `installer_windows.py --self-test` -> **PASSED (0)**
-  6. `test_bajrang_suite.py` -> **20/20 PASSED (0)**
-  7. `sudharshan.core.models --self-test` -> **PASSED (0)** (Wave 1: Features 1–10)
-  8. `sudharshan.core.memory --self-test` -> **PASSED (0)** (Wave 2: Features 11–20)
-  9. `sudharshan.core.perception --self-test` -> **PASSED (0)** (Wave 3: Features 21–30)
-  10. `sudharshan.core.security --self-test` -> **PASSED (0)** (Wave 4: Features 31–40)
-  11. `sudharshan.core.fs_automation --self-test` -> **PASSED (0)** (Wave 5: Features 41–50)
-  12. `sudharshan.core.desktop --self-test` -> **PASSED (0)** (Wave 6: Features 51–60)
-  13. `sudharshan.core.developer --self-test` -> **PASSED (0)** (Wave 7: Features 61–70)
-  14. `sudharshan.core.productivity --self-test` -> **PASSED (0)** (Wave 8: Features 71–80)
-  15. `sudharshan.core.mcp_plugins --self-test` -> **PASSED (0)** (Wave 9: Features 81–90)
-  16. `sudharshan.core.diagnostics --self-test` -> **PASSED (0)** (Wave 10: Features 91–100)
-  17. `MasterIntegrationSuiteRunner` -> **100/100 Features PASSED in 1.09s**
+  6. `test_bajrang_suite.py` -> **14/14 PASSED (0)**

@@ -75,20 +75,9 @@
 
 ---
 
-### BUG-008: Read-Only Filesystem Sandbox Failure in Quarantine & Transcript Exports
-* **Severity**: HIGH (Execution Failure in Sandboxed / Restricted Environments)
-* **Affected File**: `bajrang_core.py` (Lines ~4893, ~1804, ~5378)
-* **Root Cause**: In restricted environments where `$HOME` is mounted read-only, calling `Path.home().mkdir()` or writing transcripts/bug reports to `Path.home() / "Downloads"` crashed with `OSError: [Errno 30] Read-only file system`.
-* **Reproduction**: Run `python3 test_bajrang_suite.py` inside standard containerized sandbox.
-* **Correction**: Introduced `quarantine_base` parameter defaulting to scoped `data_dir / "quarantine"`, enforced `os.access(..., os.W_OK)` verification, and added fallback to `tempfile.gettempdir()`.
-* **Verification**: 20/20 test suites in `test_bajrang_suite.py` pass cleanly.
-
----
-
-### BUG-009: Environment HTTP Proxy Intercepting Localhost Socket Requests
-* **Severity**: HIGH (Network Self-Test Failure)
-* **Affected File**: `razorpay_server.py`, `test_bajrang_suite.py`, `bajrang_core.py`
-* **Root Cause**: When `http_proxy` / `HTTP_PROXY` was set in the environment without `NO_PROXY`, `urllib.request` directed `127.0.0.1` traffic through external proxy which rejected direct IP requests with `HTTP 400: Direct IP access is not allowed`.
-* **Reproduction**: Run `razorpay_server.py --self-test` in an environment where `HTTP_PROXY` is defined.
-* **Correction**: Added automatic `NO_PROXY` / `no_proxy` injection of `127.0.0.1`, `localhost`, and `::1`.
-* **Verification**: `razorpay_server.py --self-test` passes with 100% compliance.
+### BUG-008: Global Socket Timeout Mutation & RFC 5737 Probe False-Positive in `NetworkConnectivityDetector`
+* **Severity**: HIGH (Thread-Safety & Offline Detection Defect)
+* **Affected File**: `bajrang_core.py` (`NetworkConnectivityDetector.is_online`)
+* **Root Cause**: `is_online()` called `socket.setdefaulttimeout(timeout_sec)`, mutating global interpreter socket timeouts across all threads, and did not reject non-routable RFC 5737 TEST-NET addresses (`192.0.2.0/24`) when running behind transparent proxies.
+* **Correction**: Switched to per-socket `s.settimeout(timeout_sec)` and added RFC 5737 TEST-NET rejection guard.
+* **Verification**: `test_phase_c_10_features` and `test_phase0_adaptive_multimodel_streaming_and_asset_hygiene` pass with zero timeout mutation.

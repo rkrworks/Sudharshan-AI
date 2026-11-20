@@ -58,16 +58,6 @@ import uuid
 import wave
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-
-# Ensure localhost and 127.0.0.1 bypass any local environment proxy
-for _k in ("NO_PROXY", "no_proxy"):
-    _existing = os.environ.get(_k, "")
-    _current = [x.strip() for x in _existing.split(",") if x.strip()]
-    for _a in ("127.0.0.1", "localhost", "::1"):
-        if _a not in _current:
-            _current.append(_a)
-    os.environ[_k] = ",".join(_current)
-
 from typing import Any, Callable, Dict, FrozenSet, Generator, List, Optional, Set, Tuple
 
 
@@ -5558,7 +5548,8 @@ class NaturalLanguageFileEngine:
 
         cutoff_ts = time.time() - (days_filter * 86400) if days_filter else 0
 
-        for f in root.glob("*"):
+        has_structured_filter = bool(ext_filter or size_filter_bytes or cutoff_ts)
+        for f in sorted(root.glob("*"), key=lambda p: p.name.lower()):
             if f.is_file() and not f.name.startswith("."):
                 st = f.stat()
                 if ext_filter and f.suffix.lower() not in ext_filter:
@@ -5567,15 +5558,22 @@ class NaturalLanguageFileEngine:
                     continue
                 if cutoff_ts and st.st_mtime < cutoff_ts:
                     continue
+                name_match = bool(q and q in f.name.lower())
+                if q and not has_structured_filter and not name_match:
+                    continue
                 results.append({
                     "name": f.name,
                     "path": str(f),
                     "size_bytes": st.st_size,
                     "modified_iso": datetime.datetime.fromtimestamp(st.st_mtime, tz=datetime.timezone.utc).isoformat(),
+                    "_exact": 0 if name_match else 1,
                 })
                 if len(results) >= 100:
                     break
 
+        results.sort(key=lambda r: (r["_exact"], r["name"].lower()))
+        for r in results:
+            r.pop("_exact", None)
         return results
 
     def explain_plan(self, plan: FileOperationPlan) -> str:
@@ -6885,182 +6883,6 @@ def run_core_self_tests() -> int:
 
     print("All hardened bajrang_core self-tests passed!")
     return 0
-
-
-
-# Sudharshan AI Multi-Model Local Engine Integration
-try:
-    from sudharshan.core.models import (
-        PRIMARY_MODEL,
-        LOW_RAM_FALLBACK_MODEL,
-        REASONING_MODEL,
-        INTENT_ROUTER_MODEL,
-        EMBEDDING_MODEL,
-        EMBEDDING_FALLBACK_MODEL,
-        OCR_MODEL,
-        RAM_DOWNGRADE_THRESHOLD_GB,
-        ModelCatalogEntry,
-        MODEL_CATALOG,
-        get_available_ram_gb,
-        AdaptiveModelSwitcher,
-        IntentRouter,
-        StreamingTelemetry,
-        StreamingModelEngine,
-        compute_cosine_similarity,
-        generate_local_embedding,
-        ToolCallResult,
-        JSONSchemaConstrainedToolCaller,
-        PlanStatus,
-        PlanNode,
-        PlanTree,
-        AutonomousStepPlanner,
-        ContextWindowManager,
-        PromptTemplateLibrary,
-        BenchmarkResult,
-        ModelBenchmarkRunner,
-        OfflineFirstHybridController,
-        PersonaDefinition,
-        PersonaManager,
-    )
-    from sudharshan.core.memory import (
-        VectorChunk,
-        LocalVectorStore,
-        DocumentTextExtractor,
-        BackgroundFileIndexer,
-        BM25SearchEngine,
-        HybridSearchEngine,
-        SourceCitationFormatter,
-        MemoryCard,
-        EpisodicMemoryStore,
-        ProjectWorkspace,
-        ProjectWorkspaceManager,
-        ClipboardKnowledgeCapture,
-        DuplicateMatch,
-        DocumentDeduplicator,
-        IncognitoSessionManager,
-        MemoryBackupManager,
-    )
-    from sudharshan.core.perception import (
-        HardenedWakeWordEngine,
-        STTResult,
-        WhisperCppSTT,
-        PiperNeuralTTS,
-        AudioInteractionState,
-        PushToTalkController,
-        ScreenshotResult,
-        ScreenPerceptionPipeline,
-        MeetingTurn,
-        MeetingSummary,
-        MeetingTranscriber,
-        AudioReactiveOrbRenderer,
-        OCRToClipboardService,
-        SpokenConfirmationGate,
-        VoiceMacro,
-        VoiceMacroManager,
-    )
-    from sudharshan.core.security import (
-        AuditBlock,
-        SignedAuditLedger,
-        PermissionTier,
-        FourTierPermissionPolicy,
-        CommandPreviewDiffGenerator,
-        RollbackSnapshot,
-        PreActionRollbackManager,
-        ASTShellSanitizer,
-        SecretPIIRedactor,
-        HardwareKeyringBridge,
-        NetworkEgressMonitor,
-        AutomatedIntegrityVerifier,
-        PanicKillSwitch,
-    )
-    from sudharshan.core.fs_automation import (
-        FileMoveOperation,
-        OrganizationPlan,
-        BatchFileOrganizer,
-        SmartDownloadsDaemon,
-        ContentAwareRenamer,
-        DeduplicationSweepEngine,
-        NaturalArchiveManager,
-        CleanupTarget,
-        DiskSpaceAnalyzer,
-        FileConversionPipeline,
-        WatcherRule,
-        FolderWatcherTriggerEngine,
-        QuarantineItem,
-        SafeQuarantineTrashBin,
-        FolderSyncDelta,
-        CrossFolderDiffSync,
-    )
-    from sudharshan.core.desktop import (
-        PaletteItem,
-        CommandPaletteLauncher,
-        WindowInfo,
-        NativeWindowManager,
-        ClipboardItem,
-        ClipboardHistoryManager,
-        ResourceMetrics,
-        ResourceThermalHUD,
-        SystemSettingsController,
-        SmartFocusController,
-        NotificationBriefing,
-        NotificationTriager,
-        ContextualActionEngine,
-        CronSystemdTimerGenerator,
-        HeavyProcessInfo,
-        SafeProcessManager,
-    )
-    from sudharshan.core.developer import (
-        LocalGitAssistant,
-        TerminalErrorExplainer,
-        SymbolInfo,
-        CodebaseSymbolIndexer,
-        ContainerInspector,
-        OfflineAPITester,
-        RegexTestBench,
-        UnitTestGenerator,
-        LocalhostServiceRadar,
-        ManPageTranslator,
-        EnvironmentPathDoctor,
-    )
-    from sudharshan.core.productivity import (
-        MarkdownKnowledgeVault,
-        PaperSummary,
-        InstantPaperReader,
-        NaturalLanguageTaskManager,
-        MorningBriefingGenerator,
-        SM2SpacedRepetitionEngine,
-        MathLaTeXScratchpad,
-        WritingAssistant,
-        CalendarICSManager,
-        DataTableExtractor,
-        EndOfDayDigestGenerator,
-    )
-    from sudharshan.core.mcp_plugins import (
-        MCPClient,
-        SandboxedPluginRuntime,
-        VisualWorkflowDAGBuilder,
-        PluginSecurityScanner,
-        LocalhostAPIServer,
-        CLICompanionInterface,
-        DeclarativeYAMLToolLoader,
-        WebhookMQTTEventBridge,
-        PluginSupervisor,
-        PluginDevSandbox,
-    )
-    from sudharshan.core.diagnostics import (
-        FedoraPackagingGenerator,
-        WindowsInstallerBuilder,
-        FirstRunOnboardingWizard,
-        AutomatedSystemDoctor,
-        GracefulDegradationMatrix,
-        AccessibilityAuditor,
-        ReleaseAssetPackager,
-        ZeroTelemetryDashboard,
-        SafeCrashReporter,
-        MasterIntegrationSuiteRunner,
-    )
-except ImportError:
-    pass
 
 
 if __name__ == "__main__":

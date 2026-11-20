@@ -154,36 +154,3 @@ flowchart TD
 | **Balanced** | 16 GB | RTX 3050 / RX 6600 (4-6GB) | Mistral (7B) | Q4_K_M | 16k tokens |
 | **High** | 32 GB | RTX 3060 / 4060 (8-12GB) | Llama 3.1 (8B) | Q5_K_M | 32k tokens |
 | **Workstation** | 64 GB+ | RTX 3090 / 4090 (16-24GB) | CodeLlama (70B) / Qwen 2.5 | Q4_K_M | 64k tokens |
-
----
-
-## 5. Sudharshan Core Architecture (Waves 1–10 / 100 Features)
-
-In Enterprise v1.0, Sudharshan AI partitions capabilities into 10 decoupled, high-cohesion core modules under `sudharshan.core`:
-
-```
-sudharshan/core/
-├── __init__.py           # Unified core export namespace
-├── models.py             # Wave 1: Adaptive Multi-Model Local Engine (Features 1–10)
-├── memory.py             # Wave 2: Persistent Local Memory & Semantic RAG (Features 11–20)
-├── perception.py         # Wave 3: Voice, Audio & Multimodal Perception (Features 21–30)
-├── security.py           # Wave 4: Fail-Closed Security, Privacy & Governance (Features 31–40)
-├── fs_automation.py      # Wave 5: Intelligent File System & Automation Engine (Features 41–50)
-├── desktop.py            # Wave 6: OS Control & Desktop Ergonomics (Features 51–60)
-├── developer.py          # Wave 7: Developer & Engineering Power Suite (Features 61–70)
-├── productivity.py       # Wave 8: Knowledge, Productivity & Daily Workflow (Features 71–80)
-├── mcp_plugins.py        # Wave 9: Extensibility, MCP & Plugin Ecosystem (Features 81–90)
-└── diagnostics.py        # Wave 10: Packaging, Reliability, Diagnostics & Polish (Features 91–100)
-```
-
-### Wave Summary
-1. **Wave 1 (`models.py`)**: RAM-aware model switcher (`qwen3.5:4b` -> `qwen3.5:2b`), streaming token telemetry, sub-50ms hybrid intent router, constrained JSON-schema tool caller, autonomous step planner, rolling context summarizer, prompt template slash-commands, side-by-side benchmark runner, offline hybrid controller, and 5 system personas.
-2. **Wave 2 (`memory.py`)**: Local SQLite vector store (`LocalVectorStore`), incremental background indexer (`BackgroundFileIndexer`), BM25 + cosine hybrid search (`HybridSearchEngine`), source citation formatter, episodic memory cards (`EpisodicMemoryStore`), project workspaces, instant clipboard ingest, document deduplicator, ephemeral incognito session manager, and PBKDF2/HMAC encrypted backup/restore.
-3. **Wave 3 (`perception.py`)**: Hardened Goertzel + VAD wake-word engine, local Whisper.cpp STT with auto language detection, Piper neural TTS with barge-in interruption, push-to-talk hotkey state machine, Wayland/Windows screenshot pipeline, meeting transcriber & action-item summarizer, zero-bloat audio-reactive orb, OCR-to-clipboard, spoken confirmation gate, and offline voice macros.
-4. **Wave 4 (`security.py`)**: Cryptographically signed HMAC-SHA256 audit ledger (`SignedAuditLedger`), fail-closed 4-tier permission model, interactive unified command diff generator, pre-action atomic rollback snapshots, AST/regex shell sanitizer, PII/secret redaction filter, hardware keyring vault (`libsecret`/DPAPI), network egress monitor & airplane switch, SHA-256 integrity verifier, and emergency panic kill switch.
-5. **Wave 5 (`fs_automation.py`)**: Natural-language batch organizer with dry-run tree and 1-click undo, Smart Downloads daemon, content-aware invoice/code renamer, deduplication sweep with quarantine/hardlinks, safe archive manager with zip-slip protection, disk space cleanup analyzer, file conversion pipeline, folder watcher triggers, 30-day quarantine trash bin, and cross-folder diff/sync.
-6. **Wave 6 (`desktop.py`)**: Command palette launcher (Super+Space spotlight overlay), native window management (tiling, workspace routing), clipboard history with search and pinning, hardware and thermal sensor HUD, natural-language OS settings controller, Smart Focus / Pomodoro mode, notification triager, app-aware contextual actions, plain-English cron/systemd generator, and safe process manager.
-7. **Wave 7 (`developer.py`)**: Local Git assistant (conventional commits, diff summaries, conflict explainer), terminal traceback explainer, multilingual AST symbol indexer, container & compose inspector, offline cURL parser and JSON/YAML converter, regex builder & test bench, AST-driven unit test generator, localhost port radar, man-page query translator, and 10-point environment doctor.
-8. **Wave 8 (`productivity.py`)**: Markdown knowledge vault with bidirectional backlinks and graph view, instant academic paper reader, natural-language SQLite/ICS task manager, morning briefing generator, SM-2 spaced repetition engine, AST math & KaTeX scratchpad, distraction-free writing assistant, calendar event & conflict manager, data table extractor, and end-of-day digest generator.
-9. **Wave 9 (`mcp_plugins.py`)**: Standard Model Context Protocol (MCP) client over stdio/SSE, sandboxed plugin runtime with scoped permissions, visual workflow DAG builder with topological cycle checking, static AST plugin security scanner, localhost REST API bridge (port 8769), CLI companion interface (`ask`, `pipe`, `run`), declarative tool loader, webhook & MQTT event bridge, plugin supervisor with bounded auto-restarts, and dev testing sandbox.
-10. **Wave 10 (`diagnostics.py`)**: Native Fedora RPM spec and Flatpak manifest generator, Windows MSI WiX installer builder, first-run hardware onboarding wizard, automated 12-point system doctor, graceful degradation matrix across 4 memory tiers, WCAG 2.1 AA accessibility contrast auditor (17.9:1 text, 6.31:1 CTA), release packager with SHA256SUMS, zero-telemetry verification dashboard, safe crash minidump recorder with secret redaction, and master integration test suite runner.
