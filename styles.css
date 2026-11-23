@@ -211,3 +211,16 @@ pre.code-block {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+html[data-theme="light"] {
+  --obsidian: #F8F8FA;
+  --surface: #FFFFFF;
+  --surface-elevated: #F1F2F6;
+  --hairline: #E2E4EC;
+  --accent: #E04810;
+  --accent-hover: #C73C09;
+  --text: #111217;
+  --muted: #525563;
+}
+html[data-theme="light"] .site-header { background: rgba(248, 248, 250, 0.92); }
+html[data-theme="light"] .btn-primary { color: #FFFFFF; }
