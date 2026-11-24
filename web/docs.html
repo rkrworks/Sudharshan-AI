@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sudharshan AI v1.0 — Architecture, 100-Feature Matrix & Checksums</title>
+  <meta name="description" content="Sudharshan AI architecture, local CLI workflows, and offline release verification instructions.">
+  <meta property="og:title" content="Sudharshan AI — CLI workflows and architecture">
+  <meta property="og:description" content="Explore ten local CLI workflows, the system architecture, and release verification instructions.">
+  <title>Sudharshan AI — CLI Workflows & Architecture</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <style>
     :root {
@@ -90,12 +93,30 @@
     </nav>
   </header>
   <main>
-    <span class="tag mono">PRECISION OBSIDIAN &bull; SOLAR ORANGE &bull; ZERO TELEMETRY</span>
+    <span class="tag mono">LOCAL CLI &bull; PREVIEW FIRST &bull; SOLAR ORANGE</span>
     <h1>Local-First Adaptive Multi-Model Architecture</h1>
-    <p class="lead">Sudharshan AI v1.0 runs 100% locally on Fedora Wayland and Windows 11 with fail-closed security, hash-chained audit logs, and an adaptive Qwen 3.5 / Phi-4 / GLM-OCR engine.</p>
+    <p class="lead">The desktop app combines local AI, productivity, and developer tools. Its CLI companion adds ten workflows for tasks, notes, files, code, and schedules, with previews before file changes.</p>
+
+    <section class="panel" aria-labelledby="cli-heading">
+      <h2 id="cli-heading" style="margin-top:0;">Ten local CLI workflows</h2>
+      <p style="color:var(--muted);">Run these from the repository root with <code>python3 sudharshan_cli.py</code>. They operate on local data; preview and report commands do not make the proposed changes.</p>
+      <div class="grid">
+        <div class="card"><span class="tag mono">01 · tasks</span><h3>Task list</h3><p class="mono" style="font-size:13px;">tasks --db tasks.db list</p></div>
+        <div class="card"><span class="tag mono">02 · vault</span><h3>Markdown backlinks</h3><p class="mono" style="font-size:13px;">vault "$HOME/Notes"</p></div>
+        <div class="card"><span class="tag mono">03 · git</span><h3>Git status</h3><p class="mono" style="font-size:13px;">git --repo . --suggest-commit</p></div>
+        <div class="card"><span class="tag mono">04 · symbols</span><h3>Code symbol search</h3><p class="mono" style="font-size:13px;">symbols LocalGitAssistant --root .</p></div>
+        <div class="card"><span class="tag mono">05 · redact</span><h3>Text redaction</h3><p class="mono" style="font-size:13px;">cat notes.txt | redact</p></div>
+        <div class="card"><span class="tag mono">06 · archive-inspect</span><h3>Archive listing</h3><p class="mono" style="font-size:13px;">archive-inspect release.zip</p></div>
+        <div class="card"><span class="tag mono">07 · dedupe-report</span><h3>Duplicate report</h3><p class="mono" style="font-size:13px;">dedupe-report "$HOME/Downloads"</p></div>
+        <div class="card"><span class="tag mono">08 · disk-report</span><h3>Cache report</h3><p class="mono" style="font-size:13px;">disk-report "$HOME/Projects"</p></div>
+        <div class="card"><span class="tag mono">09 · schedule-preview</span><h3>Cron preview</h3><p class="mono" style="font-size:13px;">schedule-preview 'daily at 18:30' --command 'python3 backup.py'</p></div>
+        <div class="card"><span class="tag mono">10 · organize-preview</span><h3>Organization preview</h3><p class="mono" style="font-size:13px;">organize-preview "$HOME/Downloads"</p></div>
+      </div>
+      <p style="color:var(--muted);">For full syntax, task actions, and supported schedule formats, run <code>python3 sudharshan_cli.py --help</code>.</p>
+    </section>
 
     <section class="panel" aria-labelledby="arch-heading">
-      <h2 id="arch-heading" style="margin-top:0;">Interactive System Architecture</h2>
+      <h2 id="arch-heading" style="margin-top:0;">System Architecture</h2>
       <svg viewBox="0 0 960 220" width="100%" role="img" aria-label="Sudharshan AI multi-model architecture diagram">
         <rect x="10" y="20" width="200" height="72" rx="10" fill="#0B0B0D" stroke="#24242B"/>
         <text x="26" y="50" fill="#F4F4F6" font-size="14" font-weight="700">Desktop HUD &amp; CLI</text>
@@ -124,7 +145,7 @@
     </section>
 
     <section class="panel" aria-labelledby="waves-heading">
-      <h2 id="waves-heading" style="margin-top:0;">10-Wave Production Modules (100/100 Features Verified)</h2>
+      <h2 id="waves-heading" style="margin-top:0;">Core Project Modules</h2>
       <div class="grid">
         <div class="card"><span class="tag mono">WAVE 1</span><h3>Core Intelligence</h3><p class="mono" style="color:var(--muted);font-size:13px;">RAM switcher, NDJSON streaming, 0.8B router, JSON retry, step planner, context compactor, personas.</p></div>
         <div class="card"><span class="tag mono">WAVE 2</span><h3>Memory &amp; RAG</h3><p class="mono" style="color:var(--muted);font-size:13px;">SQLite vectors, incremental indexer, BM25+cosine hybrid search, citations, encrypted vault.</p></div>

@@ -17,6 +17,36 @@ Unlike cloud-dependent assistants that transmit your private workspace data, tel
 
 ---
 
+## 🧰 CLI Companion: 10 Local Workflows
+
+The CLI includes ten local workflows for everyday tasks, notes, files, schedules, and code. File-management commands report or preview proposed changes; they do not delete, extract, install, or execute those changes.
+
+| Command | Workflow |
+| --- | --- |
+| `tasks` | Create and list local tasks; export pending tasks to iCalendar |
+| `vault` | Index Markdown notes and report wikilinks/backlinks |
+| `git` | Inspect repository status and optionally suggest a commit message |
+| `symbols` | Search symbols in a local codebase |
+| `redact` | Mask recognized sensitive values in text read from stdin |
+| `archive-inspect` | List ZIP/TAR archive entries without extracting |
+| `dedupe-report` | Report identical files without moving or deleting them |
+| `disk-report` | Find known build and language caches for review |
+| `schedule-preview` | Preview a supported schedule as a cron line; never installs it |
+| `organize-preview` | Preview extension-based file moves without changing files |
+
+Examples:
+
+```bash
+python3 sudharshan_cli.py tasks --db "$HOME/.local/share/sudharshan/tasks.db" list
+python3 sudharshan_cli.py vault "$HOME/Notes"
+python3 sudharshan_cli.py symbols LocalGitAssistant --root .
+python3 sudharshan_cli.py schedule-preview 'daily at 18:30' --command 'python3 backup.py'
+```
+
+Run `python3 sudharshan_cli.py --help` for the complete command list and options.
+
+---
+
 ## 🚀 10 Core Architectural Features
 
 1. **Intelligent Conversation Manager**:
